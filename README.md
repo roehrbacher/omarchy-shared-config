@@ -109,9 +109,6 @@ Grok Bot logo; click it for the usage panel.
 External plugins below are reviewed copies pinned in `plugins.lock` (id, upstream
 repo, reviewed commit, date); update one only after reviewing the upstream diff. The weekly plugin round also checks `omarchy-xps-config/plugins.lock` (XPS-only plugins).
 
-- `io.github.kaiizu.runcat` 1.0.0 – Running Cat: a cat whose running speed follows
-  CPU load (reads `/proc/stat`, no network); click opens btop. Reviewed copy of
-  github.com/kaiizu/runningcat at `6314600` (commit in `.upstream-commit`)
 - `jankeesvw.notification-center` 1.2.0 – bell with your notification history
   (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 1784e19)
 - `timon.grok-usage` 1.7.0 – **my own plugin** (private repo

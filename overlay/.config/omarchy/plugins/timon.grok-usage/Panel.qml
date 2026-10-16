@@ -1,5 +1,7 @@
 import QtQuick
+import Quickshell.Io
 import qs.Commons
+import "lib/CategoryColors.js" as CategoryColors
 import qs.Ui
 
 // Usage popup. BarWidget.qml owns the bar slot and scan state.
@@ -316,6 +318,37 @@ Panel {
   // Product-slice opacities of a pace-aware fill (accent under, urgent over).
   // Bind the base color in the caller (`shadeFill(root.usageFillColor, i)`)
   // so QML tracks it; a cached palette array does not.
+  // Category colors (Chat | Grok Build | …) from the active theme's colors.toml,
+  // the same file Commons/Color reads; re-read on edits and on theme switches.
+  property var themePalette: ({})
+  readonly property var categoryPick: CategoryColors.pick(root.themePalette, root.surfaceHex, 3)
+  readonly property string surfaceHex: {
+    function h(v) { var t = Math.round(root.clamp(v, 0, 1) * 255).toString(16); return t.length < 2 ? "0" + t : t }
+    return "#" + h(root.surface.r) + h(root.surface.g) + h(root.surface.b)
+  }
+  function categoryColor(index) {
+    var pick = root.categoryPick
+    var n = pick.colors.length
+    if (n === 0) return root.shadeFill(root.usageFillColor, index)
+    var i = Math.max(0, Math.floor(Number(index)) || 0)
+    var c = Qt.color(pick.colors[i % n])
+    return pick.names[i % n] === "alpha-step" || i >= n ? root.shadeFill(c, i) : c
+  }
+  FileView {
+    id: themeColorsFile
+    path: Color.currentThemePath + "/colors.toml"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.themePalette = CategoryColors.parse(text())
+  }
+  Connections {
+    target: Color
+    function onAccentChanged() { themeColorsFile.reload() }
+    function onBackgroundChanged() { themeColorsFile.reload() }
+    function onForegroundChanged() { themeColorsFile.reload() }
+  }
+
   function shadeFill(base, index) {
     var alphas = [1.0, 0.72, 0.50, 0.86, 0.60]
     var i = Math.floor(Number(index))
@@ -721,6 +754,7 @@ Panel {
             overPace: root.overPace
             fillColor: root.usageFillColor
             paceMarkerColor: root.paceMarkerColor
+            categoryColors: true
           }
 
           // "• Chat 12%  • Grok Build 11%"
@@ -743,14 +777,14 @@ Panel {
                   height: Style.space(6)
                   radius: width / 2
                   anchors.verticalCenter: parent.verticalCenter
-                  color: root.shadeFill(root.usageFillColor, index)
+                  color: root.categoryColor(index)
                 }
 
                 Text {
                   anchors.verticalCenter: parent.verticalCenter
                   text: (modelData.title || "Product") + " "
                     + Math.round(Number(modelData.percent) * 100) + "%"
-                  color: root.dim
+                  color: root.categoryColor(index)
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
                   renderType: Text.NativeRendering
@@ -1370,6 +1404,8 @@ Panel {
     property real expectedPace: -1
     property bool overPace: false
     property color fillColor: root.underPaceColor
+    // Product slices in theme category colors (the weekly pool meter only).
+    property bool categoryColors: false
     property color paceMarkerColor: root.paceMarkerColor
     // SuperGrok weekly pool = 7 calendar days.
     property int dayCount: 7
@@ -1443,7 +1479,7 @@ Panel {
               return fillRow.width * (pct / used)
             }
             height: parent.height
-            color: root.shadeFill(meter.usedFill, index)
+            color: meter.categoryColors ? root.categoryColor(index) : root.shadeFill(meter.usedFill, index)
           }
         }
 

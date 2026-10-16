@@ -108,7 +108,10 @@ Grok Bot logo; click it for the usage panel.
 **Plugins**
 - `jankeesvw.notification-center` 1.1.0 – bell with your notification history
   (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 5dbd5ab)
-- `pixbroker.grokbar-omarchy` 1.7.0 – SuperGrok / Cursor / Grok Bot usage in the bar
+- `pixbroker.grokbar-omarchy` 1.7.0 – usage of the X Premium **shared weekly pool**
+  (Grok, Grok Bot and Cursor draw from one pool; panel title "Shared weekly pool",
+  per-product split below; the separate Cursor/Grok Bot sections are off via
+  `showCursorUsage`/`showGrokBotUsage: false` in `00-shared.json`)
   (upstream fdc88ed plus your tighter spacing and a safer panel close).
   **Local patch:** new `"iconOnly": true` option (BarWidget.qml + manifest
   schema) shows only the Grok Bot logo on the bar, no numbers; the panel is

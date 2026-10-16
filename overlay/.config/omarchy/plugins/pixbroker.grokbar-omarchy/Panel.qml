@@ -153,10 +153,9 @@ Panel {
   }
 
   // Hero title: subscription type only, e.g. "SuperGrok Heavy"
-  readonly property string weeklyTitle: {
-    if (tierLabel !== "") return tierLabel
-    return "Grok"
-  }
+  // Local patch (Timon): X Premium shares one weekly pool across Grok, Grok
+  // Bot and Cursor, so the hero is that pool, not a product tier.
+  readonly property string weeklyTitle: "Shared weekly pool"
 
   readonly property string grokRebillLabel: root.formatRebillLabel(subscriptionPeriodEnd, subscriptionCancelsAtEnd)
   readonly property string heroMeta: root.clickMeta(

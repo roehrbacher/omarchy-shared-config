@@ -32,8 +32,8 @@
         {
           "id": "pixbroker.grokbar-omarchy",
           "showClaudeUsage": false,
-          "showCursorUsage": true,
-          "showGrokBotUsage": true,
+          "showCursorUsage": false,
+          "showGrokBotUsage": false,
           "iconOnly": true
         },
         { "id": "timon.local-ai" },

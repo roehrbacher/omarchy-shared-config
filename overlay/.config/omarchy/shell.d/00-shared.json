@@ -30,7 +30,7 @@
         { "id": "flux" },
         { "id": "omarchy.agents" },
         {
-          "id": "pixbroker.grokbar-omarchy",
+          "id": "timon.grok-usage",
           "showClaudeUsage": false,
           "showCursorUsage": false,
           "showGrokBotUsage": false,

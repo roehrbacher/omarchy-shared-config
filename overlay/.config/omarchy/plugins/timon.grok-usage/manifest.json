@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "pixbroker.grokbar-omarchy",
+  "id": "timon.grok-usage",
   "name": "Grok",
   "version": "1.7.0",
-  "author": "pixbroker",
+  "author": "Timon Röhrbacher (based on grokbar-omarchy by pixbroker)",
   "license": "MIT",
   "description": "SuperGrok usage on the bar, plus optional Cursor, Grok Bot, and GPT.",
   "kinds": [
@@ -18,7 +18,7 @@
     "description": "Bar widget for SuperGrok usage, plus optional Cursor, Grok Bot, and GPT.",
     "category": "AI",
     "aliases": [
-      "usebar",
+      "grok-usage",
       "grokbar-omarchy"
     ],
     "allowMultiple": false,

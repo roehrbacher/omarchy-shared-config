@@ -12,8 +12,8 @@ import qs.Ui
 // flip to settings.
 Panel {
   id: root
-  moduleName: "pixbroker.grokbar-omarchy"
-  ipcTarget: "pixbroker.grokbar-omarchy"
+  moduleName: "timon.grok-usage"
+  ipcTarget: "timon.grok-usage"
   manageIpc: false
 
   property var anchorItem: null

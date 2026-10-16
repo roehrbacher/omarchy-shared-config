@@ -13,7 +13,7 @@ import qs.Ui
 // Left click toggles the panel; right click refreshes.
 BarWidget {
   id: root
-  moduleName: "pixbroker.grokbar-omarchy"
+  moduleName: "timon.grok-usage"
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -676,7 +676,7 @@ BarWidget {
   Component.onCompleted: root.applyIncomingSettings(root.settings)
 
   IpcHandler {
-    target: "pixbroker.grokbar-omarchy"
+    target: "timon.grok-usage"
     function refresh(): string { root.refresh(); return "ok" }
     function open(): void { root.open() }
     function close(): void { root.close() }
@@ -727,7 +727,7 @@ BarWidget {
           root.applyScan(JSON.parse(text))
         } catch (e) {
           root.hasData = false
-          console.warn("pixbroker.grokbar-omarchy: bad scanner JSON", e)
+          console.warn("timon.grok-usage: bad scanner JSON", e)
         }
       }
     }
@@ -735,7 +735,7 @@ BarWidget {
     onExited: root.refreshing = false
 
     stderr: StdioCollector {
-      onStreamFinished: if (text.trim() !== "") console.warn("pixbroker.grokbar-omarchy", text.trim())
+      onStreamFinished: if (text.trim() !== "") console.warn("timon.grok-usage", text.trim())
     }
   }
 
@@ -768,7 +768,7 @@ BarWidget {
           root.applyCursorScan(JSON.parse(text))
         } catch (e) {
           root.cursorHasData = false
-          console.warn("pixbroker.grokbar-omarchy: bad cursor scanner JSON", e)
+          console.warn("timon.grok-usage: bad cursor scanner JSON", e)
         }
       }
     }
@@ -776,7 +776,7 @@ BarWidget {
     onExited: root.cursorRefreshing = false
 
     stderr: StdioCollector {
-      onStreamFinished: if (text.trim() !== "") console.warn("pixbroker.grokbar-omarchy cursor", text.trim())
+      onStreamFinished: if (text.trim() !== "") console.warn("timon.grok-usage cursor", text.trim())
     }
   }
 
@@ -808,7 +808,7 @@ BarWidget {
           root.applyGptScan(JSON.parse(text))
         } catch (e) {
           root.gptHasData = false
-          console.warn("pixbroker.grokbar-omarchy: bad gpt scanner JSON", e)
+          console.warn("timon.grok-usage: bad gpt scanner JSON", e)
         }
       }
     }
@@ -816,7 +816,7 @@ BarWidget {
     onExited: root.gptRefreshing = false
 
     stderr: StdioCollector {
-      onStreamFinished: if (text.trim() !== "") console.warn("pixbroker.grokbar-omarchy gpt", text.trim())
+      onStreamFinished: if (text.trim() !== "") console.warn("timon.grok-usage gpt", text.trim())
     }
   }
 

@@ -114,14 +114,13 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
   github.com/kaiizu/runningcat at `6314600` (commit in `.upstream-commit`)
 - `jankeesvw.notification-center` 1.2.0 – bell with your notification history
   (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 1784e19)
-- `pixbroker.grokbar-omarchy` 1.7.0 – usage of the X Premium **shared weekly pool**
-  (Grok, Grok Bot and Cursor draw from one pool; panel title "Shared weekly pool",
-  per-product split below; the separate Cursor/Grok Bot sections are off via
-  `showCursorUsage`/`showGrokBotUsage: false` in `00-shared.json`)
-  (upstream fdc88ed plus your tighter spacing and a safer panel close).
-  **Local patch:** new `"iconOnly": true` option (BarWidget.qml + manifest
-  schema) shows only the Grok Bot logo on the bar, no numbers; the panel is
-  unchanged. Re-apply it if the plugin is ever updated from upstream.
+- `timon.grok-usage` 1.7.0 – **my own plugin** (private repo
+  github.com/roehrbacher/omarchy-grok-usage, based on pixbroker/grokbar-omarchy
+  fdc88ed, MIT). Shows the X Premium **shared weekly pool** (panel title "Shared
+  weekly pool", per-product split below; separate Cursor/Grok Bot sections are off
+  via `showCursorUsage`/`showGrokBotUsage: false` in `00-shared.json`). Own
+  additions: `"iconOnly": true` (logo only on the bar), tighter spacing, safer
+  panel close. No longer tracked in `plugins.lock`.
 - `timon.hover-reveal` 1.1.0 – invisible helper in the left section. Any bar
   entry with `"revealOnHover": true` stays invisible in its normal place
   (space kept, nothing moves) and fades in exactly like the stock indicators

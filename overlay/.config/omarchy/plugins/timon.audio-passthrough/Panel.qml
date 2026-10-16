@@ -20,7 +20,6 @@ Panel {
   property real pendingVolume: -1
   property bool dragging: false
   property string source: ""
-  property bool sourceOverride: false
   property var sources: []
   readonly property color hoverFill: bar ? Style.hoverFillFor(bar.foreground, Color.accent) : "transparent"
   readonly property color selectedFill: bar ? Style.selectedFillFor(bar.foreground, Color.accent) : "transparent"
@@ -39,7 +38,7 @@ Panel {
     if (!sourcesProc.running) sourcesProc.running = true
   }
 
-  // Passthrough-only mic: the system default input is left alone.
+  // Sets the system default input (as the stock audio panel); passthrough follows it.
   function setSource(name) {
     source = name
     run(["source", name])
@@ -62,7 +61,6 @@ Panel {
     headphones = !!data.headphones
     configured = data.configured !== false
     if (data.source !== undefined) source = data.source
-    sourceOverride = !!data.sourceOverride
   }
 
   function run(args) {
@@ -279,24 +277,14 @@ Panel {
           onClicked: root.setSource(modelData.name)
         }
       }
-
-      SourceRow {
-        visible: root.sources.length > 0
-        width: column.width
-        glyph: "󰑐"
-        label: "Machine default" + (root.sourceOverride ? "" : " (in use)")
-        active: false
-        onClicked: root.setSource("default")
-      }
     }
     }
   }
 
-  // Same look as the stock audio panel's input rows (only for passthrough).
+  // Same look as the stock audio panel's input rows.
   component SourceRow: CursorSurface {
     id: row
     property string label: ""
-    property string glyph: "󰍬"
     property bool active: false
     signal clicked()
     hasCursor: mouse.containsMouse
@@ -317,7 +305,7 @@ Panel {
 
       Text {
         textFormat: Text.PlainText
-        text: row.glyph
+        text: "󰍬"
         color: root.foreground
         font.family: root.fontFamily
         font.pixelSize: Style.font.title

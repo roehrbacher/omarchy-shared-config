@@ -3,9 +3,9 @@
 #   status          print JSON: enabled, volume, active, headphones, configured
 #   on | off        write ENABLED and restart audio-passthrough.service
 #   volume <0-150>  set the live passthrough volume and save it
-#   sources         print JSON list of mics: name, label, current
-#   source <name|default>  use this mic for passthrough only (saved in
-#                   audio-passthrough.conf); default = back to the machine conf
+#   sources         print JSON list of mics: name, label, current (= system default)
+#   source <name>   make this mic the system default input (like the stock
+#                   audio panel); passthrough follows the default mic
 DIR="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy"
 CONF=$DIR/audio-passthrough.conf
 MCONF=$DIR/audio-passthrough.machine.conf
@@ -51,15 +51,8 @@ list_sources() {
     /^[[:space:]]*Name: / {n = $2}
     /^[[:space:]]*Description: / {sub(/^[[:space:]]*Description: /, ""); if (n !~ /\.monitor$/) print n "\t" $0}'
 }
-# The mic passthrough uses now (same rule as audio-passthrough-watch).
-cur_source() {
-  local want name
-  want=$(get SOURCE)
-  if [[ -z $want ]]; then pactl get-default-source 2>/dev/null; return; fi
-  while IFS=$'\t' read -r name _; do
-    match_any "$name" "$want" && { echo "$name"; return; }
-  done < <(list_sources)
-}
+# Passthrough always uses the system default mic.
+cur_source() { pactl get-default-source 2>/dev/null; }
 jstr() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
 sources() {
   local cur name desc first=1
@@ -71,7 +64,6 @@ sources() {
   done < <(list_sources)
   printf ']\n'
 }
-override() { grep -qE '^SOURCE=' "$CONF" 2>/dev/null && echo 1; }
 b() { [[ $1 ]] && echo true || echo false; }
 status() {
   local en vol sink hp=
@@ -79,9 +71,9 @@ status() {
   vol=$(get VOLUME); vol=${vol%\%}; vol=${vol:-50}
   sink=$(get SINK)
   [[ -n $sink ]] && match_any "$(pactl get-default-sink 2>/dev/null)" "$sink" && hp=1
-  printf '{"enabled":%s,"volume":%s,"active":%s,"headphones":%s,"configured":%s,"service":"%s","source":%s,"sourceOverride":%s}\n' \
+  printf '{"enabled":%s,"volume":%s,"active":%s,"headphones":%s,"configured":%s,"service":"%s","source":%s}\n' \
     "$(b "$([[ $en == 1 ]] && echo 1)")" "$vol" "$(b "$(loop_id)")" "$(b "$hp")" "$(b "$sink")" \
-    "$(systemctl --user is-active audio-passthrough 2>/dev/null)" "$(jstr "$(cur_source)")" "$(b "$(override)")"
+    "$(systemctl --user is-active audio-passthrough 2>/dev/null)" "$(jstr "$(cur_source)")"
 }
 case ${1:-status} in
   status) status ;;
@@ -97,14 +89,15 @@ case ${1:-status} in
     status ;;
   sources) sources ;;
   source)
-    [[ -n ${2:-} ]] || { echo "source needs a mic name or 'default'" >&2; exit 1; }
-    if [[ $2 == default ]]; then
-      [[ -f $CONF ]] && sed -i -E '/^SOURCE=/d' "$CONF"
-    else
-      list_sources | cut -f1 | grep -qxF -- "$2" || { echo "no such mic: $2" >&2; exit 1; }
-      set_key SOURCE "$2"
-    fi
-    systemctl --user restart audio-passthrough
-    sleep 0.3; status ;;
+    [[ -n ${2:-} ]] || { echo "source needs a mic node name (see: sources)" >&2; exit 1; }
+    list_sources | cut -f1 | grep -qxF -- "$2" || { echo "no such mic: $2" >&2; exit 1; }
+    id=$(pw-dump 2>/dev/null | python3 -c '
+import json, sys
+for o in json.load(sys.stdin):
+    if o.get("type", "").endswith("Node") and o.get("info", {}).get("props", {}).get("node.name") == sys.argv[1]:
+        print(o["id"]); break' "$2")
+    # Same helper the stock audio panel uses; the watcher follows the new default.
+    omarchy-audio-input-set-default "${id:-0}" "$2" >/dev/null
+    sleep 0.5; status ;;
   *) sed -n 2,8p "$0"; exit 1 ;;
 esac

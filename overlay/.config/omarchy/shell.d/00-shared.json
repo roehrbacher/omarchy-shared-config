@@ -39,7 +39,7 @@
         { "id": "timon.local-ai" },
         { "id": "timon.audio" },
         { "id": "omarchy.bluetooth" },
-        { "id": "omarchy.network" },
+        { "id": "timon.network" },
         { "id": "omarchy.monitor" },
         { "id": "omarchy.power", "showPercentage": true },
         { "id": "jankeesvw.notification-center" }

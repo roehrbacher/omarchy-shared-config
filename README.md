@@ -154,6 +154,12 @@ Grok Bot logo; click it for the usage panel.
   `omarchy-audio-output-set-default`. The default sink is always tracked so a
   Bluetooth default never looks muted. The tunings themselves are per machine
   and never live in this repo.
+- `timon.network` – clone of the stock Network panel (Omarchy 4.0.x) plus a
+  **LAN** on/off switch next to the Wi-Fi switch, shown only when the machine
+  has an Ethernet device (`nmcli device disconnect|connect <iface>`; off also
+  stops autoconnect until switched on). Re-copy `Panel.qml`/`Model.js` from
+  `$OMARCHY_PATH/shell/plugins/panels/network/` and re-apply the `timon:` blocks
+  if the stock panel changes a lot; undo = put `omarchy.network` back in `00-shared.json`.
 - `timon.lock` – stock lock screen that pauses all playing media when it locks.
 - `timon.indicators` – Omarchy's stock indicators group plus the Insomnia eye
   (see *Insomnia* below). Not stored here: `omarchy-indicators-build` clones it

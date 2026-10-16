@@ -106,6 +106,9 @@ bar (`"revealOnHover": true`, see `timon.hover-reveal`). Grokbar shows only the
 Grok Bot logo; click it for the usage panel.
 
 **Plugins**
+External plugins below are reviewed copies pinned in `plugins.lock` (id, upstream
+repo, reviewed commit, date); update one only after reviewing the upstream diff.
+
 - `io.github.kaiizu.runcat` 1.0.0 – Running Cat: a cat whose running speed follows
   CPU load (reads `/proc/stat`, no network); click opens btop. Reviewed copy of
   github.com/kaiizu/runningcat at `6314600` (commit in `.upstream-commit`)
@@ -166,9 +169,6 @@ Grok Bot logo; click it for the usage panel.
   stops autoconnect until switched on). Re-copy `Panel.qml`/`Model.js` from
   `$OMARCHY_PATH/shell/plugins/panels/network/` and re-apply the `timon:` blocks
   if the stock panel changes a lot; undo = put `omarchy.network` back in `00-shared.json`.
-  It also shows the live download speed left of the icon (`340K` = 340 KB/s,
-  `1.2M` / `14M` = MB/s), from `rx_bytes` of the default-route interface every 2 s
-  (no traffic of its own); hidden under 50 KB/s or offline.
 - `timon.lock` – stock lock screen that pauses all playing media when it locks.
 - `timon.indicators` – Omarchy's stock indicators group plus the Insomnia eye
   (see *Insomnia* below). Not stored here: `omarchy-indicators-build` clones it

@@ -1,0 +1,64 @@
+#!/bin/bash
+# Managed by omarchy-shared-config.
+#
+# timon.idle is a copy of Omarchy's idle plugin with one fix: moving or
+# clicking the mouse also closes the screensaver (stock only reacts to keys).
+# After each Omarchy update, look at what the packaged idle plugin *does*:
+#
+#   sure   - it runs a second idle monitor while the screensaver is up AND it
+#            closes the screensaver itself -> retire the clone, re-enable
+#            stock omarchy.idle, notify.
+#   unsure - only one of those signs shows up -> notify once, change nothing.
+#
+# Retired clones are recorded in ~/.local/state/omarchy-config/retired-plugins
+# so install.sh / omarchy-shell-json-build do not bring them back.
+
+set -uo pipefail
+
+CLONE_ID="${USER:-$(id -un)}.idle"
+STOCK_ID="omarchy.idle"
+CLONE_DIR="$HOME/.config/omarchy/plugins/$CLONE_ID"
+MARKER="$CLONE_DIR/.restore-when-upstream-has-screensaver-dismiss"
+STOCK_DIR="${OMARCHY_PATH:-/usr/share/omarchy}/shell/plugins/services/idle"
+STOCK_SERVICE="$STOCK_DIR/Service.qml"
+STOCK_MODEL="$STOCK_DIR/IdleModel.js"
+STATE_DIR="$HOME/.local/state/omarchy-config"
+RETIRED="$STATE_DIR/retired-plugins"
+NOTIFIED="$STATE_DIR/idle-restore-notified"
+
+[[ -f $MARKER && -d $CLONE_DIR && -f $STOCK_SERVICE ]] || exit 0
+mkdir -p "$STATE_DIR"
+
+notify() {
+  command -v omarchy-notification-send >/dev/null || return 0
+  omarchy-notification-send -g 󰐱 "$1" "$2" || true
+}
+
+monitors=$(grep -cE '^\s*IdleMonitor\s*\{' "$STOCK_SERVICE" || true)
+closes_saver=0
+if grep -qE 'pkill.*screensaver|dismissScreensaver|screensaverDismiss' "$STOCK_SERVICE" "$STOCK_MODEL" 2>/dev/null; then
+  closes_saver=1
+fi
+
+signs=0
+(( monitors >= 2 )) && signs=$((signs + 1))
+(( closes_saver )) && signs=$((signs + 1))
+
+if (( signs == 2 )); then
+  grep -qxF "$CLONE_ID $STOCK_ID" "$RETIRED" 2>/dev/null || echo "$CLONE_ID $STOCK_ID" >>"$RETIRED"
+  omarchy plugin remove "$CLONE_ID" --yes >/dev/null 2>&1 || rm -rf "$CLONE_DIR"
+  omarchy plugin enable "$STOCK_ID" >/dev/null 2>&1 || true
+  command -v omarchy-shell-json-build >/dev/null && omarchy-shell-json-build >/dev/null 2>&1 || true
+  notify "Idle clone removed" \
+    "Stock Omarchy idle now closes the screensaver on mouse input, so $CLONE_ID was retired. Remove it from omarchy-shared-config too."
+  exit 0
+fi
+
+if (( signs == 1 )); then
+  stamp=$(cat "$STOCK_SERVICE" "$STOCK_MODEL" 2>/dev/null | sha256sum | cut -d' ' -f1)
+  [[ -f $NOTIFIED && $(<"$NOTIFIED") == "$stamp" ]] && exit 0
+  echo "$stamp" >"$NOTIFIED"
+  notify "Check Omarchy idle" \
+    "Stock idle changed and may now close the screensaver on mouse input. Test it; if it works, run: omarchy plugin remove $CLONE_ID"
+fi
+exit 0

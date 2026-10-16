@@ -1,0 +1,69 @@
+#!/bin/bash
+# Control audio passthrough (used by the timon.audio-passthrough bar widget).
+#   status          print JSON: enabled, volume, active, headphones, configured
+#   on | off        write ENABLED and restart audio-passthrough.service
+#   volume <0-150>  set the live passthrough volume and save it
+DIR="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy"
+CONF=$DIR/audio-passthrough.conf
+MCONF=$DIR/audio-passthrough.machine.conf
+NAME=omarchy_audio_passthrough_playback
+
+ensure_conf() {
+  [[ -f $CONF ]] && return
+  mkdir -p "$DIR"
+  cat >"$CONF" <<'C'
+# Audio passthrough (hear yourself in the headphones). Set by the bar widget.
+# Which mic/headphones: audio-passthrough.machine.conf
+ENABLED=1          # 0 = off
+VOLUME=50%         # how loud your voice is in the headphones
+LATENCY_MS=10      # delay; raise to 20 if it crackles
+C
+}
+get() { # user conf wins over machine conf
+  local v
+  v=$(sed -nE "s/^$1=([^[:space:]#]*).*/\1/p" "$CONF" 2>/dev/null | tail -1)
+  [[ -z $v ]] && v=$(sed -nE "s/^$1=([^[:space:]#]*).*/\1/p" "$MCONF" 2>/dev/null | tail -1)
+  v=${v#[\"\']}; v=${v%[\"\']}   # SINK="a|b" is quoted in the conf
+  echo "$v"
+}
+set_key() {
+  ensure_conf
+  if grep -qE "^$1=" "$CONF"; then sed -i -E "s/^($1=)[^[:space:]#]*/\1$2/" "$CONF"
+  else echo "$1=$2" >>"$CONF"; fi
+}
+loop_id() {
+  pactl list sink-inputs 2>/dev/null | awk -v n="$NAME" '
+    /^Sink Input #/ {id = substr($3, 2)}
+    index($0, "node.name = \"" n "\"") {print id; exit}'
+}
+# True if $1 contains any of the '|'-separated parts of $2.
+match_any() {
+  local IFS='|' p
+  for p in $2; do [[ -n $p && $1 == *"$p"* ]] && return 0; done
+  return 1
+}
+b() { [[ $1 ]] && echo true || echo false; }
+status() {
+  local en vol sink hp=
+  en=$(get ENABLED); en=${en:-1}
+  vol=$(get VOLUME); vol=${vol%\%}; vol=${vol:-50}
+  sink=$(get SINK)
+  [[ -n $sink ]] && match_any "$(pactl get-default-sink 2>/dev/null)" "$sink" && hp=1
+  printf '{"enabled":%s,"volume":%s,"active":%s,"headphones":%s,"configured":%s,"service":"%s"}\n' \
+    "$(b "$([[ $en == 1 ]] && echo 1)")" "$vol" "$(b "$(loop_id)")" "$(b "$hp")" "$(b "$sink")" \
+    "$(systemctl --user is-active audio-passthrough 2>/dev/null)"
+}
+case ${1:-status} in
+  status) status ;;
+  on|off)
+    set_key ENABLED "$([[ $1 == on ]] && echo 1 || echo 0)"
+    systemctl --user restart audio-passthrough
+    sleep 0.3; status ;;
+  volume)
+    v=${2%\%}; [[ $v =~ ^[0-9]+$ ]] || { echo "volume needs 0-150" >&2; exit 1; }
+    (( v > 150 )) && v=150
+    set_key VOLUME "$v%"
+    id=$(loop_id); [[ -n $id ]] && pactl set-sink-input-volume "$id" "$v%"
+    status ;;
+  *) sed -n 2,5p "$0"; exit 1 ;;
+esac

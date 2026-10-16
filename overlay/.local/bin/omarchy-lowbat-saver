@@ -1,0 +1,71 @@
+#!/bin/bash
+# Managed by omarchy-shared-config. Runs as omarchy-lowbat-saver.service.
+# Laptops only: on a desktop (omarchy-machine-kind) the service exits at once.
+#
+# On battery at or below LOWBAT_SAVER_PERCENT (default 20) switch the power
+# profile to power-saver ONCE. If Timon changes the profile afterwards it is
+# left alone; the one-shot resets when the charger is plugged in.
+# Stock Omarchy (omarchy.battery) only warns at 10% and switches the AC /
+# battery profile on plug changes; this does not touch that: it never saves
+# a profile in Omarchy's per-source memory, so plugging in restores the AC
+# profile as usual.
+#
+#   omarchy-lowbat-saver            the service loop
+#   omarchy-lowbat-saver check <percent> <battery|ac>   dry-run of one decision
+set -u
+
+THRESHOLD=${LOWBAT_SAVER_PERCENT:-20}
+INTERVAL=${LOWBAT_SAVER_INTERVAL:-30}
+RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omarchy-lowbat-saver"
+FLAG="$RUN_DIR/applied"
+
+reading() {
+  local pct src
+  pct=$(busctl get-property org.freedesktop.UPower /org/freedesktop/UPower/devices/DisplayDevice org.freedesktop.UPower.Device Percentage 2>/dev/null | awk '{printf "%d", $2 + 0.5}')
+  [[ $(busctl get-property org.freedesktop.UPower /org/freedesktop/UPower org.freedesktop.UPower OnBattery 2>/dev/null) == "b true" ]] && src=battery || src=ac
+  echo "${pct:-100} $src"
+}
+
+# decide <percent> <source> <already-applied 0|1> -> apply | reset | none
+decide() {
+  if [[ $2 != battery ]]; then
+    (( $3 )) && echo reset || echo none
+  elif (( $1 <= THRESHOLD )) && (( ! $3 )); then
+    echo apply
+  else
+    echo none
+  fi
+}
+
+step() {
+  local pct src applied=0
+  read -r pct src < <(reading)
+  [[ -e $FLAG ]] && applied=1
+  case $(decide "$pct" "$src" "$applied") in
+  apply)
+    mkdir -p "$RUN_DIR"; touch "$FLAG"
+    # Let Omarchy's own battery profile switch land first after an unplug.
+    sleep 3
+    if [[ $(powerprofilesctl get 2>/dev/null) != power-saver ]]; then
+      omarchy-power-saver && [[ $(powerprofilesctl get 2>/dev/null) == power-saver ]] &&
+        omarchy-notification-send -g 󰌪 "Power saver on" "Battery is at ${pct}%." >/dev/null 2>&1
+    fi
+    ;;
+  reset) rm -f "$FLAG" ;;
+  esac
+}
+
+case "${1:-}" in
+check)
+  applied=0; [[ ${4:-} == applied ]] && applied=1
+  echo "$(decide "${2:?percent}" "${3:?battery|ac}" "$applied") (threshold ${THRESHOLD}%)"
+  ;;
+"")
+  if ! omarchy-machine-kind laptop; then
+    echo "$(omarchy-machine-kind --why): no battery to watch, exiting"
+    exit 0
+  fi
+  while :; do step; sleep "$INTERVAL"; done
+  ;;
+*) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac

@@ -1,0 +1,7 @@
+[Unit]
+Description=Rebuild the Omarchy menu extension (shared tweaks + folder rows)
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/omarchy-menu-build --quiet

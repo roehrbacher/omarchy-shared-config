@@ -1,0 +1,87 @@
+#!/bin/bash
+# Managed by omarchy-shared-config. Build timon.indicators: Omarchy's stock
+# indicators group (omarchy.indicators) cloned the way `omarchy plugin clone`
+# does it, plus the Insomnia indicator (~/.local/share/omarchy-config/indicators)
+# inserted into its list just before StayAwake (the coffee).
+#
+# Rebuilt from the installed stock files by install.sh and after every Omarchy
+# update (hooks/post-update.d/rebuild-indicators), so the clone never drifts
+# from upstream. If the stock layout changes so that the build fails, the
+# previous build stays in place and this exits non-zero.
+#
+#   omarchy-indicators-build           rebuild if stock or Insomnia changed
+#   omarchy-indicators-build --force   rebuild anyway
+set -euo pipefail
+
+SRC_ID=omarchy.indicators
+NEW_ID=timon.indicators
+EXTRA="$HOME/.local/share/omarchy-config/indicators"
+PLUGINS="$HOME/.config/omarchy/plugins"
+DEST="$PLUGINS/$NEW_ID"
+
+fail() { echo "omarchy-indicators-build: $*" >&2; exit 1; }
+
+info=$(omarchy-plugin-catalog | jq -r --arg id "$SRC_ID" '.[] | select(.firstParty and .id == $id) | [.sourceDir, .manifestPath] | @tsv')
+[[ -n $info ]] || fail "built-in $SRC_ID not found"
+IFS=$'\t' read -r sdir manifest <<<"$info"
+entry=$(jq -r '.entryPoints.barWidget // empty' "$manifest")
+[[ -n $entry && -f $sdir/$entry ]] || fail "no bar widget entry point in $manifest"
+
+# Fingerprint of everything the build reads.
+inputs() {
+  cat "$manifest" "$sdir/$entry" "$0"
+  jq -r '.omarchy.clonePaths[]?.source' "$manifest" | while read -r s; do
+    find "$sdir/$s" -type f -print0 | sort -z | xargs -0 cat
+  done
+  find "$EXTRA" -type f -print0 | sort -z | xargs -0 cat
+}
+stamp=$(inputs | sha256sum | cut -d' ' -f1)
+if [[ ${1:-} != --force && -f $DEST/.build-stamp && $(cat "$DEST/.build-stamp") == "$stamp" ]]; then
+  exit 0
+fi
+
+mkdir -p "$PLUGINS"
+stage=$(mktemp -d "$PLUGINS/.build.XXXXXX")
+trap 'rm -rf "$stage"' EXIT
+
+# Same steps as omarchy-plugin-clone's copy_plugin/update_manifest.
+cp -aL "$manifest" "$stage/manifest.json"
+cp -aL "$sdir/$entry" "$stage/$entry"
+while IFS=$'\t' read -r source target; do
+  [[ $target != /* && $target != *..* ]] || fail "invalid clone target: $target"
+  mkdir -p "$stage/$target"
+  cp -aL "$sdir/$source/." "$stage/$target/"
+  pattern=${source//./\\.}
+  rg --files-with-matches --null --fixed-strings "$source" "$stage" | xargs -0 -r sed -i "s|$pattern|$target|g"
+done < <(jq -r '.omarchy.clonePaths[]? | [.source, .target] | @tsv' "$manifest")
+[[ -f $stage/indicators/StayAwake.qml ]] || fail "stock indicators folder not where expected"
+
+# Insomnia: the indicator files, and one more entry in the default list.
+cp -a "$EXTRA/." "$stage/indicators/"
+grep -q '"StayAwake" *\]' "$stage/$entry" || fail "default indicator list not found in $entry"
+sed -i '/defaultIndicatorEntries/ s/"StayAwake" *\]/"Insomnia", "StayAwake" ]/' "$stage/$entry"
+grep -q '"Insomnia", "StayAwake"' "$stage/$entry" || fail "could not add Insomnia to the indicator list"
+
+jq --arg id "$NEW_ID" --arg sourceId "$SRC_ID" '
+  .id = $id |
+  .name = "Indicators + Insomnia" |
+  .author = "Omarchy (cloned by omarchy-indicators-build)" |
+  .barWidget.displayName = "Indicators + Insomnia" |
+  .barWidget.schema |= map(if .key == "items" then
+      .options |= (map(select(.value != "Insomnia")) as $o
+        | ($o | map(.value) | index("StayAwake")) as $i
+        | if $i == null then $o + [$ins] else $o[:$i] + [$ins] + $o[$i:] end)
+    else . end) |
+  .omarchy = ((if (.omarchy | type) == "object" then .omarchy else {} end) + { clonedFrom: $sourceId }) |
+  del(.omarchy.clonePaths)
+' --argjson ins '{"value":"Insomnia","label":"Insomnia","description":"Timed keep-awake session"}' \
+  "$stage/manifest.json" >"$stage/manifest.json.tmp"
+mv "$stage/manifest.json.tmp" "$stage/manifest.json"
+echo "$stamp" >"$stage/.build-stamp"
+
+chmod 755 "$stage"
+rm -rf "$DEST"
+mv "$stage" "$DEST"
+trap - EXIT
+echo "Built $NEW_ID from $SRC_ID ($sdir)"
+omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true

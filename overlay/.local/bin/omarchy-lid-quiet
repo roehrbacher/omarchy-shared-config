@@ -1,0 +1,177 @@
+#!/bin/bash
+# Managed by omarchy-shared-config (laptop part of Insomnia; does nothing on
+# a desktop, see omarchy-machine-kind).
+#
+# "Quiet mode" while a laptop lid is closed and the machine keeps running
+# (on AC, or on battery inside an Insomnia session, see omarchy-insomnia):
+#   - power profile -> power-saver, the previous one is restored on open
+#   - chatty apps from ~/.config/omarchy/lid-freeze-apps are frozen (SIGSTOP)
+#     and continued (SIGCONT) on open
+#
+# Runs as the transient user unit omarchy-lid-quiet.service so it survives
+# shell restarts; stopping the unit (lid open) always thaws via ExecStopPost.
+# The unit also watches for a missed lid-open or a resume from sleep and
+# stops itself, so apps are never left frozen.
+#
+#   omarchy-lid-quiet start    lid closed: enter quiet mode (idempotent)
+#   omarchy-lid-quiet stop     lid open: leave quiet mode (idempotent)
+#   omarchy-lid-quiet thaw     SIGCONT every listed app (safety net, boot/login)
+#   omarchy-lid-quiet status   print active/inactive and the frozen PIDs
+#   omarchy-lid-quiet list     show which running processes would be frozen
+set -u
+
+UNIT=omarchy-lid-quiet.service
+RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omarchy-lid-quiet"
+LIST="$HOME/.config/omarchy/lid-freeze-apps"
+SELF=$(readlink -f "$0")
+LOWBAT_FLAG="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omarchy-lowbat-saver/applied"
+
+# Never frozen, even if they end up in the list by mistake.
+GUARD_RE='^(grok|grok-bot|grokbot|cursor|voxtype|alacritty|kitty|foot|footclient|ghostty|wezterm|brave|brave-browser|chromium|chrome|sunshine|moonlight|tailscale|tailscaled|ssh|sshd|ssh-agent|hermes|ollama|llama|llama-server|llama-cli|omarchy-shell|quickshell|qs|hyprland|hyprlock|pipewire|pipewire-pulse|wireplumber|systemd|dbus-daemon|dbus-broker|xdg-desktop-portal.*|uwsm|bash|zsh|fish|tmux|herdr|node|python.*)$'
+
+on_battery() {
+  [[ $(busctl get-property org.freedesktop.UPower /org/freedesktop/UPower org.freedesktop.UPower OnBattery 2>/dev/null) == "b true" ]]
+}
+lid_closed() {
+  [[ $(busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager LidClosed 2>/dev/null) == "b true" ]]
+}
+source_name() { on_battery && echo battery || echo ac; }
+
+# Names from the list file: one per line, # comments, matched
+# case-insensitively against the process name and the executable's basename.
+list_names() {
+  [[ -r $LIST ]] || return 0
+  sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$LIST" | grep -v '^$' | tr '[:upper:]' '[:lower:]'
+}
+
+# PIDs of this user's processes whose name or executable matches the list.
+matching_pids() {
+  local names pid comm exe
+  names=$(list_names)
+  [[ -n $names ]] || return 0
+  while read -r pid comm; do
+    [[ $pid == "$$" ]] && continue
+    exe=$(readlink "/proc/$pid/exe" 2>/dev/null); exe=${exe% (deleted)}; exe=${exe##*/}
+    comm=${comm,,}; exe=${exe,,}
+    if [[ $comm =~ $GUARD_RE || $exe =~ $GUARD_RE ]]; then continue; fi
+    if grep -qxF -e "$comm" -e "${exe:-$comm}" <<<"$names"; then echo "$pid"; fi
+  done < <(ps -U "$(id -u)" -o pid=,comm=)
+}
+
+freeze() {
+  mkdir -p "$RUN_DIR"
+  local pids
+  pids=$(matching_pids)
+  [[ -n $pids ]] || return 0
+  # shellcheck disable=SC2086
+  kill -STOP $pids 2>/dev/null
+  printf '%s\n' $pids >>"$RUN_DIR/frozen"
+}
+
+thaw() {
+  local pids=""
+  [[ -r $RUN_DIR/frozen ]] && pids=$(sort -u "$RUN_DIR/frozen")
+  pids="$pids $(matching_pids)"
+  # shellcheck disable=SC2086
+  [[ -n ${pids// /} ]] && kill -CONT $pids 2>/dev/null
+  rm -f "$RUN_DIR/frozen"
+  return 0
+}
+
+restore_profile() {
+  local prev="" src=""
+  [[ -r $RUN_DIR/profile ]] && prev=$(<"$RUN_DIR/profile")
+  [[ -r $RUN_DIR/source ]] && src=$(<"$RUN_DIR/source")
+  rm -f "$RUN_DIR/profile" "$RUN_DIR/source"
+  [[ -n $prev ]] || return 0
+  if on_battery && [[ -e $LOWBAT_FLAG ]]; then
+    omarchy-power-saver   # low-battery saver is in charge
+  elif [[ $src == "$(source_name)" ]]; then
+    powerprofilesctl set "$prev" 2>/dev/null
+  else
+    # AC/battery changed while closed: use Omarchy's remembered profile for now.
+    omarchy-powerprofiles-set autodetect 2>/dev/null
+  fi
+}
+
+# The body of the transient unit.
+run_unit() {
+  mkdir -p "$RUN_DIR"
+  if [[ ! -e $RUN_DIR/profile ]]; then
+    powerprofilesctl get >"$RUN_DIR/profile" 2>/dev/null || rm -f "$RUN_DIR/profile"
+    source_name >"$RUN_DIR/source"
+  fi
+  omarchy-power-saver
+  freeze
+  trap 'exit 0' TERM INT
+  local last now src open_count=0
+  last=$(date +%s)
+  src=$(source_name)
+  while :; do
+    sleep 15 &
+    wait $!
+    now=$(date +%s)
+    # Resumed from sleep (big clock jump) or lid seen open twice: leave.
+    if (( now - last > 90 )) && ! lid_closed; then exit 0; fi
+    last=$now
+    if lid_closed; then open_count=0; else open_count=$((open_count + 1)); fi
+    (( open_count >= 2 )) && exit 0
+    # Keep power-saver while the lid stays closed. Omarchy re-applies its
+    # AC/battery profile when the power source changes, and the Dell firmware
+    # firmware can switch the platform profile on lid events (power-profiles-daemon
+    # follows it), so re-check every pass instead of only on a source change.
+    if [[ $(source_name) != "$src" ]]; then
+      src=$(source_name)
+      sleep 3
+    fi
+    # omarchy-power-saver makes it stick (see there), so this only acts
+    # after a real outside change, at most once per 15 s pass.
+    if lid_closed && [[ $(powerprofilesctl get 2>/dev/null) != power-saver ]]; then
+      omarchy-power-saver
+    fi
+  done
+}
+
+# Laptops only. On a desktop every command is a no-op (thaw included: there
+# is no lid, so nothing was ever frozen).
+if [[ ${1:-} != list && ${1:-} != status ]] && ! omarchy-machine-kind laptop; then
+  exit 0
+fi
+
+case "${1:-}" in
+start)
+  systemctl --user is-active --quiet "$UNIT" && exit 0
+  systemctl --user reset-failed "$UNIT" >/dev/null 2>&1
+  systemd-run --user --quiet --collect --unit="$UNIT" \
+    --description="Lid closed: power saver + frozen chatty apps" \
+    -p ExecStopPost="$SELF _cleanup" "$SELF" _run
+  ;;
+stop)
+  if systemctl --user is-active --quiet "$UNIT"; then
+    systemctl --user stop "$UNIT"
+  else
+    "$SELF" _cleanup
+  fi
+  ;;
+_run) run_unit ;;
+_cleanup)
+  thaw
+  restore_profile
+  ;;
+thaw) thaw ;;
+status)
+  if systemctl --user is-active --quiet "$UNIT"; then echo active; else echo inactive; fi
+  [[ -r $RUN_DIR/frozen ]] && echo "frozen: $(sort -u "$RUN_DIR/frozen" | tr '\n' ' ')"
+  [[ -r $RUN_DIR/profile ]] && echo "restore profile: $(<"$RUN_DIR/profile") (closed on $(cat "$RUN_DIR/source" 2>/dev/null))"
+  true
+  ;;
+list)
+  for pid in $(matching_pids); do
+    printf '%s\t%s\t%s\n' "$pid" "$(ps -o stat= -p "$pid" | tr -d ' ')" "$(tr '\0' ' ' <"/proc/$pid/cmdline" | cut -c1-80)"
+  done
+  ;;
+*)
+  sed -n '2,20p' "$SELF" | sed 's/^# \{0,1\}//'
+  exit 1
+  ;;
+esac

@@ -1,0 +1,13 @@
+[Unit]
+Description=Recheck timezone from network location and nudge on mismatch
+
+[Timer]
+# User timers start at login, often long after boot, so OnBootSec would already
+# be in the past and never fire. Count from login (OnStartupSec) and from when
+# the timer is (re)started (OnActiveSec), then every 20 min after each run.
+OnStartupSec=45s
+OnActiveSec=45s
+OnUnitInactiveSec=20min
+
+[Install]
+WantedBy=timers.target

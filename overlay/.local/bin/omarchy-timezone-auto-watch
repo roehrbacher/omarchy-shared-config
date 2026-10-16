@@ -1,0 +1,22 @@
+#!/bin/bash
+# Managed by omarchy-shared-config.
+# Recheck timezone after boot and on network changes; nudge if it no longer matches.
+
+set -euo pipefail
+
+AUTO="$HOME/.local/bin/omarchy-timezone-auto"
+
+run() {
+  "$AUTO" || true
+}
+
+run
+
+while IFS= read -r line; do
+  case $line in
+  *connected* | *disconnected* | *connectivity*)
+    sleep 8
+    run
+    ;;
+  esac
+done < <(nmcli monitor)

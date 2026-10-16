@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Name=Mail Proton
+Comment=Proton Mail
+Keywords=Proton;Mail;Email;
+Exec=omarchy-launch-webapp https://mail.proton.me
+Terminal=false
+Type=Application
+Icon=proton-mail
+StartupNotify=true
+MimeType=x-scheme-handler/mailto;

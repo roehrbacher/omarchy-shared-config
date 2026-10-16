@@ -1,0 +1,11 @@
+[Unit]
+Description=Audio passthrough: hear your mic in the headphones (only while they are default)
+After=pipewire.service pipewire-pulse.service wireplumber.service
+
+[Service]
+ExecStart=%h/.local/bin/audio-passthrough-watch
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

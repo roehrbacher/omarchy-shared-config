@@ -1,0 +1,8 @@
+[Unit]
+Description=Detect location and nudge if the timezone no longer matches
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/omarchy-timezone-auto

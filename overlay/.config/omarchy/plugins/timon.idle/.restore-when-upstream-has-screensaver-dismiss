@@ -1,0 +1,5 @@
+This clone exists only until packaged omarchy.idle dismisses the screensaver
+on mouse movement/clicks (not just key presses).
+The post-update hook restore-idle-when-upstream-dismisses checks the stock
+plugin after every Omarchy update. If it is sure stock can do it, it retires
+this clone and switches back to omarchy.idle; if it is unsure it only notifies.

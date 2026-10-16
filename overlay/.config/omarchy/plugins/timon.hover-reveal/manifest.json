@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "timon.hover-reveal",
+  "name": "Hover reveal",
+  "version": "1.1.0",
+  "author": "Timon Röhrbacher",
+  "license": "MIT",
+  "description": "Keeps bar widgets marked \"revealOnHover\": true invisible in place and fades them in like the stock indicators next to the clock.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Hover reveal",
+    "description": "Invisible helper: other bar entries with \"revealOnHover\": true stay invisible in place and fade in like the stock indicators next to the clock",
+    "category": "Layout",
+    "allowMultiple": false,
+    "defaultSection": "left",
+    "schema": [
+      {
+        "key": "revealMs",
+        "type": "integer",
+        "label": "Reveal animation (ms)",
+        "min": 0,
+        "max": 1000,
+        "step": 10,
+        "defaultValue": 140
+      },
+      {
+        "key": "hideMs",
+        "type": "integer",
+        "label": "Hide animation (ms)",
+        "min": 0,
+        "max": 1000,
+        "step": 10,
+        "defaultValue": 140
+      },
+      {
+        "key": "hideDelayMs",
+        "type": "integer",
+        "label": "Hide delay after leaving the bar (ms, only for bars without the stock peek state)",
+        "min": 0,
+        "max": 5000,
+        "step": 50,
+        "defaultValue": 450
+      }
+    ]
+  }
+}

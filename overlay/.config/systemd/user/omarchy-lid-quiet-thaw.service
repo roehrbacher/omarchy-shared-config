@@ -1,0 +1,11 @@
+# Managed by omarchy-shared-config. No-op on desktops (omarchy-lid-quiet checks).
+[Unit]
+Description=Safety net: continue any app the lid quiet mode froze
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/omarchy-lid-quiet thaw
+
+[Install]
+WantedBy=graphical-session.target

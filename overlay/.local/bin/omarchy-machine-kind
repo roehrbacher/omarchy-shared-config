@@ -1,0 +1,45 @@
+#!/bin/bash
+# Managed by omarchy-shared-config. Print "laptop" or "desktop".
+#
+# laptop  = a system battery is present (power_supply type Battery, not a
+#           peripheral's: scope Device is skipped) AND there is a lid
+#           (/proc/acpi/button/lid/*). Everything else is a desktop.
+# Override (not shipped): INSOMNIA_MODE=laptop|desktop in
+# ~/.config/omarchy/insomnia.conf, or OMARCHY_MACHINE_KIND in the environment.
+#
+#   omarchy-machine-kind            print the kind
+#   omarchy-machine-kind laptop     exit 0 if this is a laptop (quiet)
+#   omarchy-machine-kind --why      print the kind and what decided it
+set -u
+
+kind="" why=""
+if [[ ${OMARCHY_MACHINE_KIND:-} == laptop || ${OMARCHY_MACHINE_KIND:-} == desktop ]]; then
+  kind=$OMARCHY_MACHINE_KIND why="OMARCHY_MACHINE_KIND"
+else
+  conf="$HOME/.config/omarchy/insomnia.conf"
+  mode=$(sed -n 's/^[[:space:]]*INSOMNIA_MODE=["'\'']\{0,1\}\(laptop\|desktop\)["'\'']\{0,1\}[[:space:]]*\(#.*\)\{0,1\}$/\1/p' "$conf" 2>/dev/null | tail -1)
+  if [[ -n $mode ]]; then
+    kind=$mode why="INSOMNIA_MODE in $conf"
+  else
+    battery="" lid=""
+    for s in /sys/class/power_supply/*; do
+      [[ -r $s/type && $(<"$s/type") == Battery ]] || continue
+      [[ -r $s/scope && $(<"$s/scope") == Device ]] && continue
+      [[ -r $s/present && $(<"$s/present") != 1 ]] && continue
+      battery=${s##*/}; break
+    done
+    for l in /proc/acpi/button/lid/*/state; do [[ -e $l ]] && { lid=${l%/state}; lid=${lid##*/}; break; }; done
+    if [[ -n $battery && -n $lid ]]; then
+      kind=laptop why="battery $battery + lid $lid"
+    else
+      kind=desktop why="battery ${battery:-none}, lid ${lid:-none}"
+    fi
+  fi
+fi
+
+case "${1:-}" in
+laptop | desktop) [[ $kind == "$1" ]] ;;
+--why) echo "$kind ($why)" ;;
+"") echo "$kind" ;;
+*) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

@@ -1,0 +1,27 @@
+#!/bin/bash
+# Managed by omarchy-shared-config. Run when an Insomnia session starts on the
+# PC (omarchy-insomnia) and by the laptop lid handler when it keeps running closed (omarchy-lid).
+# Not bound to a key any more (Insert used to run it).
+#
+# Lock the session (Omarchy's own lock, timon.lock) and turn every display
+# fully off (DPMS, no backlight). Nothing is suspended or hibernated, so the
+# machine keeps running and stays reachable (Grok Bot, SSH, downloads, ...).
+# Any key or mouse move turns the displays back on at the lock screen
+# (Hyprland key_press_enables_dpms / mouse_move_enables_dpms, both stock on);
+# the lock screen blanks them again 5 s after the last input.
+set -u
+
+omarchy-system-lock >/dev/null 2>&1 || true
+
+# Wait (max 3 s) until the lock screen is up and secure. Turning the displays
+# off earlier would let the lock surface mapping light them up again.
+for _ in $(seq 1 30); do
+  [[ $(omarchy-shell lock status 2>/dev/null | jq -r '.secure // false' 2>/dev/null) == true ]] && break
+  sleep 0.1
+done
+
+# Let the Insert key release pass first: a key event wakes DPMS.
+sleep 0.5
+
+omarchy-brightness-keyboard off >/dev/null 2>&1 || true
+omarchy-brightness-display off

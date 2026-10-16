@@ -1,0 +1,17 @@
+# Managed by omarchy-shared-config (used on laptops only).
+# Apps frozen (SIGSTOP) while the laptop lid is closed and the laptop keeps
+# running, continued (SIGCONT) when the lid opens. One process or executable
+# name per line, case-insensitive (see `omarchy-lid-quiet list`).
+# Terminals, browsers, Grok Bot, Voxtype, Sunshine, Tailscale, ssh and local
+# AI servers are never frozen, even if listed here.
+# Web apps (e.g. WhatsApp in a Brave app window) run inside Brave and can't
+# be frozen separately.
+signal-desktop
+signal
+telegram-desktop
+telegram
+spotify
+discord
+vesktop
+slack
+ente

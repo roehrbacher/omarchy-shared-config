@@ -1,0 +1,14 @@
+[Unit]
+Description=Exclusive MPRIS playback (pause other media players)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/mpris-exclusive
+Restart=on-failure
+RestartSec=2
+Environment=XDG_RUNTIME_DIR=%t
+
+[Install]
+WantedBy=graphical-session.target

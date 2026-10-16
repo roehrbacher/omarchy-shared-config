@@ -1,0 +1,90 @@
+#!/bin/bash
+# Audio passthrough (sidetone): hear your own mic in the headphones, only
+# while the configured headphone sink is the default output.
+#
+# Machine settings (which mic, which headphones):
+#   ~/.config/omarchy/audio-passthrough.machine.conf   SOURCE=, SINK=
+#   (each a part of the device name; several alternatives separated by '|',
+#    quoted: SINK="name_a|name_b")
+# Your settings (written by the bar widget / omarchy-audio-passthrough):
+#   ~/.config/omarchy/audio-passthrough.conf           ENABLED=, VOLUME=, LATENCY_MS=
+# No SINK configured, or the devices are missing: does nothing.
+#
+# The loopback is two plain streams (capture + playback), not a sink or
+# source, so it never shows up as an output or a microphone. Only
+# server/sink/source events are followed, never its own streams.
+
+DIR="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy"
+NAME=omarchy_audio_passthrough
+LOOP_PID=
+
+load_conf() {
+  ENABLED=1; VOLUME=50%; LATENCY_MS=10
+  SINK=        # part of the headphone sink name; empty = never active
+  SOURCE=      # part of the mic source name; empty = default mic
+  # shellcheck source=/dev/null
+  [[ -f $DIR/audio-passthrough.machine.conf ]] && source "$DIR/audio-passthrough.machine.conf"
+  # shellcheck source=/dev/null
+  [[ -f $DIR/audio-passthrough.conf ]] && source "$DIR/audio-passthrough.conf"
+}
+
+# True if $1 contains any of the '|'-separated parts of $2.
+match_any() {
+  local IFS='|' p
+  for p in $2; do [[ -n $p && $1 == *"$p"* ]] && return 0; done
+  return 1
+}
+
+running() { [[ -n $LOOP_PID ]] && kill -0 "$LOOP_PID" 2>/dev/null; }
+stop() {
+  if running; then kill "$LOOP_PID" 2>/dev/null; wait "$LOOP_PID" 2>/dev/null; fi
+  LOOP_PID=
+}
+
+find_source() {
+  if [[ -z $SOURCE ]]; then pactl get-default-source 2>/dev/null; return; fi
+  local name
+  while read -r _ name _; do
+    [[ $name == *.monitor ]] && continue
+    match_any "$name" "$SOURCE" && { echo "$name"; return; }
+  done < <(pactl list short sources 2>/dev/null)
+}
+
+start() {
+  local sink=$1 src id i
+  src=$(find_source)
+  [[ -n $src ]] || return 0
+  pw-loopback -n "$NAME" -l "$LATENCY_MS" -C "$src" -P "$sink" \
+    -i "node.name=${NAME}_capture node.description=\"Audio passthrough\" media.name=\"Audio passthrough input\" node.dont-reconnect=true stream.dont-remix=false media.role=Communication" \
+    -o "node.name=${NAME}_playback node.description=\"Audio passthrough\" media.name=\"Audio passthrough\" node.dont-reconnect=true media.role=Communication" \
+    >/dev/null 2>&1 &
+  LOOP_PID=$!
+  LOOP_SRC=$src
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    id=$(pactl list sink-inputs 2>/dev/null | awk -v n="${NAME}_playback" '
+      /^Sink Input #/ {id = substr($3, 2)}
+      index($0, "node.name = \"" n "\"") {print id; exit}')
+    [[ -n $id ]] && { pactl set-sink-input-volume "$id" "$VOLUME" >/dev/null 2>&1; break; }
+    sleep 0.1
+  done
+}
+
+update() {
+  load_conf
+  local cur
+  cur=$(pactl get-default-sink 2>/dev/null)
+  if [[ $ENABLED == 1 && -n $SINK && $(match_any "$cur" "$SINK" && echo y) == y && -n $(find_source) ]]; then
+    if ! running || [[ $cur != "$LOOP_SINK" || $(find_source) != "$LOOP_SRC" ]]; then
+      stop; LOOP_SINK=$cur; start "$cur"
+    fi
+  else
+    stop; LOOP_SINK=
+  fi
+}
+
+trap 'stop; exit 0' TERM INT
+update
+while read -r _; do
+  update
+done < <(pactl subscribe 2>/dev/null | grep --line-buffered -E "on (server|sink|source) #")
+stop

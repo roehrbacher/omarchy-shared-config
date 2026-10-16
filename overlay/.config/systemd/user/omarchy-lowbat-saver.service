@@ -1,0 +1,13 @@
+# Managed by omarchy-shared-config. On a desktop the script exits at once
+# (inactive, no restarts: Restart only on failure).
+[Unit]
+Description=Switch to power-saver once when the battery drops to 20% (laptops)
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/omarchy-lowbat-saver
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target

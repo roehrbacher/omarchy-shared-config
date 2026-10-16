@@ -1,0 +1,7 @@
+[Unit]
+Description=Update hyprsunset night light to today's sunrise and sunset
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/omarchy-nightlight-sun-schedule

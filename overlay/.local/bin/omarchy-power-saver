@@ -1,0 +1,49 @@
+#!/bin/bash
+# Managed by omarchy-shared-config. Switch to power-saver so that it sticks.
+#
+# Usually that is just `powerprofilesctl set power-saver`. One case needs a
+# detour: when power-profiles-daemon has to EMULATE power-saver because the
+# kernel's /sys/firmware/acpi/platform_profile offers no low-power profile
+# (e.g. the XPS: two platform-profile handlers, Intel "SoC Power Slider" and
+# dell-pc, whose only shared choices are "balanced performance"). ppd 0.30
+# then sets platform "balanced" + CPU EPP "power". If the platform was on
+# "performance", that write changes it, the kernel signals the change, and
+# ppd reads "balanced" back as an outside switch to balanced: power-saver
+# silently lands as balanced. Stepping through balanced first means the
+# power-saver write changes nothing at platform level, so it stays.
+# Without the emulation (a native low-power/quiet/cool choice, or no
+# platform profile at all) the plain call is used.
+#
+#   omarchy-power-saver          set power-saver (no-op if already active)
+#   omarchy-power-saver --why    print which path this machine takes
+set -u
+
+CHOICES=/sys/firmware/acpi/platform_profile_choices
+
+emulated() {
+  [[ -r $CHOICES ]] || return 1
+  ! grep -qwE 'low-power|quiet|cool' "$CHOICES"
+}
+
+if [[ ${1:-} == --why ]]; then
+  handlers=$(ls -d /sys/class/platform-profile/* 2>/dev/null | wc -l)
+  if emulated; then
+    echo "balanced first: platform_profile_choices '$(<"$CHOICES")' has no low-power choice ($handlers handlers), ppd emulates power-saver"
+  else
+    echo "plain: $( [[ -r $CHOICES ]] && echo "choices '$(<"$CHOICES")'" || echo "no platform profile")"
+  fi
+  exit 0
+fi
+
+command -v powerprofilesctl >/dev/null || exit 0
+[[ $(powerprofilesctl get 2>/dev/null) == power-saver ]] && exit 0
+if emulated && [[ $(cat /sys/firmware/acpi/platform_profile 2>/dev/null) != balanced ]]; then
+  powerprofilesctl set balanced 2>/dev/null
+  # Let ppd see the platform change before the next request.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    [[ $(powerprofilesctl get 2>/dev/null) == balanced ]] && break
+    sleep 0.1
+  done
+  sleep 0.3
+fi
+powerprofilesctl set power-saver 2>/dev/null

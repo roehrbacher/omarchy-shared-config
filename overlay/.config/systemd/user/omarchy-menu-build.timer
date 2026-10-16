@@ -1,0 +1,10 @@
+[Unit]
+Description=Rebuild the Omarchy menu at login and every 15 minutes (catches deeper folder changes)
+
+[Timer]
+OnStartupSec=15s
+OnUnitActiveSec=15min
+Unit=omarchy-menu-build.service
+
+[Install]
+WantedBy=timers.target

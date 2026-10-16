@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=Calendar Proton
+Comment=Proton Calendar
+Keywords=Proton;Calendar;
+Exec=omarchy-launch-webapp "https://calendar.proton.me"
+Terminal=false
+Type=Application
+Icon=proton-calendar
+StartupNotify=true

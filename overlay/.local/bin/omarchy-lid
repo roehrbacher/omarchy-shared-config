@@ -1,0 +1,83 @@
+#!/bin/bash
+# Managed by omarchy-shared-config. Bound to the lid switch in
+# hypr/shared-bindings.lua (desktops have no lid switch, so it never runs there;
+# on a desktop it would just do the stock lid commands).
+#
+#   omarchy-lid close   lid closed
+#   omarchy-lid open    lid opened
+#   omarchy-lid why     what closing the lid would do right now
+#
+# close: Omarchy's own lid handler first (locks unless an external monitor is
+#        in use, then sets up clamshell). Then, if the laptop will keep running
+#        closed and no external monitor is in use, the displays go fully off
+#        (omarchy-screen-off) and quiet mode starts (omarchy-lid-quiet:
+#        power-saver + chatty apps frozen). It keeps running closed when
+#          - an Insomnia session runs (omarchy-insomnia holds logind's lid
+#            handling, so battery behaves like AC), or
+#          - it is on AC and logind ignores the lid on AC
+#            (HandleLidSwitchExternalPower=ignore/lock; on the XPS from
+#            omarchy-xps-config root-files/).
+#        Otherwise logind suspends as usual and this does nothing more.
+# open:  quiet mode ends (apps continued, power profile restored), then
+#        Omarchy's clamshell handler, then the display comes back on at the
+#        lock screen. Without any input it goes dark again after 30 s, like the
+#        lock screen does after a keypress.
+set -u
+
+on_ac() {
+  local supply
+  for supply in /sys/class/power_supply/*; do
+    [[ -r $supply/type && $(<"$supply/type") == Mains && -r $supply/online ]] || continue
+    [[ $(<"$supply/online") == 1 ]] && return 0
+  done
+  return 1
+}
+
+insomnia() { systemctl --user is-active --quiet omarchy-insomnia.service; }
+
+# What logind does with the lid on external power (ignore, lock, suspend, ...).
+logind_ac_action() {
+  busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager HandleLidSwitchExternalPower 2>/dev/null | sed -n 's/^s "\(.*\)"$/\1/p'
+}
+
+keeps_running() {
+  insomnia && return 0
+  on_ac || return 1
+  case $(logind_ac_action) in ignore | lock) return 0 ;; esac
+  return 1
+}
+
+locked() { [[ $(omarchy-shell lock isLocked 2>/dev/null) == true ]]; }
+
+case "${1:-}" in
+close)
+  omarchy-system-lid-close
+  if omarchy-machine-kind laptop && keeps_running && omarchy-hw-laptop-closed && ! omarchy-hw-external-monitors; then
+    omarchy-lid-quiet start >/dev/null 2>&1 || true
+    omarchy-screen-off
+  fi
+  ;;
+open)
+  omarchy-lid-quiet stop >/dev/null 2>&1 || true
+  omarchy-hyprland-monitor-clamshell
+  omarchy-machine-kind laptop || exit 0
+  omarchy-brightness-keyboard restore >/dev/null 2>&1 || true
+  omarchy-brightness-display on
+  if locked; then
+    sleep 30
+    if locked && ! omarchy-hw-laptop-closed &&
+      [[ $(omarchy-shell lock status 2>/dev/null | jq -r '.authenticating // false' 2>/dev/null) != true ]]; then
+      omarchy-brightness-display off
+    fi
+  fi
+  ;;
+why)
+  echo "machine: $(omarchy-machine-kind --why)"
+  echo "power: $(on_ac && echo AC || echo battery), logind on AC: $(logind_ac_action), insomnia: $(insomnia && echo on || echo off)"
+  if omarchy-machine-kind laptop && keeps_running; then echo "close -> keeps running: lock, screen off, quiet mode"; else echo "close -> stock (logind decides, usually suspend)"; fi
+  ;;
+*)
+  echo "Usage: omarchy-lid close|open|why" >&2
+  exit 2
+  ;;
+esac

@@ -1,0 +1,134 @@
+#!/bin/bash
+# Managed by omarchy-shared-config.
+# If the public-IP timezone differs from the clock, nudge — do not switch.
+# Lookups are HTTPS only (ipwho.is, then ipapi.co). Clicking the notification
+# runs omarchy-timezone-apply (sudo -n timedatectl set-timezone, allowed by
+# Omarchy's stock sudoers rule).
+
+set -euo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/settings"
+STATE_FILE="$STATE_DIR/timezone-nudge.json"
+LOCK="${XDG_RUNTIME_DIR:-/tmp}/omarchy-timezone-auto.lock"
+APPLY="$HOME/.local/bin/omarchy-timezone-apply"
+mkdir -p "$STATE_DIR"
+
+exec 9>"$LOCK"
+flock -n 9 || exit 0
+
+lookup_location() {
+  local json
+
+  json=$(curl -fsS --max-time 6 https://ipwho.is/ 2>/dev/null || true)
+  if [[ -n $json ]]; then
+    python3 -c '
+import json, sys
+data = json.loads(sys.stdin.read())
+if not data.get("success"):
+    sys.exit(1)
+tz = (data.get("timezone") or {}).get("id") or ""
+city = data.get("city") or data.get("region") or ""
+lat = data.get("latitude")
+lon = data.get("longitude")
+if not tz:
+    sys.exit(1)
+print(f"{tz}\t{city}\t{lat}\t{lon}")
+' <<<"$json" && return 0
+  fi
+
+  json=$(curl -fsS --max-time 6 https://ipapi.co/json/ 2>/dev/null || true)
+  if [[ -n $json ]]; then
+    python3 -c '
+import json, sys
+data = json.loads(sys.stdin.read())
+if data.get("error"):
+    sys.exit(1)
+tz = data.get("timezone") or ""
+city = data.get("city") or ""
+lat = data.get("latitude")
+lon = data.get("longitude")
+if not tz:
+    sys.exit(1)
+print(f"{tz}\t{city}\t{lat}\t{lon}")
+' <<<"$json" && return 0
+  fi
+
+  return 1
+}
+
+is_known_timezone() {
+  timedatectl list-timezones | grep -Fxq "$1"
+}
+
+already_nudged() {
+  python3 - "$STATE_FILE" "$1" "$2" <<'PY'
+import json, sys
+from pathlib import Path
+path, current, detected = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+if not path.is_file():
+    raise SystemExit(1)
+try:
+    data = json.loads(path.read_text())
+except json.JSONDecodeError:
+    raise SystemExit(1)
+if data.get("from") == current and data.get("timezone") == detected and data.get("notified"):
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+write_pending() {
+  python3 - "$STATE_FILE" "$1" "$2" "$3" "$4" "$5" <<'PY'
+import json, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+tz, city, lat, lon, current = sys.argv[2:7]
+
+
+def num(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+path.write_text(json.dumps({
+    "timezone": tz,
+    "city": city,
+    "latitude": num(lat),
+    "longitude": num(lon),
+    "from": current,
+    "notified": True,
+}, indent=2) + "\n")
+PY
+}
+
+lookup=$(lookup_location) || exit 0
+IFS=$'\t' read -r timezone city lat lon <<<"$lookup"
+
+[[ -n $timezone ]] || exit 0
+is_known_timezone "$timezone" || exit 0
+
+current=$(timedatectl show -p Timezone --value)
+city=${city:-$timezone}
+
+if [[ $timezone == "$current" ]]; then
+  rm -f "$STATE_FILE"
+  echo "Timezone already $timezone ($city)"
+  exit 0
+fi
+
+if already_nudged "$current" "$timezone"; then
+  echo "Already nudged $current → $timezone"
+  exit 0
+fi
+
+write_pending "$timezone" "$city" "$lat" "$lon" "$current"
+
+omarchy notification send -g 󰥔 -u normal \
+  "You appear to be in ${city}" \
+  "Clock is on ${current}. Click to switch to ${timezone}." \
+  --exec "$APPLY"
+
+echo "Nudged timezone: $current → $timezone ($city)"

@@ -1,0 +1,17 @@
+#!/bin/bash
+# Blocks commits that would publish secrets or personal device data.
+# Bypass once (only if sure): git commit --no-verify
+set -uo pipefail
+fail=0
+if command -v gitleaks >/dev/null; then
+  gitleaks git --pre-commit --staged --redact --no-banner -v || fail=1
+else
+  echo "pre-commit: gitleaks not installed, only running pattern check" >&2
+fi
+pat='\b100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]+\.[0-9]+|\.ts\.net\b|bluez_(input|output|card)\.([0-9A-Fa-f]{2}[:_.]){5}[0-9A-Fa-f]{2}|\b([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b|DWH[0-9A-Z]{8,}|gh[pousr]_[A-Za-z0-9]{20,}|xai-[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY'
+hits=$(git diff --cached -U0 --diff-filter=ACMR -- . ':!*/tests/*' | grep -E '^\+[^+]' | grep -nE "$pat" || true)
+if [[ -n $hits ]]; then
+  echo "pre-commit: blocked, staged lines look like a Tailscale IP/MAC/serial/token/key:" >&2
+  echo "$hits" >&2; fail=1
+fi
+exit $fail

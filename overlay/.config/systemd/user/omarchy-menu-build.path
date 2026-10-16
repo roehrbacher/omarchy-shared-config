@@ -1,0 +1,22 @@
+[Unit]
+Description=Rebuild the Omarchy menu when folders or menu.d fragments change
+# Missing folders are fine: systemd waits for them to appear.
+
+[Path]
+PathChanged=%h
+PathChanged=%h/Desktop
+PathChanged=%h/Documents
+PathChanged=%h/Downloads
+PathChanged=%h/Music
+PathChanged=%h/Pictures
+PathChanged=%h/Videos
+PathChanged=%h/Projects
+PathChanged=%h/projects
+PathChanged=%h/Work
+PathChanged=%h/src
+PathChanged=%h/Wallpapers
+PathChanged=%h/.config/omarchy/menu.d
+Unit=omarchy-menu-build.service
+
+[Install]
+WantedBy=default.target

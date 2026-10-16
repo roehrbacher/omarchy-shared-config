@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "bar": {
+    "position": "top",
+    "transparent": false,
+    "centerAnchor": "omarchy.clock",
+    "layout": {
+      "left": [
+        { "id": "omarchy.menu" },
+        { "id": "omarchy.workspaces" },
+        { "id": "timon.hover-reveal" }
+      ],
+      "center": [
+        { "id": "timon.indicators" },
+        {
+          "id": "omarchy.clock",
+          "lifeExpectancy": 100,
+          "weekStartDay": "monday",
+          "format": "ddd d MMM HH:mm",
+          "formatAlt": "d MMMM 'W'ww yyyy",
+          "verticalFormat": "HH\n—\nmm"
+        },
+        { "id": "omarchy.keyboard-layout" },
+        { "id": "timon.media", "revealOnHover": true },
+        { "id": "omarchy.system-update" }
+      ],
+      "right": [
+        { "id": "omarchy.tray" },
+        { "id": "omarchy.tailscale" },
+        { "id": "flux" },
+        { "id": "omarchy.agents" },
+        {
+          "id": "pixbroker.grokbar-omarchy",
+          "showClaudeUsage": false,
+          "showCursorUsage": true,
+          "showGrokBotUsage": true,
+          "iconOnly": true
+        },
+        { "id": "timon.local-ai" },
+        { "id": "timon.audio" },
+        { "id": "omarchy.bluetooth" },
+        { "id": "omarchy.network" },
+        { "id": "omarchy.monitor" },
+        { "id": "omarchy.power", "showPercentage": true },
+        { "id": "jankeesvw.notification-center" }
+      ]
+    }
+  },
+  "plugins": [
+    { "id": "timon.lock" },
+    { "id": "timon.media" },
+    { "id": "timon.idle" }
+  ],
+  "disabledPlugins": ["omarchy.lock", "omarchy.media", "omarchy.idle"],
+  "cloneSourceRestores": ["timon.lock", "timon.media", "timon.idle"]
+}

@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""Pause other MPRIS media players when one starts playing.
+
+Games, Discord, and meeting apps are left alone: they either do not export
+MPRIS, or match the denylist below and neither steal focus nor get paused.
+"""
+
+from gi.repository import Gio, GLib
+
+MPRIS_PREFIX = "org.mpris.MediaPlayer2."
+OBJECT_PATH = "/org/mpris/MediaPlayer2"
+IFACE_PLAYER = "org.mpris.MediaPlayer2.Player"
+IFACE_MPRIS = "org.mpris.MediaPlayer2"
+IFACE_PROPS = "org.freedesktop.DBus.Properties"
+IFACE_DBUS = "org.freedesktop.DBus"
+
+# Do not take exclusive focus from these, and do not pause them.
+DENY_SUBSTRINGS = (
+    "discord",
+    "vesktop",
+    "webcord",
+    "zoom",
+    "teams",
+    "skype",
+    "slack",
+    "element",
+    "signal",
+    "google meet",
+    "jitsi",
+)
+
+bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+_pausing = False
+
+
+def _call(dest, path, iface, method, params=None, reply_type=None, timeout=1000):
+    try:
+        result = bus.call_sync(
+            dest,
+            path,
+            iface,
+            method,
+            params,
+            reply_type,
+            Gio.DBusCallFlags.NONE,
+            timeout,
+            None,
+        )
+        return None if result is None else result.unpack()
+    except Exception:
+        return None
+
+
+def get_prop(name, iface, prop):
+    result = _call(
+        name,
+        OBJECT_PATH,
+        IFACE_PROPS,
+        "Get",
+        GLib.Variant("(ss)", (iface, prop)),
+        GLib.VariantType("(v)"),
+        timeout=800,
+    )
+    if not result:
+        return None
+    return result[0]
+
+
+def list_players():
+    result = _call(
+        "org.freedesktop.DBus",
+        "/org/freedesktop/DBus",
+        IFACE_DBUS,
+        "ListNames",
+        None,
+        GLib.VariantType("(as)"),
+    )
+    if not result:
+        return []
+    return [n for n in result[0] if n.startswith(MPRIS_PREFIX)]
+
+
+def owner_of(name):
+    result = _call(
+        "org.freedesktop.DBus",
+        "/org/freedesktop/DBus",
+        IFACE_DBUS,
+        "GetNameOwner",
+        GLib.Variant("(s)", (name,)),
+        GLib.VariantType("(s)"),
+        timeout=500,
+    )
+    if not result:
+        return None
+    return result[0]
+
+
+def pid_of(name):
+    # Spotify (and other Chromium apps) export two MPRIS names on the same PID.
+    # Treat those as one player so exclusive-pause does not fight itself.
+    result = _call(
+        "org.freedesktop.DBus",
+        "/org/freedesktop/DBus",
+        IFACE_DBUS,
+        "GetConnectionUnixProcessID",
+        GLib.Variant("(s)", (name,)),
+        GLib.VariantType("(u)"),
+        timeout=500,
+    )
+    if not result:
+        return None
+    return result[0]
+
+
+def well_known_for(unique_name):
+    return [n for n in list_players() if owner_of(n) == unique_name]
+
+
+def denied(name):
+    identity = get_prop(name, IFACE_MPRIS, "Identity") or ""
+    desktop = get_prop(name, IFACE_MPRIS, "DesktopEntry") or ""
+    blob = f"{name} {identity} {desktop}".lower()
+    return any(s in blob for s in DENY_SUBSTRINGS)
+
+
+def pause(name):
+    _call(name, OBJECT_PATH, IFACE_PLAYER, "Pause")
+
+
+def on_playing(source_name):
+    global _pausing
+    if _pausing or denied(source_name):
+        return
+    _pausing = True
+    try:
+        source_pid = pid_of(source_name)
+        for other in list_players():
+            if other == source_name or denied(other):
+                continue
+            if source_pid is not None and pid_of(other) == source_pid:
+                continue
+            if get_prop(other, IFACE_PLAYER, "PlaybackStatus") == "Playing":
+                print(f"pause {other} (focus: {source_name})", flush=True)
+                pause(other)
+    finally:
+        _pausing = False
+
+
+def on_properties_changed(connection, sender, object_path, interface, signal, params):
+    iface, changed, _invalidated = params.unpack()
+    if iface != IFACE_PLAYER:
+        return
+    if changed.get("PlaybackStatus") != "Playing" or not sender:
+        return
+    for name in well_known_for(sender):
+        on_playing(name)
+
+
+bus.signal_subscribe(
+    None,
+    IFACE_PROPS,
+    "PropertiesChanged",
+    OBJECT_PATH,
+    None,
+    Gio.DBusSignalFlags.NONE,
+    on_properties_changed,
+)
+
+print("mpris-exclusive: watching for PlaybackStatus=Playing", flush=True)
+GLib.MainLoop().run()

@@ -1,0 +1,122 @@
+import QtQuick
+import Quickshell.Io
+import qs.Commons
+import qs.Ui
+
+// Insomnia as one more stock indicator. Built into timon.indicators by
+// omarchy-indicators-build (a clone of omarchy.indicators), so the group
+// itself places it: in the inactive row, in list order just before the coffee
+// (StayAwake), only revealed on hover; while a session runs it moves into the
+// active block next to the clock with the countdown beside it.
+// Left click opens the picker (or stop/extend while on), right click stops.
+Item {
+  id: root
+
+  // Injected by the indicators group, like for BarIndicator.
+  property var bar: null
+  property string moduleName: ""
+  property var settings: ({})
+  property string indicatorBlock: "single"
+  property var indicatorHost: null
+  property var activeOverride: null
+
+  property bool active: false
+  property string countdown: ""
+  property string tip: "Insomnia"
+
+  // Same rule as BarIndicator's own visibility. Not button.visible: that is
+  // the child's effective visibility, which would latch false with root.
+  visible: button.belongsInBlock
+  implicitWidth: row.implicitWidth
+  implicitHeight: row.implicitHeight
+
+  readonly property string activeTip: root.countdown === "∞" ? "Stop Insomnia"
+    : root.countdown !== "" ? "Stop Insomnia (" + root.countdown + " left)" : "Stop Insomnia"
+
+  function poll() { if (!statusProc.running) statusProc.running = true }
+
+  function click(b) {
+    if (root.bar) root.bar.run(b === Qt.RightButton
+      ? (root.active ? "omarchy-insomnia stop" : "")
+      : "omarchy-insomnia menu")
+    refreshSoon.restart()
+  }
+
+  Process {
+    id: statusProc
+    command: ["omarchy-insomnia", "status", "--json"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var s = JSON.parse(String(text || "").trim())
+          root.active = s.active === true
+          root.countdown = s.active ? String(s.text || "") : ""
+          if (s.tooltip) root.tip = String(s.tooltip)
+        } catch (e) {
+          root.active = false
+          root.countdown = ""
+        }
+      }
+    }
+  }
+
+  Timer {
+    interval: root.active ? 10000 : 20000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.poll()
+  }
+
+  // Re-read for a while after a click (the picker stays open until a choice).
+  Timer {
+    id: refreshSoon
+    interval: 1500
+    repeat: true
+    property int ticks: 0
+    onTriggered: {
+      root.poll()
+      if (++ticks >= 10) { ticks = 0; stop() }
+    }
+    onRunningChanged: if (running) ticks = 0
+  }
+
+  Row {
+    id: row
+    spacing: 0
+
+    BarIndicator {
+      id: button
+      bar: root.bar
+      moduleName: root.moduleName
+      settings: root.settings
+      indicatorBlock: root.indicatorBlock
+      indicatorHost: root.indicatorHost
+      activeOverride: root.activeOverride
+      active: root.active
+      activeTooltipText: root.activeTip
+      inactiveTooltipText: root.tip
+      iconComponent: Component {
+        Item {
+          EyeIcon {
+            anchors.centerIn: parent
+            iconSize: Style.font.caption * 1.05
+            color: button.foreground
+          }
+        }
+      }
+      onPressed: function(b) { root.click(b) }
+    }
+
+    WidgetButton {
+      anchors.verticalCenter: parent.verticalCenter
+      visible: button.belongsInBlock && button.effectiveActive && root.countdown !== ""
+      bar: root.bar
+      text: root.countdown
+      fontSize: Style.font.caption
+      horizontalMargin: 2
+      tooltipText: root.activeTip
+      onPressed: function(b) { root.click(b) }
+    }
+  }
+}

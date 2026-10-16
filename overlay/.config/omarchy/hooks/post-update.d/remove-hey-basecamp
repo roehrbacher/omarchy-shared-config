@@ -1,0 +1,28 @@
+#!/bin/bash
+# Managed by omarchy-shared-config.
+# HEY and Basecamp are not used. Omarchy can bring their web-app launchers
+# back on a refresh, so remove the user copies again and keep email links on
+# Proton Mail. Package files under /usr/share are left alone.
+
+set -uo pipefail
+
+APPS="$HOME/.local/share/applications"
+removed=0
+shopt -s nullglob nocaseglob
+for f in "$APPS"/HEY*.desktop "$APPS"/Basecamp*.desktop "$APPS"/icons/HEY.* "$APPS"/icons/Basecamp.*; do
+  rm -f "$f" && removed=1
+done
+shopt -u nocaseglob
+
+if [[ -f "$APPS/Proton Mail.desktop" ]] && command -v xdg-mime >/dev/null; then
+  current=$(xdg-mime query default x-scheme-handler/mailto 2>/dev/null || true)
+  if [[ $current != "Proton Mail.desktop" ]]; then
+    xdg-mime default "Proton Mail.desktop" x-scheme-handler/mailto
+    removed=1
+  fi
+fi
+
+if (( removed )) && command -v update-desktop-database >/dev/null; then
+  update-desktop-database "$APPS" >/dev/null 2>&1 || true
+fi
+exit 0

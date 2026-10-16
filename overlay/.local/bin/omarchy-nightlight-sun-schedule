@@ -1,0 +1,194 @@
+#!/bin/bash
+# Managed by omarchy-shared-config.
+# Keep hyprsunset on today's sunrise/sunset for where you are.
+# Location: Omarchy's weather location (~/.local/state/omarchy/settings/weather.json,
+# also updated by omarchy-timezone-apply). If none is saved, look it up from
+# the public IP over HTTPS (ipwho.is) once and save it there; Vienna if offline.
+# Manual toggle (Super+Ctrl+N) still works until the next profile switch.
+
+set -euo pipefail
+
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprsunset.conf"
+LOC_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/settings/weather.json"
+TEMPERATURE=4000
+
+read_location() {
+  python3 - "$LOC_FILE" <<'PY'
+import json, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+name, lat, lon = "Vienna", 48.2082, 16.3738
+if path.is_file():
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        data = {}
+    if isinstance(data.get("name"), str) and data["name"].strip():
+        name = data["name"].strip()
+    try:
+        lat = float(data["latitude"])
+        lon = float(data["longitude"])
+    except (KeyError, TypeError, ValueError):
+        pass
+print(f"{name}\t{lat}\t{lon}")
+PY
+}
+
+sun_times() {
+  python3 - "$1" "$2" <<'PY'
+import math
+import sys
+from datetime import datetime, timedelta, timezone
+
+lat = float(sys.argv[1])
+lon = float(sys.argv[2])
+date = datetime.now().astimezone().date()
+zenith = 90.833
+
+
+def sun_utc(rise: bool):
+    n = date.timetuple().tm_yday
+    lng_hour = lon / 15.0
+    t = n + ((6 if rise else 18) - lng_hour) / 24.0
+    M = (0.9856 * t) - 3.289
+    L = (M + (1.916 * math.sin(math.radians(M))) + (0.020 * math.sin(math.radians(2 * M))) + 282.634) % 360
+    RA = math.degrees(math.atan(0.91764 * math.tan(math.radians(L)))) % 360
+    Lquadrant = math.floor(L / 90) * 90
+    RAquadrant = math.floor(RA / 90) * 90
+    RA = (RA + (Lquadrant - RAquadrant)) / 15.0
+    sin_dec = 0.39782 * math.sin(math.radians(L))
+    cos_dec = math.cos(math.asin(sin_dec))
+    cos_h = (math.cos(math.radians(zenith)) - (sin_dec * math.sin(math.radians(lat)))) / (
+        cos_dec * math.cos(math.radians(lat))
+    )
+    if not -1 <= cos_h <= 1:
+        raise SystemExit("no sunrise/sunset at this latitude today")
+    H = (360 - math.degrees(math.acos(cos_h)) if rise else math.degrees(math.acos(cos_h))) / 15.0
+    T = H + RA - (0.06571 * t) - 6.622
+    UT = (T - lng_hour) % 24
+    hours = int(math.floor(UT))
+    minutes = int(round((UT - hours) * 60))
+    if minutes == 60:
+        hours = (hours + 1) % 24
+        minutes = 0
+    return datetime(date.year, date.month, date.day, tzinfo=timezone.utc) + timedelta(hours=hours, minutes=minutes)
+
+
+sunrise = sun_utc(True).astimezone()
+sunset = sun_utc(False).astimezone()
+print(f"{sunrise:%H:%M}\t{sunset:%H:%M}")
+PY
+}
+
+# No saved coordinates yet: ask ipwho.is and cache the answer as the weather
+# location, so the weather panel and this script agree from now on.
+cache_ip_location() {
+  local json row
+  json=$(curl -fsS --max-time 6 https://ipwho.is/ 2>/dev/null) || return 1
+  row=$(python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())
+if not d.get("success"):
+    sys.exit(1)
+lat, lon = d.get("latitude"), d.get("longitude")
+if lat is None or lon is None:
+    sys.exit(1)
+name = d.get("city") or d.get("region") or "Here"
+print("%s\t%.4f\t%.4f" % (name, float(lat), float(lon)))
+' <<<"$json") || return 1
+  IFS=$'\t' read -r c la lo <<<"$row"
+  if command -v omarchy-weather-location >/dev/null; then
+    omarchy-weather-location --set "$c" "$la,$lo" >/dev/null || return 1
+  else
+    mkdir -p "$(dirname "$LOC_FILE")"
+    python3 -c 'import json,sys; print(json.dumps({"name":sys.argv[1],"latitude":float(sys.argv[2]),"longitude":float(sys.argv[3])}))' "$c" "$la" "$lo" >"$LOC_FILE"
+  fi
+}
+
+has_saved_coords() {
+  [[ -f $LOC_FILE ]] && python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+float(d["latitude"]); float(d["longitude"])
+' "$LOC_FILE" 2>/dev/null
+}
+
+has_saved_coords || cache_ip_location || true
+
+IFS=$'\t' read -r place lat lon < <(read_location)
+IFS=$'\t' read -r sunrise sunset < <(sun_times "$lat" "$lon")
+
+if [[ ! $sunrise =~ ^[0-9]{2}:[0-9]{2}$ || ! $sunset =~ ^[0-9]{2}:[0-9]{2}$ ]]; then
+  echo "Failed to compute sunrise/sunset for $place ($lat,$lon)" >&2
+  exit 1
+fi
+
+mkdir -p "$(dirname "$CONF")"
+new_conf=$(cat <<EOF
+# Managed by omarchy-nightlight-sun-schedule.
+# Identity (no tint) at sunrise, ${TEMPERATURE}K at sunset — same warmth as Super+Ctrl+N.
+# Location: ${place} (${lat}, ${lon})
+# Updated: $(date +%F)  sunrise ${sunrise}  sunset ${sunset}
+
+profile {
+    time = ${sunrise}
+    identity = true
+}
+
+profile {
+    time = ${sunset}
+    temperature = ${TEMPERATURE}
+}
+EOF
+)
+
+if [[ -f $CONF ]] && [[ $(<"$CONF") == "$new_conf" ]]; then
+  echo "Night light already scheduled for $place sunrise $sunrise / sunset $sunset"
+  exit 0
+fi
+
+printf '%s\n' "$new_conf" >"$CONF"
+echo "Scheduled night light for $place: identity at $sunrise, ${TEMPERATURE}K at $sunset"
+
+# hyprsunset only fires profiles at their clock time. After a restart it
+# starts at default ~6000K (looks off) until the next sunset. If it is
+# already night, re-apply warmth immediately.
+minutes_since_midnight() {
+  local h m
+  IFS=: read -r h m <<<"$1"
+  echo $((10#$h * 60 + 10#$m))
+}
+
+is_night() {
+  local now sunrise_m sunset_m
+  now=$(minutes_since_midnight "$(date +%H:%M)")
+  sunrise_m=$(minutes_since_midnight "$sunrise")
+  sunset_m=$(minutes_since_midnight "$sunset")
+  (( now >= sunset_m || now < sunrise_m ))
+}
+
+apply_night_temp() {
+  local temp i
+  for i in {1..15}; do
+    hyprctl hyprsunset temperature "$TEMPERATURE" >/dev/null 2>&1 || true
+    sleep 0.2
+    temp=$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' | head -n1)
+    [[ $temp == "$TEMPERATURE" ]] && break
+  done
+  command -v omarchy-shell >/dev/null && omarchy-shell -q nightlight refresh || true
+}
+
+if pgrep -x hyprsunset >/dev/null; then
+  pkill -x hyprsunset || true
+  for _ in {1..20}; do
+    pgrep -x hyprsunset >/dev/null || break
+    sleep 0.1
+  done
+  setsid uwsm-app -- hyprsunset >/dev/null 2>&1 &
+  if is_night; then
+    sleep 0.3
+    apply_night_temp
+    echo "Night: re-applied ${TEMPERATURE}K after hyprsunset restart"
+  fi
+fi

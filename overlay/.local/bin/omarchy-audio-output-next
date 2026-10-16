@@ -1,0 +1,128 @@
+#!/bin/bash
+# Managed by omarchy-shared-config. Copy of Omarchy's omarchy-audio-output-switch
+# (bound to Ctrl+^) with one fix: `pactl -f json` turns any sink description that
+# contains non-ASCII characters (the "Calibrated Speakers — Protected" tuning sink,
+# Bluetooth names with emoji) into "(null)", so the OSD showed "(null)". The
+# description is read from pw-dump instead, which keeps UTF-8 intact.
+
+sink_description() {
+  local d
+  # The speaker tuning sink is just "Speakers" (not "Calibrated Speakers — Protected").
+  [[ $1 == omarchy_speaker_tuning ]] && { echo "Speakers"; return; }
+  d=$(timeout 2 pw-dump 2>/dev/null | jq -r --arg n "$1" \
+    'first(.[] | select(.type == "PipeWire:Interface:Node" and .info.props."node.name" == $n) | .info.props."node.description") // empty')
+  [[ -n $d && $d != "(null)" ]] && { echo "$d"; return; }
+  echo "$1"
+}
+
+
+# One switch at a time: spamming the key otherwise starts several copies that
+# all read the same current output and race each other.
+# Every run leaves one line in ~/.local/state/omarchy/audio-switch.log (last 200
+# kept), so a press that "did nothing" can be told apart from a key that never
+# arrived.
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy"
+mkdir -p "$state_dir"
+log() {
+  local f="$state_dir/audio-switch.log"
+  echo "$(date '+%F %T') $*" >>"$f"
+  (( $(wc -l <"$f") > 400 )) && tail -n 200 "$f" >"$f.tmp" && mv "$f.tmp" "$f"
+  return 0
+}
+
+started=$(date +%s%3N)
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/omarchy-audio-output-next.lock"
+flock -w 3 9 || { log "busy: another switch still running, skipped"; exit 0; }
+
+# One Ctrl+^ press can fire two binds (dead_circumflex and asciicircum both
+# match, e.g. once from the keyboard and once from fcitx5), which switched to the
+# next output and straight back. Runs that started within 400 ms of the
+# previous one are the same press.
+last_file="${XDG_RUNTIME_DIR:-/tmp}/omarchy-audio-output-next.last"
+last=$(cat "$last_file" 2>/dev/null || echo 0)
+[[ $last =~ ^[0-9]+$ ]] || last=0
+if (( started - last < 400 )); then
+  log "same press fired twice, second run ignored"
+  exit 0
+fi
+echo "$started" >"$last_file"
+
+# Tell the PC's audio-sticky-sink watcher this change is the user's own, so it
+# keeps the new output instead of reverting it as if a game had stolen it.
+date +%s >"$state_dir/audio-user-switch.ts"
+
+# Skip the physical sink an active speaker tuning fronts: rotating onto it would
+# silently bypass the tuning rather than pick a different output.
+fronted=$(omarchy-audio-tuning fronted-sink 2>/dev/null || true)
+# A custom tuning (e.g. the PC's own) is unknown to omarchy-audio-tuning, so
+# ask the tuning sink itself which speakers it feeds. Ctrl+^ then goes
+# Headphones <-> Speakers (tuned) without the raw speaker sink in between.
+if [[ -z $fronted ]] && timeout 2 pactl list short sinks 2>/dev/null | awk '{print $2}' | grep -qx omarchy_speaker_tuning; then
+  fronted=$(omarchy-audio-output-sink omarchy_speaker_tuning 2>/dev/null || true)
+  [[ $fronted == omarchy_speaker_tuning ]] && fronted=""
+fi
+
+sinks=$(timeout 2 pactl -f json list sinks |
+  jq --arg fronted "$fronted" '[.[]
+    | select((.ports | length == 0) or ([.ports[]? | .availability != "not available"] | any))
+    | select($fronted == "" or .name != $fronted)]')
+sinks_count=$(jq 'length' <<<"$sinks")
+# Right after resume PipeWire can take a moment to answer; retry briefly.
+for _ in 1 2 3 4; do
+  (( sinks_count > 0 )) && break
+  sleep 0.5
+  sinks=$(timeout 2 pactl -f json list sinks |
+    jq --arg fronted "$fronted" '[.[]
+      | select((.ports | length == 0) or ([.ports[]? | .availability != "not available"] | any))
+      | select($fronted == "" or .name != $fronted)]')
+  sinks_count=$(jq 'length' <<<"$sinks")
+done
+
+if (( sinks_count == 0 )); then
+  log "no sinks found"
+  omarchy-osd -m "No audio devices found"
+  exit 1
+fi
+
+current_sink_name=$(timeout 2 pactl get-default-sink)
+current_sink_index=$(jq -r --arg name "$current_sink_name" 'map(.name) | index($name)' <<<"$sinks")
+
+if [[ $current_sink_index != "null" ]]; then
+  next_sink_index=$(((current_sink_index + 1) % sinks_count))
+else
+  next_sink_index=0
+fi
+
+next_sink=$(jq -c ".[$next_sink_index]" <<<"$sinks")
+next_sink_name=$(jq -r '.name' <<<"$next_sink")
+next_sink_description=$(sink_description "$next_sink_name")
+# A tuning sink sits at a fixed 100% and unmuted while real loudness lives on the
+# physical sink beneath it, so read the level from whichever sink actually carries
+# it or the OSD contradicts the volume keys.
+next_sink_effective=$(omarchy-audio-output-sink "$next_sink_name")
+next_sink_volume=$(timeout 2 pactl get-sink-volume "$next_sink_effective" 2>/dev/null |
+  awk 'NR == 1 {for (i = 1; i <= NF; i++) if ($i ~ /%$/) {sub("%", "", $i); print $i; exit}}')
+[[ -n $next_sink_volume ]] || next_sink_volume=$(jq -r '.volume | to_entries[0].value.value_percent | sub("%"; "") | tonumber' <<<"$next_sink")
+if [[ $(timeout 2 pactl get-sink-mute "$next_sink_effective" 2>/dev/null) == *yes ]]; then
+  next_sink_is_muted=true
+else
+  next_sink_is_muted=false
+fi
+
+if [[ $next_sink_is_muted == "true" ]] || (( next_sink_volume == 0 )); then
+  icon_state="muted"
+elif (( next_sink_volume <= 33 )); then
+  icon_state="low"
+elif (( next_sink_volume <= 66 )); then
+  icon_state="medium"
+else
+  icon_state="high"
+fi
+
+if [[ $next_sink_name != $current_sink_name ]]; then
+  date +%s >"$state_dir/audio-user-switch.ts"
+  omarchy-audio-output-set-default "$(jq -r '.index' <<<"$next_sink")" "$next_sink_name"
+fi
+log "${current_sink_name:-?} -> $next_sink_name ($sinks_count outputs)"
+
+omarchy-osd -i "volume-${icon_state}" -m "$next_sink_description"

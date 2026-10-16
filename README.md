@@ -236,16 +236,16 @@ system battery (peripheral batteries are skipped) **and** a lid
 configured per machine; an optional, unshipped `~/.config/omarchy/insomnia.conf`
 can force `INSOMNIA_MODE=laptop|desktop` or override any `INSOMNIA_*` value.
 
-- **Desktop** (the PC): inhibits `sleep:idle`, so nothing suspends or
+- **Desktop** (the PC): inhibits `sleep`, so nothing suspends or
   hibernates; starting a session locks and turns the displays off
   (`.local/bin/omarchy-screen-off`, Omarchy's lock + DPMS off; any key or mouse
   move wakes them at the lock screen, they blank again 5 s after the last
   input); unlocking during the session ends it (you're back; checked every 5 s
   via `omarchy-shell lock isLocked`). Tooltip "Lock Omarchy and turn off
   screen".
-- **Laptop** (the XPS): inhibits `handle-lid-switch` (polkit allows that for
-  the active session, no sudo), so closing the lid keeps it running **also on
-  battery**. No lock on start (keep working, close the lid when done), unlocking
+- **Laptop** (the XPS): inhibits `sleep` and `handle-lid-switch` (polkit allows
+  that for the active session, no sudo), so nothing suspends and closing the lid
+  keeps it running **also on battery**. No lock on start (keep working, close the lid when done), unlocking
   doesn't end it (one session spans several close/open cycles), and it ends on
   battery at **20 %**; if the lid is closed on battery then, it suspends.
   Tooltip "Stay awake with lid closed". The laptop parts, all no-ops on a
@@ -288,7 +288,9 @@ can force `INSOMNIA_MODE=laptop|desktop` or override any `INSOMNIA_*` value.
 Idle never suspends either machine anyway: stock idle only starts the
 screensaver (150 s, skipped while locked) and locks (300 s), and logind's
 `IdleAction` is `ignore`; the inhibitor also blocks a suspend from the menu
-while a session runs.
+while a session runs. Insomnia never inhibits `idle`: the screen still blanks
+and locks on the normal timers. The coffee icon (Omarchy's stay awake) is the
+separate "never blank or lock" switch.
 The eye is the mark of Krish Garg's macOS app
 [Insomnia](https://github.com/krishhgg/Insomnia) (`docs/assets/eye-open.svg`,
 MIT, copy and license in `.local/share/omarchy-config/indicators/assets/`), drawn natively in the bar's

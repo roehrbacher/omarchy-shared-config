@@ -12,17 +12,20 @@
 #
 # What a session does depends on the machine (omarchy-machine-kind: battery +
 # lid = laptop, else desktop):
-#   desktop (gaming PC): inhibit sleep:idle, so nothing suspends or hibernates;
+#   desktop (gaming PC): inhibit sleep, so nothing suspends or hibernates;
 #     starting a session locks and turns the displays off (omarchy-screen-off);
 #     unlocking during the session ends it (you're back).
-#   laptop (XPS): inhibit handle-lid-switch, so closing the lid on battery keeps
+#   laptop (XPS): inhibit sleep + handle-lid-switch, so nothing suspends and
+#     closing the lid on battery keeps
 #     it running like on AC (omarchy-lid: lock + screen off + quiet mode); no
 #     lock on start; survives unlocks (lid close/open cycles); ends on battery
 #     at 20 %, and if the lid is closed on battery then, suspends.
 # Optional overrides (nothing shipped) in ~/.config/omarchy/insomnia.conf,
 # sourced bash after the mode defaults:
 #   INSOMNIA_MODE=laptop|desktop         force the mode (read by omarchy-machine-kind)
-#   INSOMNIA_INHIBIT=handle-lid-switch   what systemd-inhibit blocks
+#   INSOMNIA_INHIBIT=sleep:handle-lid-switch   what systemd-inhibit blocks
+# Idle is never inhibited: the screen still blanks and locks on the normal idle
+# timers (timon.idle). Omarchy's coffee toggle is the "never blank or lock" switch.
 #   INSOMNIA_LOCK_ON_START=0             lock + screen off on start (1/0)
 #   INSOMNIA_FLOOR=20                    end on battery at/below this % (empty: never)
 #   INSOMNIA_END_ON_UNLOCK=0             end when the lock screen is unlocked during
@@ -58,7 +61,7 @@ lid_closed() {
 }
 
 if [[ $INSOMNIA_MODE == laptop ]]; then
-  INSOMNIA_INHIBIT="handle-lid-switch"
+  INSOMNIA_INHIBIT="sleep:handle-lid-switch"
   INSOMNIA_LOCK_ON_START=0
   INSOMNIA_FLOOR=20
   INSOMNIA_END_ON_UNLOCK=0
@@ -79,7 +82,7 @@ if [[ $INSOMNIA_MODE == laptop ]]; then
     fi
   }
 else
-  INSOMNIA_INHIBIT="sleep:idle"
+  INSOMNIA_INHIBIT="sleep"
   INSOMNIA_LOCK_ON_START=1
   INSOMNIA_FLOOR=""
   INSOMNIA_END_ON_UNLOCK=1

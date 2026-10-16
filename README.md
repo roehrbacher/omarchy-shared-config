@@ -107,7 +107,7 @@ Grok Bot logo; click it for the usage panel.
 
 **Plugins**
 External plugins below are reviewed copies pinned in `plugins.lock` (id, upstream
-repo, reviewed commit, date); update one only after reviewing the upstream diff.
+repo, reviewed commit, date); update one only after reviewing the upstream diff. The weekly plugin round also checks `omarchy-xps-config/plugins.lock` (XPS-only plugins).
 
 - `io.github.kaiizu.runcat` 1.0.0 – Running Cat: a cat whose running speed follows
   CPU load (reads `/proc/stat`, no network); click opens btop. Reviewed copy of

@@ -3,5 +3,5 @@
 # reviewing the upstream diff from the commit below.
 # id                              upstream repo                                          reviewed commit                            reviewed    notes
 io.github.kaiizu.runcat           https://github.com/kaiizu/runningcat                   63146002445fa92ea43c57973d56b21c1347deba   2026-10-16  unmodified
-jankeesvw.notification-center     https://github.com/jankeesvw/omarchy-notification-center 5dbd5ab                                  <2026-10-15 unmodified (short SHA from README)
+jankeesvw.notification-center     https://github.com/jankeesvw/omarchy-notification-center 1784e198596c2c5933dd99836321db5e2eafd117   2026-10-16  unmodified
 pixbroker.grokbar-omarchy         https://github.com/pixbroker/grokbar-omarchy           fdc88ed                                    <2026-10-15 local patches: iconOnly, spacing, panel close, shared-pool title

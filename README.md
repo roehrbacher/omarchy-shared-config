@@ -112,8 +112,8 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
 - `io.github.kaiizu.runcat` 1.0.0 – Running Cat: a cat whose running speed follows
   CPU load (reads `/proc/stat`, no network); click opens btop. Reviewed copy of
   github.com/kaiizu/runningcat at `6314600` (commit in `.upstream-commit`)
-- `jankeesvw.notification-center` 1.1.0 – bell with your notification history
-  (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 5dbd5ab)
+- `jankeesvw.notification-center` 1.2.0 – bell with your notification history
+  (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 1784e19)
 - `pixbroker.grokbar-omarchy` 1.7.0 – usage of the X Premium **shared weekly pool**
   (Grok, Grok Bot and Cursor draw from one pool; panel title "Shared weekly pool",
   per-product split below; the separate Cursor/Grok Bot sections are off via

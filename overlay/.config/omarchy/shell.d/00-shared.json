@@ -41,6 +41,7 @@
         { "id": "omarchy.bluetooth" },
         { "id": "timon.network" },
         { "id": "omarchy.monitor" },
+        { "id": "io.github.kaiizu.runcat" },
         { "id": "omarchy.power", "showPercentage": true },
         { "id": "jankeesvw.notification-center" }
       ]

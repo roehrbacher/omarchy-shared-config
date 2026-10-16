@@ -106,6 +106,9 @@ bar (`"revealOnHover": true`, see `timon.hover-reveal`). Grokbar shows only the
 Grok Bot logo; click it for the usage panel.
 
 **Plugins**
+- `io.github.kaiizu.runcat` 1.0.0 – Running Cat: a cat whose running speed follows
+  CPU load (reads `/proc/stat`, no network); click opens btop. Reviewed copy of
+  github.com/kaiizu/runningcat at `6314600` (commit in `.upstream-commit`)
 - `jankeesvw.notification-center` 1.1.0 – bell with your notification history
   (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 5dbd5ab)
 - `pixbroker.grokbar-omarchy` 1.7.0 – usage of the X Premium **shared weekly pool**

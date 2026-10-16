@@ -329,7 +329,10 @@ devices come from `~/.config/omarchy/audio-passthrough.machine.conf`
 (`SINK=`, `SOURCE=`, set by a machine repo); without it, or with a device
 missing, it stays idle. On/off and level: the `timon.audio-passthrough` bar
 widget or `omarchy-audio-passthrough on|off|volume N`, saved to
-`~/.config/omarchy/audio-passthrough.conf`.
+`~/.config/omarchy/audio-passthrough.conf`. The widget's INPUT list (or
+`omarchy-audio-passthrough sources` / `source <node-name|default>`) picks
+another mic for passthrough only, without changing the system's default input;
+it is saved as `SOURCE=` in that same file, and "Machine default" removes it again.
 
 ## License
 

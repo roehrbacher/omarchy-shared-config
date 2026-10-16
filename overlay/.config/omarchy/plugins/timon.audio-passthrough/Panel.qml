@@ -19,6 +19,11 @@ Panel {
   property int editingCount: 0
   property real pendingVolume: -1
   property bool dragging: false
+  property string source: ""
+  property bool sourceOverride: false
+  property var sources: []
+  readonly property color hoverFill: bar ? Style.hoverFillFor(bar.foreground, Color.accent) : "transparent"
+  readonly property color selectedFill: bar ? Style.selectedFillFor(bar.foreground, Color.accent) : "transparent"
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.45)
@@ -28,6 +33,17 @@ Panel {
     if (statusProc.running || actionProc.running || root.editingCount > 0 || root.dragging)
       return
     statusProc.running = true
+  }
+
+  function refreshSources() {
+    if (!sourcesProc.running) sourcesProc.running = true
+  }
+
+  // Passthrough-only mic: the system default input is left alone.
+  function setSource(name) {
+    source = name
+    run(["source", name])
+    refreshSources()
   }
 
   function applyStatus(text) {
@@ -45,6 +61,8 @@ Panel {
     active = !!data.active
     headphones = !!data.headphones
     configured = data.configured !== false
+    if (data.source !== undefined) source = data.source
+    sourceOverride = !!data.sourceOverride
   }
 
   function run(args) {
@@ -73,7 +91,7 @@ Panel {
     return "On, starting…"
   }
 
-  Component.onCompleted: refresh()
+  Component.onCompleted: { refresh(); refreshSources() }
 
   Timer {
     id: volumeTimer
@@ -96,6 +114,18 @@ Panel {
   }
 
   Process {
+    id: sourcesProc
+    command: [root.tool, "sources"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try { root.sources = JSON.parse(text) } catch (e) {}
+      }
+    }
+  }
+
+  onOpenedChanged: if (opened) { refresh(); refreshSources() }
+
+  Process {
     id: actionProc
     stdout: StdioCollector {
       onStreamFinished: root.applyStatus(text)
@@ -112,7 +142,7 @@ Panel {
     interval: 2000
     running: true
     repeat: true
-    onTriggered: root.refresh()
+    onTriggered: { root.refresh(); if (root.opened) root.refreshSources() }
   }
 
   implicitWidth: button.implicitWidth
@@ -225,7 +255,96 @@ Panel {
         onMoved: function(next) { root.queueVolume(next) }
         onReleased: function(next) { root.queueVolume(next) }
       }
+
+      PanelSeparator {
+        visible: root.sources.length > 0
+        foreground: root.foreground
+      }
+
+      PanelSectionHeader {
+        visible: root.sources.length > 0
+        text: "INPUT"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+      }
+
+      Repeater {
+        model: root.sources
+
+        SourceRow {
+          required property var modelData
+          width: column.width
+          label: modelData.label
+          active: modelData.name === root.source
+          onClicked: root.setSource(modelData.name)
+        }
+      }
+
+      SourceRow {
+        visible: root.sources.length > 0
+        width: column.width
+        glyph: "󰑐"
+        label: "Machine default" + (root.sourceOverride ? "" : " (in use)")
+        active: false
+        onClicked: root.setSource("default")
+      }
     }
+    }
+  }
+
+  // Same look as the stock audio panel's input rows (only for passthrough).
+  component SourceRow: CursorSurface {
+    id: row
+    property string label: ""
+    property string glyph: "󰍬"
+    property bool active: false
+    signal clicked()
+    hasCursor: mouse.containsMouse
+    current: active
+    foreground: root.foreground
+    fill: root.hoverFill
+    currentFill: root.selectedFill
+    implicitHeight: inner.implicitHeight + Style.spacing.xl
+
+    Row {
+      id: inner
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(6)
+      anchors.rightMargin: Style.space(6)
+      spacing: Style.space(8)
+
+      Text {
+        textFormat: Text.PlainText
+        text: row.glyph
+        color: root.foreground
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.title
+        width: Style.space(22)
+        horizontalAlignment: Text.AlignHCenter
+        anchors.verticalCenter: parent.verticalCenter
+      }
+
+      Text {
+        textFormat: Text.PlainText
+        text: row.label
+        color: root.foreground
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.body
+        font.bold: row.active
+        elide: Text.ElideRight
+        width: parent.width - Style.space(30)
+        anchors.verticalCenter: parent.verticalCenter
+      }
+    }
+
+    MouseArea {
+      id: mouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: row.clicked()
     }
   }
 }

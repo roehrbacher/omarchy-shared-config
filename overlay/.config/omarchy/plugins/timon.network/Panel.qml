@@ -436,6 +436,43 @@ Panel {
   // icon reflects connection changes without polling. Wired is preferred
   // when both are up, matching the default-route device.
   readonly property var wiredDevice: findDevice(DeviceType.Wired)
+  // timon: live download speed from rx_bytes of the default-route interface
+  // (no traffic of its own). Bytes per second: "340K" = 340 KB/s, "1.2M" = 1.2 MB/s.
+  property string rxText: ""
+  property real rxLastBytes: -1
+  property real rxLastMs: 0
+  property string rxLastIface: ""
+  function rxFormat(bps) {
+    if (bps < 50000) return ""
+    if (bps < 1000000) return Math.round(bps / 1000) + "K"
+    var m = bps / 1000000
+    return (m < 10 ? m.toFixed(1) : Math.round(m)) + "M"
+  }
+  Process {
+    id: rxProc
+    command: ["sh", "-c", "i=$(ip route show default 2>/dev/null | awk '/ dev /{for(n=1;n<NF;n++) if($n==\"dev\"){print $(n+1); exit}}'); [ -n \"$i\" ] && echo \"$i $(cat /sys/class/net/$i/statistics/rx_bytes)\""]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var parts = text.trim().split(" ")
+        var now = Date.now()
+        var bytes = Number(parts[1])
+        if (parts.length < 2 || !isFinite(bytes)) { root.rxText = ""; root.rxLastBytes = -1; return }
+        if (root.rxLastBytes >= 0 && parts[0] === root.rxLastIface && now > root.rxLastMs) {
+          var bps = (bytes - root.rxLastBytes) * 1000 / (now - root.rxLastMs)
+          root.rxText = bps > 0 ? root.rxFormat(bps) : ""
+        } else root.rxText = ""
+        root.rxLastBytes = bytes; root.rxLastMs = now; root.rxLastIface = parts[0]
+      }
+    }
+  }
+  Timer {
+    interval: 2000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: if (!rxProc.running) rxProc.running = true
+  }
   // timon: LAN switch state. Follows the device (connected/connecting) unless
   // a toggle is in flight; "disconnect" also stops NetworkManager autoconnect
   // until "connect", so off stays off.
@@ -975,7 +1012,9 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.icon
+    // timon: download speed left of the icon (hidden when ~0 or offline).
+    text: root.rxText !== "" && !vertical ? root.rxText + " " + root.icon : root.icon
+    slotSize: Style.bar.iconSlot * (root.rxText !== "" && !vertical ? 2.6 : 1)
 
     onPressed: function(b) {
       if (root.opened) root.close()

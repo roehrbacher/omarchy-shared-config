@@ -163,6 +163,9 @@ Grok Bot logo; click it for the usage panel.
   stops autoconnect until switched on). Re-copy `Panel.qml`/`Model.js` from
   `$OMARCHY_PATH/shell/plugins/panels/network/` and re-apply the `timon:` blocks
   if the stock panel changes a lot; undo = put `omarchy.network` back in `00-shared.json`.
+  It also shows the live download speed left of the icon (`340K` = 340 KB/s,
+  `1.2M` / `14M` = MB/s), from `rx_bytes` of the default-route interface every 2 s
+  (no traffic of its own); hidden under 50 KB/s or offline.
 - `timon.lock` – stock lock screen that pauses all playing media when it locks.
 - `timon.indicators` – Omarchy's stock indicators group plus the Insomnia eye
   (see *Insomnia* below). Not stored here: `omarchy-indicators-build` clones it

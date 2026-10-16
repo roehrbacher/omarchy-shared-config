@@ -69,6 +69,8 @@ Nothing in one repo overwrites a file of the other:
 | `hypr/monitors.lua` | machine (PC) / stock (XPS) | screen setup |
 | `omarchy/shell.d/00-shared.json` | shared | the one top bar, same on both |
 | `omarchy/shell.d/50-<machine>.json` | machine repo | small additions (e.g. XPS battery service) |
+| `voxtype/config.toml` | shared | dictation: Whisper large-v3-turbo q5_0, en+de, vocabulary hint, VAD, word replacements |
+| `systemd/user/voxtype.service.d/*.conf` | machine repo | which Voxtype build/GPU runs it (PC: Radeon, XPS: Arc + flash attention) |
 | `omarchy/shell.json` | generated | built from `shell.d/` by `omarchy-shell-json-build` |
 | `omarchy/menu.d/00-shared.jsonc` | shared | menu tweaks for both machines |
 | `omarchy/menu.d/50-<machine>.jsonc` | machine repo (optional) | that machine's menu rows |

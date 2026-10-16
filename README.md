@@ -199,6 +199,8 @@ default menu (the menu would otherwise blank them).
 - Super+Ctrl+Return agent picker (Grok Build); Herdr moves to Super+Shift+Ctrl+H
 - Super+Shift+B Grok Bot (focus or start); the browser stays on Super+Shift+Return
 - Super+Shift+C Calendar Proton, Super+Shift+E Mail Proton (no HEY keys)
+- Super+Shift+W WhatsApp, Super+Shift+S Signal (replace stock Omawrite and
+  Google Maps; the stock Super+Shift+Alt+G / Super+Shift+G still work)
 - Super+Shift+Y (YouTube) unbound
 - Print is Omarchy's stock screenshot again (omasnap is gone)
 - Insert is unbound again (it used to run the screen-off script; Insomnia

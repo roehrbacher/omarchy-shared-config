@@ -52,3 +52,10 @@ o.bind("SUPER + SHIFT + B", "Grok Bot", { launch = "grok-bot", focus = "^grok-bo
 
 -- Telegram on SUPER + SHIFT + T: focuses the open window, or starts it.
 o.bind("SUPER + SHIFT + T", "Telegram", { launch = "Telegram", focus = "^org.telegram.desktop$" })
+
+-- Messengers on easy keys (Super+Shift+G / Super+Shift+Alt+G still work too).
+-- Replaces stock SUPER+SHIFT+W (was: Omawrite) and SUPER+SHIFT+S (was: Google Maps).
+hl.unbind("SUPER + SHIFT + W")
+o.bind("SUPER + SHIFT + W", "WhatsApp", { webapp = "https://web.whatsapp.com/", focus = true })
+hl.unbind("SUPER + SHIFT + S")
+o.bind("SUPER + SHIFT + S", "Signal", { omarchy = "signal" })

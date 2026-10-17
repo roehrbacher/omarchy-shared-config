@@ -72,6 +72,9 @@ Nothing in one repo overwrites a file of the other:
 | `omarchy/shell.d/50-<machine>.json` | machine repo | small additions (e.g. XPS battery service) |
 | `voxtype/config.toml` | shared | dictation: Whisper large-v3-turbo q5_0, en+de, vocabulary hint, VAD, word replacements |
 | `systemd/user/voxtype.service.d/*.conf` | machine repo | which Voxtype build/GPU runs it (PC: Radeon, XPS: Arc + flash attention) |
+| `brave-flags.d/00-shared.conf` | shared | Brave flags for both machines (Wayland, keyring, extensions) |
+| `brave-flags.d/50-<machine>.conf` | machine repo (optional) | that machine's Brave flags (PC: scale 1.1) |
+| `brave-flags.conf` | generated | built from `brave-flags.d/` by `omarchy-brave-flags-build`; own flags go in `brave-flags.d/90-local.conf` |
 | `omarchy/shell.json` | generated | built from `shell.d/` by `omarchy-shell-json-build` |
 | `omarchy/menu.d/00-shared.jsonc` | shared | menu tweaks for both machines |
 | `omarchy/menu.d/50-<machine>.jsonc` | machine repo (optional) | that machine's menu rows |
@@ -93,6 +96,19 @@ Reordering or setting changes made only in the UI are not kept by a rebuild.
 code-reviewed commit (list: `THEMES` in `repo.conf`), and **never applies a theme**:
 switching is always manual from the theme menu. Pick the wallpaper
 (launchpad, engine cluster, sunset) in Omarchy's wallpaper picker.
+
+**Brave + summarize extensions** – Brave reads one file,
+`~/.config/brave-flags.conf`; `omarchy-brave-flags-build` writes it from
+`brave-flags.d/*.conf` (replaces `@HOME@`, merges every `--load-extension=` and
+`--enable-features=` into one line, since Brave only honours the last). The shared
+flags load Omarchy's bundled extensions plus my
+[Lumo](https://github.com/roehrbacher/lumo-summarize-extension) and
+[Grok](https://github.com/roehrbacher/grok-summarize-extension) summarize
+extensions unpacked from `~/Work/<name>` (private repos, their code is
+maintained there, not here). `install.sh` clones them if missing and
+fast-forwards them when the clone is clean and on its default branch (list:
+`SUMMARIZE_EXTENSIONS` in `repo.conf`). Brave picks up changed flags on its next
+start; an updated extension needs a reload in `brave://extensions` or a Brave restart.
 
 **Bar (same on both machines)** – left: menu, workspaces. Center: status
 indicators (stock group + the Insomnia eye; stock behaviour: inactive ones only fade in on hover), clock

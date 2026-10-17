@@ -8,7 +8,7 @@
 #   clipboard.sh open <index>             open a URL in the browser, text in the editor, an image in the editor
 #   clipboard.sh clear                    empty the live clipboard
 #   clipboard.sh prune                    delete stored images no entry points to
-#   clipboard.sh wipe                     delete all stored history (used by uninstall)
+#   clipboard.sh wipe                     resume Flux if we paused it, delete all stored history (used by uninstall)
 
 set -uo pipefail
 umask 077
@@ -93,7 +93,9 @@ prune)
   done
   ;;
 wipe)
-  rm -rf "$DATA_DIR"
+  # Never leave Flux paused behind when the plugin goes away.
+  "$(dirname "$0")/flux-pause.sh" resume >/dev/null 2>&1
+  rm -rf "$DATA_DIR" "${XDG_STATE_HOME:-$HOME/.local/state}/timon.clipboard"
   ;;
 *)
   sed -n '2,12p' "$0" >&2

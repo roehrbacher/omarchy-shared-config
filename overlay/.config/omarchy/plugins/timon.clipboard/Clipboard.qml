@@ -29,6 +29,10 @@ Item {
   property bool cursorActive: false
   property bool clearConfirmOpen: false
   property bool privateMode: false
+  // Flux (fluxd) clipboard sync: paused by flux-pause.sh while private mode is on.
+  property bool fluxPresent: false
+  property bool fluxPaused: false
+  property bool fluxResync: false
   property bool hasPinned: false
   property var history: []
 
@@ -39,6 +43,7 @@ Item {
   readonly property string statePath: dataDir + "/state.json"
   readonly property string captureScript: pluginDir + "/capture.sh"
   readonly property string helper: pluginDir + "/clipboard.sh"
+  readonly property string fluxScript: pluginDir + "/flux-pause.sh"
 
   // Same [menu] surface tokens as the stock clipboard, so every theme styles it.
   property color background: Color.menu.background
@@ -93,23 +98,35 @@ Item {
   }
 
   function status(arg) {
-    return JSON.stringify({ private: root.privateMode, open: root.opened, entries: root.history.length, shown: displayModel.count })
+    return JSON.stringify({ private: root.privateMode, fluxPaused: root.fluxPaused, open: root.opened, entries: root.history.length, shown: displayModel.count })
   }
 
   // ---- private mode -----------------------------------------------------
   function setPrivate(value, notify) {
+    var fluxWasPaused = root.fluxPaused
     root.privateMode = value
     stateFile.setText(JSON.stringify({ private: value }) + "\n")
+    root.syncFlux()
     if (notify) {
       Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "2500",
         value ? "Clipboard private mode on" : "Clipboard private mode off",
-        value ? "New copies are not saved." : "Copies are saved to history again."])
+        value ? "New copies are not saved." + (root.fluxPresent ? " Flux sync paused." : "")
+              : "Copies are saved to history again." + (fluxWasPaused ? " Flux sync resumed." : "")])
     }
   }
 
   function loadState(raw) {
     try { root.privateMode = JSON.parse(String(raw || "{}")).private === true }
     catch (e) { root.privateMode = false }
+    // Also runs at shell start: resumes Flux if private mode ended while the
+    // shell was down, pauses it again if private mode is still on.
+    root.syncFlux()
+  }
+
+  // Make Flux match private mode (flux-pause.sh sync reads state.json).
+  function syncFlux() {
+    if (fluxProc.running) root.fluxResync = true
+    else fluxProc.running = true
   }
 
   // ---- history ----------------------------------------------------------
@@ -436,6 +453,25 @@ Item {
   }
 
   Process {
+    id: fluxProc
+    command: [root.fluxScript, "sync"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var s = String(text).trim()
+        root.fluxPresent = s !== "" && s !== "absent"
+        root.fluxPaused = s === "paused"
+      }
+    }
+    onExited: {
+      if (root.fluxResync) {
+        root.fluxResync = false
+        Qt.callLater(function() { fluxProc.running = true })
+      }
+    }
+  }
+
+  Process {
     id: currentProc
     command: [root.captureScript]
     stdout: StdioCollector {
@@ -599,7 +635,7 @@ Item {
           Text {
             anchors.centerIn: parent
             textFormat: Text.PlainText
-            text: "󰗹  Private mode – new copies are not saved  (Ctrl+P to turn off)"
+            text: "󰗹  Private mode – new copies are not saved" + (root.fluxPaused ? ", Flux sync paused" : "") + "  (Ctrl+P to turn off)"
             color: root.accent
             font.family: root.fontFamily
             font.pixelSize: Style.font.body

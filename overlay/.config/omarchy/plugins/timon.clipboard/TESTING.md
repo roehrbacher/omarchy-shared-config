@@ -84,3 +84,41 @@ Not tested live: the real Ctrl+A / Ctrl+C keystrokes in the popup and the new
 history entry, because the laptop was in use and the PC was locked (no
 synthetic keys sent). To try: Super+Shift+V, type something, Ctrl+A, Ctrl+C,
 Esc → the text is on the clipboard and at the top of the history.
+
+# Test run – 2026-10-17 (1.2.0: private mode pauses Flux), XPS laptop and gaming PC
+
+Automated (all pass):
+
+```
+$ bash tests/flux-pause.test.sh      # stub systemctl, the real fluxd is never touched
+ok   no Flux: sync prints only 'absent'      ok   no Flux: no start/stop
+ok   no Flux: no marker                      ok   status running
+ok   private on -> sync pauses               ok   fluxd stopped
+ok   marker written                          ok   state dir is 0700
+ok   second sync while private: no extra stop
+ok   private off -> sync resumes             ok   fluxd running again
+ok   marker removed
+ok   Flux off before private: stays off      ok   Flux off before private: no marker
+ok   startup after private ended: resumes    ok   login with private on: paused again
+ok   flux-cli off while paused: stays off    ok   flux-cli off: marker dropped
+ok   failed stop: no marker                  ok   failed start: marker kept for retry
+ok   retry starts Flux                       ok   wipe resumes Flux
+ok   wipe removes marker
+$ node tests/history.test.js && bash tests/capture.test.sh   # unchanged, all ok
+```
+
+Live on the laptop, toggled over the same IPC the key and the bar icon use
+(`omarchy-shell shell call timon.clipboard togglePrivate x` / `setPrivateMode`):
+
+| Step | fluxd.service | `flux-pause.sh status` | plugin `status` |
+|---|---|---|---|
+| before | active (old PID) | running | private false, fluxPaused false |
+| togglePrivate → private | inactive, fluxd and its `wl-paste --watch` gone | paused (marker present) | private true, fluxPaused true |
+| togglePrivate → recording | active (new PID) | running (marker gone) | private false, fluxPaused false |
+| setPrivateMode on, then shell restart | inactive, stays inactive after restart | paused | private true, fluxPaused true |
+| setPrivateMode off | active | running | private false, fluxPaused false |
+
+Shell log after restart: no QML errors from timon.clipboard. Not done live: a
+real copy during private mode (kept off the user's clipboard); fluxd's own
+code records the current clipboard at start without sending it
+(`internal/desktop/clipboard.go`, `observe(..., initial)`).

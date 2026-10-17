@@ -128,8 +128,8 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
 
 - `jankeesvw.notification-center` 1.2.0 – bell with your notification history
   (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 1784e19)
-- `timon.clipboard` 1.1.0 – **my own plugin** (private repo
-  github.com/roehrbacher/omarchy-clipboard, copy of b345fcf; details, keys and
+- `timon.clipboard` 1.2.0 – **my own plugin** (private repo
+  github.com/roehrbacher/omarchy-clipboard, copy of 7ef4489; details, keys and
   tests in its `README.md`). Clipboard history with the UX of GNOME Clipboard
   History, built on and replacing Omarchy's stock clipboard manager as a clone
   (`omarchy.clipboard` is in `disabledPlugins`, so only one watcher runs and
@@ -143,15 +143,23 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
   you typed (it becomes a new history item), plus Ctrl+X/V, Shift+arrows,
   Ctrl+Backspace. **Bar icon** in the right section before the audio icon
   (fixed-width slot): left click opens/closes, right click private mode,
-  incognito icon while private. Bar icon alone off: remove the
+  incognito icon while private. **Private mode also pauses Flux** (stops
+  `fluxd.service`, so nothing is synced to the phone, and starts it again when
+  private mode ends, only if the plugin stopped it; Flux's own files are never
+  touched). The phone link is down while private mode is on; banner, tooltip
+  and notification say "Flux sync paused". Undo just this: `git revert` the
+  1.2.0 commit here (turn private mode off first, or run
+  `systemctl --user start fluxd`). Bar icon alone off: remove the
   `{ "id": "timon.clipboard" }` line from `bar.layout.right` in
   `shell.d/00-shared.json` and run `./install.sh`.
   **Undo** (both machines): delete `overlay/.config/omarchy/plugins/timon.clipboard`,
   its four entries in `shell.d/00-shared.json` (plugins, disabledPlugins,
   cloneSourceRestores, bar) and its block in
   `shared-bindings.lua`, add `.config/omarchy/plugins/timon.clipboard` to
-  `REMOVE_PATHS`, run `./install.sh`; stock Super+Ctrl+V comes back. Saved
-  history: `rm -rf ~/.local/share/timon.clipboard`.
+  `REMOVE_PATHS`, run `./install.sh`; stock Super+Ctrl+V comes back. Before
+  that, turn private mode off (or run `systemctl --user start fluxd`) so Flux
+  is not left paused. Saved history:
+  `rm -rf ~/.local/share/timon.clipboard ~/.local/state/timon.clipboard`.
 - `timon.grok-usage` 1.7.0 – **my own plugin** (private repo
   github.com/roehrbacher/omarchy-grok-usage, based on pixbroker/grokbar-omarchy
   fdc88ed, MIT). Shows the X Premium **shared weekly pool** (panel title "Shared

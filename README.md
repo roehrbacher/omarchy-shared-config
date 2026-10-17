@@ -31,6 +31,7 @@ whatever it replaces, `./install.sh --dry-run` shows what would change, and
 
 ## What's in this repo
 
+- **Apps built from source:** Flux, kept at a reviewed tag (`SOURCE_APPS`)
 - **Look:** themes installed but never applied (switching is manual), one top bar layout for both machines
 - **Clipboard history:** `timon.clipboard`, GNOME Clipboard History style (Super+Shift+V)
 - **Bar plugins:** audio panel, audio passthrough, now playing, Insomnia eye,
@@ -109,6 +110,32 @@ maintained there, not here). `install.sh` clones them if missing and
 fast-forwards them when the clone is clean and on its default branch (list:
 `SUMMARIZE_EXTENSIONS` in `repo.conf`). Brave picks up changed flags on its next
 start; an updated extension needs a reload in `brave://extensions` or a Brave restart.
+
+**Source-built apps** – apps that come from their own repo and are built
+from source, not from pacman/AUR, so **`omarchy update` never updates them**.
+Right now: [Flux](https://github.com/bjarneo/flux) (phone link; `fluxd`,
+`flux-cli`, `flux`, `flux-gui` in `~/.local/bin`, `fluxd.service`, its bar
+plugin is copied in by fluxd itself). List: `SOURCE_APPS` in `repo.conf`, one
+line per app: `"name|repo|reviewed-tag|build-cmd|user-service"`.
+`install.sh` clones each into `~/Work/<name>` if it is missing. If the checkout
+is not at the reviewed tag, it fetches, checks out the tag, runs the build
+command in the checkout (log: `~/.local/state/omarchy-config/source-apps/`) and
+restarts the user service if it is running. Already at the tag: nothing
+happens, no rebuild. It skips an app with local changes in its checkout, and
+skips it quietly (printing what to install, e.g. `mise install go@1.27.1`) when
+the build tools are missing. A failed build goes back to the old checkout, so
+the installed version keeps running. Flux is never restarted while clipboard
+private mode is on (timon.clipboard's Flux pause) or after `flux-cli off`.
+The app's own config is never touched and never in this repo: Flux's pairing
+lives in `~/.config/flux` and is personal, so anyone else using this repo has
+to pair their own phone (`flux-cli setup`, then pair in the app).
+Updates come only from the weekly plugin check (Mondays): it reviews the
+upstream diff and bumps the reviewed tag here, then runs `install.sh` on both
+machines. Force a rebuild by hand: run the build command in `~/Work/<name>`.
+Stop managing an app: delete its line (`./uninstall.sh` also leaves it
+installed). Remove Flux fully: `systemctl --user disable --now fluxd`,
+`make -C ~/Work/flux uninstall-user`, `rm -rf ~/Work/flux
+~/.config/omarchy/plugins/flux` (and `~/.config/flux` to drop the pairing).
 
 **Bar (same on both machines)** – left: menu, workspaces. Center: status
 indicators (stock group + the Insomnia eye; stock behaviour: inactive ones only fade in on hover), clock

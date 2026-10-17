@@ -31,7 +31,7 @@ whatever it replaces, `./install.sh --dry-run` shows what would change, and
 
 ## What's in this repo
 
-- **Look:** Liftoff theme (pinned), one top bar layout for both machines
+- **Look:** themes installed but never applied (switching is manual), one top bar layout for both machines
 - **Bar plugins:** audio panel, audio passthrough, now playing, Insomnia eye,
   hover-reveal, local AI toggle, idle and lock tweaks; plus two third-party
   plugins (notification center, Grokbar usage)
@@ -86,13 +86,11 @@ Reordering or setting changes made only in the UI are not kept by a rebuild.
 
 ## What is in here
 
-**Theme** – [Liftoff](https://github.com/tcballard/omarchy-theme-liftoff) by
-tcballard, pinned to the reviewed commit `942fad8` (only `colors.toml` and three
-8K wallpapers are used). `install.sh` clones it into
-`~/.config/omarchy/themes/theme-liftoff` if it is missing and applies it once
-per machine (marker: `~/.local/state/omarchy-config/theme-applied`), so picking
-another theme by hand later is not undone by the next install. Settings live in
-`repo.conf` (`THEME_REPO`, `THEME_COMMIT`, `THEME_DIR`). Pick the wallpaper
+**Themes** – [Liftoff](https://github.com/tcballard/omarchy-theme-liftoff) and
+[Tokyo Roadster](https://github.com/tcballard/omarchy-theme-tokyo-roadster) by tcballard.
+`install.sh` clones each into `~/.config/omarchy/themes/` if it is missing, at the
+code-reviewed commit (list: `THEMES` in `repo.conf`), and **never applies a theme**:
+switching is always manual from the theme menu. Pick the wallpaper
 (launchpad, engine cluster, sunset) in Omarchy's wallpaper picker.
 
 **Bar (same on both machines)** – left: menu, workspaces. Center: status

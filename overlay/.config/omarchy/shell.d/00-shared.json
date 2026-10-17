@@ -49,8 +49,9 @@
   "plugins": [
     { "id": "timon.lock" },
     { "id": "timon.media" },
-    { "id": "timon.idle" }
+    { "id": "timon.idle" },
+    { "id": "timon.clipboard" }
   ],
-  "disabledPlugins": ["omarchy.lock", "omarchy.media", "omarchy.idle"],
-  "cloneSourceRestores": ["timon.lock", "timon.media", "timon.idle"]
+  "disabledPlugins": ["omarchy.lock", "omarchy.media", "omarchy.idle", "omarchy.clipboard"],
+  "cloneSourceRestores": ["timon.lock", "timon.media", "timon.idle", "timon.clipboard"]
 }

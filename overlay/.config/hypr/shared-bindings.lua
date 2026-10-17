@@ -59,3 +59,9 @@ hl.unbind("SUPER + SHIFT + W")
 o.bind("SUPER + SHIFT + W", "WhatsApp", { webapp = "https://web.whatsapp.com/", focus = true })
 hl.unbind("SUPER + SHIFT + S")
 o.bind("SUPER + SHIFT + S", "Signal", { omarchy = "signal" })
+
+-- Clipboard history (timon.clipboard, GNOME Clipboard History style).
+-- New keys, nothing replaced. Stock SUPER + CTRL + V ("Clipboard manager")
+-- still works: it calls omarchy.clipboard, which the shell routes to this clone.
+o.bind("SUPER + SHIFT + V", "Clipboard history", "omarchy-shell shell toggle timon.clipboard")
+o.bind("SUPER + SHIFT + CTRL + V", "Clipboard private mode", "omarchy-shell shell call timon.clipboard togglePrivate x")

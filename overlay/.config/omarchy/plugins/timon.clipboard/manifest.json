@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "timon.clipboard",
+  "name": "Clipboard History",
+  "version": "1.0.0",
+  "author": "Timon Röhrbacher (based on Omarchy's clipboard manager)",
+  "license": "MIT",
+  "description": "Clipboard history with pinned items, private mode and regex search, modelled on GNOME Clipboard History",
+  "kinds": [
+    "overlay",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Clipboard.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Clipboard History",
+    "description": "Open clipboard history; shows when private mode is on",
+    "category": "Utilities",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.clipboard"
+  }
+}

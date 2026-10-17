@@ -32,6 +32,7 @@ whatever it replaces, `./install.sh --dry-run` shows what would change, and
 ## What's in this repo
 
 - **Look:** themes installed but never applied (switching is manual), one top bar layout for both machines
+- **Clipboard history:** `timon.clipboard`, GNOME Clipboard History style (Super+Shift+V)
 - **Bar plugins:** audio panel, audio passthrough, now playing, Insomnia eye,
   hover-reveal, local AI toggle, idle and lock tweaks; plus two third-party
   plugins (notification center, Grokbar usage)
@@ -111,6 +112,23 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
 
 - `jankeesvw.notification-center` 1.2.0 – bell with your notification history
   (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 1784e19)
+- `timon.clipboard` 1.0.0 – **my own plugin** (private repo
+  github.com/roehrbacher/omarchy-clipboard, copy of 4f8b283; details, keys and
+  tests in its `README.md`). Clipboard history with the UX of GNOME Clipboard
+  History, built on and replacing Omarchy's stock clipboard manager as a clone
+  (`omarchy.clipboard` is in `disabledPlugins`, so only one watcher runs and
+  stock Super+Ctrl+V opens this one). Pinned items (own section, survive
+  clear and the limit), private mode (nothing saved; Super+Shift+Ctrl+V or
+  Ctrl+P), case-insensitive regex search, Ctrl+1…9 / Alt+1…9 quick paste,
+  Enter paste, Shift+Enter copy, Delete / Shift+Delete, 500 unpinned items,
+  text and images. Password-manager copies are skipped. History stays local in
+  `~/.local/share/timon.clipboard/` (0700/0600); the stock history is imported
+  once. Optional bar icon `{ "id": "timon.clipboard" }` (not placed).
+  **Undo** (both machines): delete `overlay/.config/omarchy/plugins/timon.clipboard`,
+  its three entries in `shell.d/00-shared.json` and its block in
+  `shared-bindings.lua`, add `.config/omarchy/plugins/timon.clipboard` to
+  `REMOVE_PATHS`, run `./install.sh`; stock Super+Ctrl+V comes back. Saved
+  history: `rm -rf ~/.local/share/timon.clipboard`.
 - `timon.grok-usage` 1.7.0 – **my own plugin** (private repo
   github.com/roehrbacher/omarchy-grok-usage, based on pixbroker/grokbar-omarchy
   fdc88ed, MIT). Shows the X Premium **shared weekly pool** (panel title "Shared
@@ -212,6 +230,8 @@ default menu (the menu would otherwise blank them).
 - Super+Shift+C Calendar Proton, Super+Shift+E Mail Proton (no HEY keys)
 - Super+Shift+W WhatsApp, Super+Shift+S Signal (replace stock Omawrite and
   Google Maps; the stock Super+Shift+Alt+G / Super+Shift+G still work)
+- Super+Shift+V clipboard history (`timon.clipboard`; stock Super+Ctrl+V opens
+  it too), Super+Shift+Ctrl+V clipboard private mode on/off. New keys, nothing replaced
 - Super+Shift+Y (YouTube) unbound
 - Print is Omarchy's stock screenshot again (omasnap is gone)
 - Insert is unbound again (it used to run the screen-off script; Insomnia

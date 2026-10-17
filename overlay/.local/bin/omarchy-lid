@@ -15,8 +15,8 @@
 #          - an Insomnia session runs (omarchy-insomnia holds logind's lid
 #            handling, so battery behaves like AC), or
 #          - it is on AC and logind ignores the lid on AC
-#            (HandleLidSwitchExternalPower=ignore/lock; on the XPS from
-#            omarchy-xps-config root-files/).
+#            (HandleLidSwitchExternalPower=ignore/lock; not set on the
+#            XPS, which suspends on AC by choice).
 #        Otherwise logind suspends as usual and this does nothing more.
 # open:  quiet mode ends (apps continued, power profile restored), then
 #        Omarchy's clamshell handler, then the display comes back on at the

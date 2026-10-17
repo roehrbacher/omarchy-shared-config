@@ -275,9 +275,9 @@ can force `INSOMNIA_MODE=laptop|desktop` or override any `INSOMNIA_*` value.
     there). It runs Omarchy's own lid commands first (lock unless an external
     monitor is in use, clamshell); then, if the laptop keeps running closed,
     turns the display fully off and starts quiet mode. It keeps running closed
-    during an Insomnia session, or on AC when logind ignores the lid on AC
-    (`HandleLidSwitchExternalPower=ignore`, a root drop-in that the XPS repo
-    ships); otherwise logind suspends and nothing is fought. Opening lights the
+    during an Insomnia session, or on AC if logind is set to ignore the lid on
+    AC (`HandleLidSwitchExternalPower=ignore`; not used on the XPS, which
+    suspends on AC by choice); otherwise logind suspends and nothing is fought. Opening lights the
     lock screen, which goes dark again after 30 s without input. With an
     external monitor it's stock clamshell. `omarchy-lid why` explains the
     current decision.

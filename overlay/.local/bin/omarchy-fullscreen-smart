@@ -1,0 +1,24 @@
+#!/bin/bash
+# Managed by omarchy-shared-config. Super+F full screen.
+# Browsers (tabbed windows) get compositor full screen only: the window fills the
+# screen but the browser isn't told it's full screen, so tabs and the address bar
+# stay visible (F11 / a video's own full screen still work as usual).
+# Every other window gets Omarchy's normal full screen.
+set -euo pipefail
+
+active=$(hyprctl activewindow -j)
+class=$(jq -r '.class // ""' <<<"$active")
+internal=$(jq -r '.fullscreen // 0' <<<"$active")
+client=$(jq -r '.fullscreenClient // 0' <<<"$active")
+
+state() {
+  hyprctl dispatch "hl.dsp.window.fullscreen_state({ internal = $1, client = $2 })" >/dev/null 2>&1 ||
+    hyprctl dispatch fullscreenstate "$1" "$2" >/dev/null
+}
+
+if [[ $class =~ ^(brave-browser|chromium|google-chrome|firefox|zen|librewolf)$ ]]; then
+  if [[ $internal != 0 || $client != 0 ]]; then state 0 0; else state 2 0; fi
+else
+  hyprctl dispatch 'hl.dsp.window.fullscreen({ mode = "fullscreen" })' >/dev/null 2>&1 ||
+    hyprctl dispatch fullscreen 0 >/dev/null
+fi

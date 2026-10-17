@@ -65,3 +65,8 @@ o.bind("SUPER + SHIFT + S", "Signal", { omarchy = "signal" })
 -- still works: it calls omarchy.clipboard, which the shell routes to this clone.
 o.bind("SUPER + SHIFT + V", "Clipboard history", "omarchy-shell shell toggle timon.clipboard")
 o.bind("SUPER + SHIFT + CTRL + V", "Clipboard private mode", "omarchy-shell shell call timon.clipboard togglePrivate x")
+
+-- Super+F: browsers keep their tabs visible in full screen (omarchy-fullscreen-smart);
+-- other windows get the normal full screen. Undo: delete these two lines.
+hl.unbind("SUPER + F")
+o.bind("SUPER + F", "Full screen", "omarchy-fullscreen-smart")

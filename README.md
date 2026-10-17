@@ -426,6 +426,20 @@ widget or `omarchy-audio-passthrough on|off|volume N`, saved to
 `omarchy-audio-passthrough sources` / `source <node-name>`) sets the system
 default mic, exactly like the stock audio panel.
 
+## Packages
+
+Extra apps (`PACKAGES` in `repo.conf`) installed on both machines on top of Omarchy:
+
+bitwarden, bitwarden-cli, brave-bin, cursor-bin, ente-desktop-bin (AUR), firefox, fwupd, gitleaks (for the pre-commit hook), grok-bot, hermes-desktop, minecraft-launcher, python-scipy, signal-desktop, spotify, steam, tailscale, telegram-desktop, voxtype-bin.
+
+`./install.sh` installs only the ones that are missing (`pacman -S --needed`,
+AUR packages through `yay`). It never upgrades or removes anything, and a package
+that fails is skipped with a message. If sudo needs a password and there is no
+terminal, it just prints what is pending. `./uninstall.sh` never removes packages;
+remove them by hand with `sudo pacman -Rns <pkg>`.
+
+**Using this repo yourself?** Trim `PACKAGES` in `repo.conf` to the apps you want first.
+
 ## License
 
 0BSD (see `LICENSE`), © 2026 Timon Röhrbacher. Third-party plugins and assets in `overlay/` (e.g. folders not named `timon.*`) keep their own licenses, see the `LICENSE` file inside each.

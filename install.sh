@@ -24,6 +24,7 @@ fi
 
 REMOVE_PATHS=()
 EXTRA_BACKUP=()
+PACKAGES=()
 post_install() { :; }
 # shellcheck source=/dev/null
 source "$ROOT/repo.conf"
@@ -47,7 +48,38 @@ if [[ -d $OVERLAY/.config/omarchy/plugins ]]; then
   done
 fi
 
+# Packages from repo.conf: only missing ones are installed (pacman --needed,
+# AUR through yay). Nothing is ever upgraded or removed; a failure is skipped.
+install_packages() {
+  local pkg missing=() repo=() aur=()
+  for pkg in "${PACKAGES[@]}"; do
+    pacman -Q "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+  done
+  (( ${#missing[@]} )) || return 0
+  if ! sudo -n true 2>/dev/null && [[ ! -t 0 ]]; then
+    echo "Not installing packages (sudo needs a password, no terminal): ${missing[*]}"
+    echo "  Run ./install.sh in a terminal, or: sudo pacman -S --needed <pkg>"
+    return 0
+  fi
+  for pkg in "${missing[@]}"; do
+    if pacman -Si "$pkg" >/dev/null 2>&1; then repo+=("$pkg"); else aur+=("$pkg"); fi
+  done
+  for pkg in "${repo[@]}"; do
+    echo "Installing package $pkg"
+    sudo pacman -S --needed --noconfirm "$pkg" >/dev/null || echo "Could not install $pkg, skipping it"
+  done
+  for pkg in "${aur[@]}"; do
+    if ! command -v yay >/dev/null; then echo "Could not install $pkg (AUR, yay missing), skipping it"; continue; fi
+    echo "Installing AUR package $pkg"
+    yay -S --needed --noconfirm "$pkg" >/dev/null || echo "Could not install $pkg (AUR), skipping it"
+  done
+  return 0
+}
+
 if (( DRY )); then
+  for pkg in "${PACKAGES[@]}"; do
+    pacman -Q "$pkg" >/dev/null 2>&1 || echo "package $pkg"
+  done
   printf 'copy   ~/%s\n' "${FILES[@]}" "${PLUGINS[@]}"
   printf 'remove ~/%s\n' "${REMOVE_PATHS[@]}"
   exit 0
@@ -92,6 +124,7 @@ for rel in "${FILES[@]}"; do
 done
 
 command -v systemctl >/dev/null && systemctl --user daemon-reload || true
+install_packages
 post_install
 
 if command -v omarchy-shell-json-build >/dev/null || [[ -x $HOME/.local/bin/omarchy-shell-json-build ]]; then

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Put back what the last ./install.sh of this repo replaced.
+# Packages from PACKAGES (repo.conf) are never removed; uninstall them by hand
+# with `sudo pacman -Rns <pkg>` if you want them gone.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -128,8 +128,8 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
 
 - `jankeesvw.notification-center` 1.2.0 – bell with your notification history
   (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 1784e19)
-- `timon.clipboard` 1.0.0 – **my own plugin** (private repo
-  github.com/roehrbacher/omarchy-clipboard, copy of 4f8b283; details, keys and
+- `timon.clipboard` 1.1.0 – **my own plugin** (private repo
+  github.com/roehrbacher/omarchy-clipboard, copy of b345fcf; details, keys and
   tests in its `README.md`). Clipboard history with the UX of GNOME Clipboard
   History, built on and replacing Omarchy's stock clipboard manager as a clone
   (`omarchy.clipboard` is in `disabledPlugins`, so only one watcher runs and
@@ -139,9 +139,16 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
   Enter paste, Shift+Enter copy, Delete / Shift+Delete, 500 unpinned items,
   text and images. Password-manager copies are skipped. History stays local in
   `~/.local/share/timon.clipboard/` (0700/0600); the stock history is imported
-  once. Optional bar icon `{ "id": "timon.clipboard" }` (not placed).
+  once. The search line is a real text field: Ctrl+A then Ctrl+C copies what
+  you typed (it becomes a new history item), plus Ctrl+X/V, Shift+arrows,
+  Ctrl+Backspace. **Bar icon** in the right section before the audio icon
+  (fixed-width slot): left click opens/closes, right click private mode,
+  incognito icon while private. Bar icon alone off: remove the
+  `{ "id": "timon.clipboard" }` line from `bar.layout.right` in
+  `shell.d/00-shared.json` and run `./install.sh`.
   **Undo** (both machines): delete `overlay/.config/omarchy/plugins/timon.clipboard`,
-  its three entries in `shell.d/00-shared.json` and its block in
+  its four entries in `shell.d/00-shared.json` (plugins, disabledPlugins,
+  cloneSourceRestores, bar) and its block in
   `shared-bindings.lua`, add `.config/omarchy/plugins/timon.clipboard` to
   `REMOVE_PATHS`, run `./install.sh`; stock Super+Ctrl+V comes back. Saved
   history: `rm -rf ~/.local/share/timon.clipboard`.

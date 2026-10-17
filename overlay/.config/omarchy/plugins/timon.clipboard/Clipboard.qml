@@ -68,7 +68,7 @@ Item {
     root.cursorActive = true
     root.disarmPointer()
     root.rebuildDisplay()
-    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    Qt.callLater(function() { searchInput.forceActiveFocus() })
   }
 
   function close() {
@@ -148,7 +148,7 @@ Item {
   function cancelClearHistory() {
     root.clearConfirmOpen = false
     root.disarmPointer()
-    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    Qt.callLater(function() { searchInput.forceActiveFocus() })
   }
 
   function confirmClearHistory() {
@@ -161,7 +161,7 @@ Item {
     root.disarmPointer()
     root.clearConfirmOpen = false
     root.rebuildDisplay()
-    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    Qt.callLater(function() { searchInput.forceActiveFocus() })
   }
 
   function removeDisplayIndex(index) {
@@ -289,6 +289,91 @@ Item {
   function activateIndex(index) { root.runOnIndex(index, "paste") }
   function copyIndex(index) { root.runOnIndex(index, "copy") }
   function openIndex(index) { root.runOnIndex(index, "open") }
+
+  // ---- search field keys --------------------------------------------------
+  // The search line is a real text field. Popup shortcuts are taken first
+  // (ClipboardHistory.searchKeyAction); every other key edits the text, so
+  // Ctrl+A, Ctrl+C/X/V, Shift+arrows and Ctrl+Backspace behave as usual.
+  function handleSearchKey(event) {
+    if (root.clearConfirmOpen) {
+      clearConfirm.handleKey(event)
+      event.accepted = true
+      return
+    }
+
+    var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+    var alt = (event.modifiers & Qt.AltModifier) !== 0
+    var shift = (event.modifiers & Qt.ShiftModifier) !== 0
+    var action = ClipboardHistory.searchKeyAction({
+      key: event.key, ctrl: ctrl, alt: alt, shift: shift,
+      hasSelection: searchInput.selectedText.length > 0
+    })
+    var digit = event.key >= Qt.Key_1 && event.key <= Qt.Key_9 ? event.key - Qt.Key_0 : 0
+
+    switch (action) {
+    case "escape":
+      if (root.filterText) root.setFilter("")
+      else root.close()
+      break
+    case "slot": root.activateSlot(false, digit); break
+    case "pinnedSlot": root.activateSlot(true, digit); break
+    case "copySelection": root.copyText(searchInput.selectedText); break
+    case "cutSelection":
+      root.copyText(searchInput.selectedText)
+      searchInput.remove(searchInput.selectionStart, searchInput.selectionEnd)
+      break
+    case "clearSearch": root.setFilter(""); break
+    case "pin": if (root.cursorActive) root.togglePinDisplayIndex(root.selectedIndex); break
+    case "private": root.setPrivate(!root.privateMode, false); break
+    case "clear": root.requestClearHistory(); break
+    case "delete": if (root.cursorActive) root.removeDisplayIndex(root.selectedIndex); break
+    case "up": root.select(-1); break
+    case "down": root.select(1); break
+    case "pageUp": root.select(-6); break
+    case "pageDown": root.select(6); break
+    case "home": root.selectAbsolute(0); break
+    case "end": root.selectAbsolute(displayModel.count - 1); break
+    case "enter":
+      if (root.cursorActive && alt) root.openIndex(root.selectedIndex)
+      else if (root.cursorActive && shift) root.copyIndex(root.selectedIndex)
+      else if (root.cursorActive) root.activateIndex(root.selectedIndex)
+      else if (displayModel.count > 0) root.cursorActive = true
+      break
+    default:
+      return
+    }
+    event.accepted = true
+  }
+
+  // Ctrl+C / Ctrl+X in the search field. The text goes to wl-copy over stdin
+  // (never argv, never a file), so the copy outlives the popup and even a
+  // shell restart, and the capture watcher records it like any other copy.
+  function copyText(text) {
+    if (!text) return
+    copyProc.nextText = text
+    if (!copyProc.running) copyProc.startCopy()
+  }
+
+  onFilterTextChanged: if (searchInput.text !== root.filterText) searchInput.text = root.filterText
+
+  Process {
+    id: copyProc
+    property string nextText: ""
+    property string sending: ""
+    command: ["wl-copy"]
+    function startCopy() {
+      sending = nextText
+      nextText = ""
+      stdinEnabled = true
+      running = true
+    }
+    onStarted: {
+      write(sending)
+      sending = ""
+      stdinEnabled = false
+    }
+    onExited: if (nextText) startCopy()
+  }
 
   // ---- startup ----------------------------------------------------------
   Component.onCompleted: initProc.running = true
@@ -421,62 +506,9 @@ Item {
       MouseArea { anchors.fill: parent; onClicked: {} }
 
       Item {
-        id: keyCatcher
+        id: confirmLayer
         anchors.fill: parent
         z: root.clearConfirmOpen ? 20 : 0
-        focus: true
-
-        Keys.priority: Keys.BeforeItem
-        Keys.onPressed: function(event) {
-          if (root.clearConfirmOpen) {
-            if (clearConfirm.handleKey(event)) event.accepted = true
-            return
-          }
-
-          var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
-          var alt = (event.modifiers & Qt.AltModifier) !== 0
-          var digit = event.key >= Qt.Key_1 && event.key <= Qt.Key_9 ? event.key - Qt.Key_0 : 0
-
-          if (event.key === Qt.Key_Escape) {
-            if (root.filterText) root.setFilter("")
-            else root.close()
-          } else if (digit && ctrl) {
-            root.activateSlot(false, digit)
-          } else if (digit && alt) {
-            root.activateSlot(true, digit)
-          } else if (ctrl && event.key === Qt.Key_F) {
-            if (root.cursorActive) root.togglePinDisplayIndex(root.selectedIndex)
-          } else if (ctrl && event.key === Qt.Key_P) {
-            root.setPrivate(!root.privateMode, false)
-          } else if (Util.editsFilter(event, root.filterText)) {
-            root.setFilter(Util.editedFilter(event, root.filterText))
-          } else if (event.key === Qt.Key_Delete) {
-            if (event.modifiers & Qt.ShiftModifier) root.requestClearHistory()
-            else if (root.cursorActive) root.removeDisplayIndex(root.selectedIndex)
-          } else if (event.key === Qt.Key_Up || (ctrl && event.key === Qt.Key_K)) {
-            root.select(-1)
-          } else if (event.key === Qt.Key_Down || (ctrl && event.key === Qt.Key_J)) {
-            root.select(1)
-          } else if (event.key === Qt.Key_PageUp) {
-            root.select(-6)
-          } else if (event.key === Qt.Key_PageDown) {
-            root.select(6)
-          } else if (event.key === Qt.Key_Home) {
-            root.selectAbsolute(0)
-          } else if (event.key === Qt.Key_End) {
-            root.selectAbsolute(displayModel.count - 1)
-          } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            if (root.cursorActive && alt) root.openIndex(root.selectedIndex)
-            else if (root.cursorActive && (event.modifiers & Qt.ShiftModifier)) root.copyIndex(root.selectedIndex)
-            else if (root.cursorActive) root.activateIndex(root.selectedIndex)
-            else if (displayModel.count > 0) root.cursorActive = true
-          } else if (!ctrl && !alt && event.text && event.text.length === 1 && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127) {
-            root.setFilter(root.filterText + event.text)
-          } else {
-            return
-          }
-          event.accepted = true
-        }
 
         ConfirmDialog {
           id: clearConfirm
@@ -510,18 +542,38 @@ Item {
           width: parent.width
           height: root.headerHeight
 
-          Text {
-            textFormat: Text.PlainText
+          TextInput {
+            id: searchInput
             anchors.left: parent.left
             anchors.right: countLabel.left
             anchors.rightMargin: Style.space(12)
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.filterText || "Search clipboard…"
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            verticalAlignment: TextInput.AlignVCenter
+            focus: true
+            clip: true
+            selectByMouse: true
+            persistentSelection: false
             color: root.foreground
-            opacity: root.filterText ? 1 : 0.58
+            selectionColor: root.selectedBackground
+            selectedTextColor: root.selectedText
             font.family: root.fontFamily
             font.pixelSize: Style.font.heading
-            elide: Text.ElideRight
+            Keys.priority: Keys.BeforeItem
+            Keys.onPressed: function(event) { root.handleSearchKey(event) }
+            onTextChanged: if (text !== root.filterText) root.setFilter(text)
+
+            Text {
+              anchors.fill: parent
+              verticalAlignment: Text.AlignVCenter
+              visible: searchInput.text === ""
+              textFormat: Text.PlainText
+              text: "Search clipboard…"
+              color: root.foreground
+              opacity: 0.58
+              font: searchInput.font
+              elide: Text.ElideRight
+            }
           }
 
           Text {

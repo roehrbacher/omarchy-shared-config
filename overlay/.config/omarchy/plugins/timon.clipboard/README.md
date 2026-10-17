@@ -22,17 +22,21 @@ In the popup:
 | Key | What it does |
 |---|---|
 | type | search (case-insensitive regex; invalid regex = plain text) |
-| ↑ ↓ / Ctrl+K Ctrl+J, PgUp PgDn, Home End | move |
+| ↑ ↓ / Ctrl+K Ctrl+J, PgUp PgDn, Home End | move through the list |
 | Enter / click | paste into the window you came from |
 | Shift+Enter | copy only |
 | Alt+Enter | open (URL in browser, text in editor, image in editor) |
 | Ctrl+1…9 | paste the Nth history item |
 | Alt+1…9 | paste the Nth pinned item |
 | Ctrl+F (or the pin icon) | pin / unpin |
-| Delete (or the trash icon) | delete the item |
+| Delete (or the trash icon) | delete the item (with search text selected: delete that text) |
 | Shift+Delete | clear history (asks first; pinned items stay) |
 | Ctrl+P (or the footer switch) | private mode on/off |
-| Backspace, Ctrl+Backspace, Ctrl+U | edit the search |
+| Backspace, Ctrl+Backspace, ← →, Ctrl+Z | edit the search |
+| Ctrl+U | clear the search |
+| Shift+← → / Shift+Home End, Ctrl+A, mouse drag | select search text |
+| Ctrl+C / Ctrl+X (with search text selected) | copy / cut it to the clipboard (becomes a new history item) |
+| Ctrl+V | paste into the search |
 | Esc | clear the search, then close |
 
 ## Behaviour
@@ -54,11 +58,15 @@ In the popup:
   `0600`): `history.json`, `state.json`, `images/`. Nothing is logged, synced
   or sent anywhere. Unreferenced images are deleted automatically.
 - Clipboard text is read by index from that file, never passed on a command
-  line, so it does not show up in process lists.
+  line, so it does not show up in process lists. Search text copied with
+  Ctrl+C goes to `wl-copy` over stdin for the same reason, and stays on the
+  clipboard after the popup closes.
 
-Optional bar icon (not on the bar by default): add `{ "id": "timon.clipboard" }`
-to a bar section. Left click opens the history, right click toggles private
-mode, and it turns into the incognito icon while private mode is on.
+Bar icon: add `{ "id": "timon.clipboard" }` to a bar section (omarchy-shared-config
+puts it in the right section, before the audio icon). It uses the standard
+fixed-width bar icon slot, so switching icons never shifts its neighbours.
+Left click opens / closes the history, right click toggles private mode, and it
+turns into the incognito icon (󰗹) while private mode is on.
 
 IPC (for scripts): `omarchy-shell shell call timon.clipboard togglePrivate x`,
 `setPrivateMode on|off`, `status x`.
@@ -111,7 +119,8 @@ rebuild would otherwise turn it back on).
 ## Tests
 
 ```bash
-node tests/history.test.js     # history model: limit, pins, search, clear
+node tests/history.test.js     # history model: limit, pins, search, clear; search-field key routing
+QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/tst_searchfield.qml  # search field keys (real Qt)
 bash tests/capture.test.sh     # capture: private mode, password hint, size caps, 0600/0700, import, prune
 ```
 

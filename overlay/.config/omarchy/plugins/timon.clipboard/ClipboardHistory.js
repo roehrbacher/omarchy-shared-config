@@ -273,6 +273,46 @@ function displayRows(history, query, limit) {
   return out
 }
 
+// ---- search field keys ----------------------------------------------------
+// Which popup action a key press in the search field triggers. "" means the
+// key belongs to the text field itself, so normal editing works: typing,
+// Backspace, Ctrl+Backspace, Ctrl+A, Ctrl+V, Ctrl+Z, Left/Right and
+// Shift+arrows / Shift+Home / Shift+End selection.
+// Key codes are Qt's (Qt.Key_*), so node tests need no QML.
+var KEY = {
+  Escape: 0x01000000, Return: 0x01000004, Enter: 0x01000005, Insert: 0x01000006, Delete: 0x01000007,
+  Home: 0x01000010, End: 0x01000011, Left: 0x01000012, Up: 0x01000013,
+  Right: 0x01000014, Down: 0x01000015, PageUp: 0x01000016, PageDown: 0x01000017,
+  A: 0x41, C: 0x43, F: 0x46, J: 0x4a, K: 0x4b, P: 0x50, U: 0x55, V: 0x56, X: 0x58
+}
+
+// ev: { key, ctrl, alt, shift, hasSelection }
+function searchKeyAction(ev) {
+  var key = ev.key
+  var digit = key >= 0x31 && key <= 0x39
+  if (key === KEY.Escape) return "escape"
+  if (digit && ev.ctrl && !ev.alt) return "slot"
+  if (digit && ev.alt && !ev.ctrl) return "pinnedSlot"
+  if (ev.ctrl && !ev.alt && (key === KEY.C || key === KEY.Insert)) return ev.hasSelection ? "copySelection" : ""
+  if (ev.ctrl && !ev.alt && key === KEY.X) return ev.hasSelection ? "cutSelection" : ""
+  // Qt's own Ctrl+U would also copy the line to the clipboard; just clear.
+  if (ev.ctrl && !ev.alt && key === KEY.U) return "clearSearch"
+  if (ev.ctrl && key === KEY.F) return "pin"
+  if (ev.ctrl && key === KEY.P) return "private"
+  if (key === KEY.Delete) {
+    if (ev.shift) return "clear"
+    return ev.hasSelection ? "" : "delete"
+  }
+  if (!ev.shift && (key === KEY.Up || (ev.ctrl && key === KEY.K))) return "up"
+  if (!ev.shift && (key === KEY.Down || (ev.ctrl && key === KEY.J))) return "down"
+  if (key === KEY.PageUp) return "pageUp"
+  if (key === KEY.PageDown) return "pageDown"
+  if (!ev.shift && key === KEY.Home) return "home"
+  if (!ev.shift && key === KEY.End) return "end"
+  if (key === KEY.Return || key === KEY.Enter) return "enter"
+  return ""
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     normalizeEntry: normalizeEntry,
@@ -289,6 +329,8 @@ if (typeof module !== "undefined") {
     previewText: previewText,
     filePaths: filePaths,
     fullText: fullText,
-    displayRows: displayRows
+    displayRows: displayRows,
+    KEY: KEY,
+    searchKeyAction: searchKeyAction
   }
 }

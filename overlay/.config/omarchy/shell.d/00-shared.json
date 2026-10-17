@@ -37,6 +37,7 @@
           "iconOnly": true
         },
         { "id": "timon.local-ai" },
+        { "id": "timon.clipboard" },
         { "id": "timon.audio" },
         { "id": "omarchy.bluetooth" },
         { "id": "timon.network" },

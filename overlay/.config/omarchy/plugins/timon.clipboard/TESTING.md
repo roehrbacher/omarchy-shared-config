@@ -45,3 +45,42 @@ Live, in the running shell (driven over IPC, test strings only):
 Not tested live: Enter/click paste (Shift+Insert into the focused window) and
 the bar icon, to avoid typing into windows that were in use during the test.
 The paste path is the stock Omarchy one (`wl-copy` + `wtype` Shift+Insert).
+
+# Test run – 2026-10-17 (1.1.0: search field + bar icon), XPS laptop and gaming PC
+
+Automated (all pass):
+
+```
+$ node tests/history.test.js
+history tests: all passed            # now includes the search-field key routing
+$ bash tests/capture.test.sh         # unchanged, all ok
+$ QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/tst_searchfield.qml
+Totals: 10 passed, 0 failed          # real Qt TextInput, offscreen, no real clipboard
+```
+
+`tst_searchfield.qml` drives a text field set up like the popup's search line
+with real key events: type "not found" → Ctrl+A selects all → Ctrl+C hands
+exactly that text to the copy function, search unchanged; Ctrl+X cuts; Ctrl+C
+without a selection copies nothing; Shift+←/Shift+Home select; Ctrl+Backspace
+deletes a word; Ctrl+U clears without copying; ↑ ↓ Enter Ctrl+N still reach the
+list; Del with selected search text edits the text, without a selection it
+deletes the entry.
+
+The copy path (Quickshell `Process`, text over stdin, then stdin closed) was
+checked in a separate throwaway quickshell instance with `cat` in place of
+`wl-copy`: bytes (incl. UTF-8 and newlines) arrive exactly, EOF arrives, the
+process exits. `wl-copy` forks its own server after EOF, so the copy stays on
+the clipboard after the popup closes or the shell restarts.
+
+Live:
+
+| Check | Result |
+|---|---|
+| `hyprctl configerrors` | empty (both machines) |
+| shell log after restart | no QML errors from timon.clipboard |
+| bar icon (`timon.clipboard` in `shell.json` right section, before audio) | present, same slot size/spacing as its neighbours (checked on a private screenshot) |
+
+Not tested live: the real Ctrl+A / Ctrl+C keystrokes in the popup and the new
+history entry, because the laptop was in use and the PC was locked (no
+synthetic keys sent). To try: Super+Shift+V, type something, Ctrl+A, Ctrl+C,
+Esc → the text is on the clipboard and at the top of the history.

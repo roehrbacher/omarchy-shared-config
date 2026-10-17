@@ -1,4 +1,4 @@
-// Optional bar icon for timon.clipboard (not on the bar by default).
+// Bar icon for timon.clipboard (fixed-width icon slot, like the other bar icons).
 // Left click: open history. Right click: private mode on/off.
 // Shows the incognito icon while private mode is on.
 import QtQuick

@@ -4,3 +4,8 @@
 __pycache__/
 *.pyc
 *.qmlc
+
+# Local secrets (update-ping.env etc.) never go in the repo
+.config/omarchy-local/
+**/omarchy-local/
+*.env

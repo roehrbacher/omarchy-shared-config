@@ -1,0 +1,61 @@
+#!/bin/bash
+# Managed by omarchy-shared-config. Tell Grok Bot that Omarchy was updated.
+# Reads $HOME/.config/omarchy-local/update-ping.env (untracked, chmod 600):
+#   WEBHOOK_URL=https://...
+#   WEBHOOK_KEY=...
+#
+#   omarchy-update-ping          send {"host","version"} in the background
+#                                (silent no-op if the env file is missing)
+#   omarchy-update-ping --setup  ask for URL + key, write the env file, test it
+#   omarchy-update-ping --test   send a ping with version "test" and report
+# Undo: delete the env file, or the hook post-update.d/update-ping.
+set -u
+ENV_DIR="$HOME/.config/omarchy-local"
+ENV_FILE="$ENV_DIR/update-ping.env"
+
+host_name() {
+  case "$("$HOME/.local/bin/omarchy-machine-kind" 2>/dev/null)" in
+  laptop) echo xps ;;
+  *) echo pc ;;
+  esac
+}
+
+load_env() {
+  [[ -r $ENV_FILE ]] || return 1
+  WEBHOOK_URL=$(sed -n 's/^WEBHOOK_URL=//p' "$ENV_FILE" | tail -1)
+  WEBHOOK_KEY=$(sed -n 's/^WEBHOOK_KEY=//p' "$ENV_FILE" | tail -1)
+  [[ -n $WEBHOOK_URL && -n $WEBHOOK_KEY ]]
+}
+
+# The key goes to curl through a config on stdin, never on the command line.
+send() {
+  local version=$1 body
+  body=$(printf '{"host":"%s","version":"%s"}' "$(host_name)" "$version")
+  printf 'url = "%s"\nheader = "Authorization: Bearer %s"\nheader = "X-Automation-Key: %s"\n' \
+    "$WEBHOOK_URL" "$WEBHOOK_KEY" "$WEBHOOK_KEY" |
+    curl -fsS --max-time 10 -K - -X POST -H 'Content-Type: application/json' --data "$body" -o /dev/null
+}
+
+case "${1:-}" in
+"")
+  load_env || exit 0
+  version=$(omarchy-version 2>/dev/null || echo unknown)
+  (send "$version" >/dev/null 2>&1 &)
+  exit 0
+  ;;
+--test)
+  load_env || { echo "No $ENV_FILE yet. Run: omarchy-update-ping --setup" >&2; exit 1; }
+  if send test; then echo "Test ping sent."; else echo "Test ping failed." >&2; exit 1; fi
+  ;;
+--setup)
+  read -rp "Webhook URL: " url
+  read -rsp "Webhook key (hidden): " key; echo
+  [[ -n $url && -n $key ]] || { echo "URL and key are both needed." >&2; exit 1; }
+  mkdir -p "$ENV_DIR" && chmod 700 "$ENV_DIR"
+  (umask 077; printf 'WEBHOOK_URL=%s\nWEBHOOK_KEY=%s\n' "$url" "$key" >"$ENV_FILE")
+  chmod 600 "$ENV_FILE"
+  echo "Saved $ENV_FILE"
+  exec "$0" --test
+  ;;
+*) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

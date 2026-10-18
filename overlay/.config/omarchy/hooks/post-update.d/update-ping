@@ -1,0 +1,4 @@
+#!/bin/bash
+# Managed by omarchy-shared-config. Ping Grok Bot after an Omarchy update so it
+# can run the after-update check. Backgrounded; silent without the env file.
+"$HOME/.local/bin/omarchy-update-ping" >/dev/null 2>&1 || true

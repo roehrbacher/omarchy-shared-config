@@ -408,6 +408,26 @@ the weather location and the night light. Uses Omarchy's stock sudo rule for
 **install.sh also removes** (after backup): `timon.power`, the old
 stand-alone `timon.insomnia`, `timon.bar`, and the old post-boot timezone/night-light hooks.
 
+## Update ping (after-update check)
+
+After every `omarchy update`, Omarchy runs the hooks in
+`~/.config/omarchy/hooks/post-update.d/`. The hook `update-ping` there calls
+`omarchy-update-ping`, which POSTs `{"host":"xps"|"pc","version":"<omarchy-version>"}`
+to a Grok Bot webhook so it can check that the custom setup survived. It runs in
+the background (10 s timeout), so it never slows down or fails the update. The
+host comes from `omarchy-machine-kind` (laptop = xps, desktop = pc).
+
+The URL and key live only in `$HOME/.config/omarchy-local/update-ping.env`
+(chmod 600, ignored by git and blocked by the pre-commit hook). Without that
+file the ping does nothing. The key is passed to curl on stdin, so `ps`
+never shows it.
+
+- Set up (once per machine): `omarchy-update-ping --setup`
+- Test: `omarchy-update-ping --test`
+- Undo: delete `$HOME/.config/omarchy-local/update-ping.env` (ping stops), or
+  remove `~/.config/omarchy/hooks/post-update.d/update-ping` (add it to
+  REMOVE_PATHS so install.sh doesn't bring it back).
+
 ## Not in any repo (on purpose)
 
 Default agent (set by hand), stock Omarchy hooks/branding/menu, monitor scale on

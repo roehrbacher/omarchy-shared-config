@@ -14,4 +14,9 @@ if [[ -n $hits ]]; then
   echo "pre-commit: blocked, staged lines look like a Tailscale IP/MAC/serial/token/key:" >&2
   echo "$hits" >&2; fail=1
 fi
+bad=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)omarchy-local/|\.env$' || true)
+if [[ -n $bad ]]; then
+  echo "pre-commit: blocked, local secret files staged:" >&2
+  echo "$bad" >&2; fail=1
+fi
 exit $fail

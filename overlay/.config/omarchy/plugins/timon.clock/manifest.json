@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "timon.clock",
+  "name": "My Clock",
+  "version": "1.1.0",
+  "author": "Timon Röhrbacher",
+  "description": "Stock clock + calendar popup with a toggleable weeks-of-your-life view",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "My Clock",
+    "description": "Date/time label with a calendar popup",
+    "category": "Time",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.clock"
+  }
+}

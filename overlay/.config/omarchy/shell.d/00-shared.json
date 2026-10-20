@@ -3,7 +3,7 @@
   "bar": {
     "position": "top",
     "transparent": false,
-    "centerAnchor": "omarchy.clock",
+    "centerAnchor": "timon.clock",
     "layout": {
       "left": [
         { "id": "omarchy.menu" },
@@ -13,7 +13,7 @@
       "center": [
         { "id": "timon.indicators" },
         {
-          "id": "omarchy.clock",
+          "id": "timon.clock",
           "lifeExpectancy": 100,
           "weekStartDay": "monday",
           "format": "ddd d MMM HH:mm",

@@ -41,7 +41,7 @@
         { "id": "timon.audio" },
         { "id": "omarchy.bluetooth" },
         { "id": "timon.network" },
-        { "id": "omarchy.monitor" },
+        { "id": "timon.monitor" },
         { "id": "omarchy.power", "showPercentage": true },
         { "id": "jankeesvw.notification-center" }
       ]

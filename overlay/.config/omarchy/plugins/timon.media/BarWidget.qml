@@ -84,7 +84,7 @@ BarWidget {
 
   function close() { popupOpen = false }
 
-  // Clicking the track info in the popup jumps to Spotify (or starts it).
+  // Clicking the track info in the popup focuses the playing app's window.
   function focusSpotifyWindow() {
     if (focusSpotifyProcess.running) focusSpotifyProcess.running = false
     focusSpotifyProcess.running = true
@@ -199,27 +199,16 @@ BarWidget {
     }
   }
 
+  // Window of whichever player is shown (Brave/YouTube/Netflix tab, Telegram,
+  // mpv, Spotify, ...): see focus-player.py. Starts Spotify if nothing plays.
   Process {
     id: focusSpotifyProcess
-    command: [
-      "bash", "-lc",
-      "python3 - <<'PY'\n"
-      + "import json, subprocess\n"
-      + "clients = json.loads(subprocess.check_output(['hyprctl', 'clients', '-j']))\n"
-      + "addr = ''\n"
-      + "for c in clients:\n"
-      + "    cls = str(c.get('class') or '').strip().lower()\n"
-      + "    init = str(c.get('initialClass') or '').strip().lower()\n"
-      + "    if cls == 'spotify' or init == 'spotify':\n"
-      + "        addr = c.get('address') or ''\n"
-      + "        break\n"
-      + "if addr:\n"
-      + "    cmd = 'hl.dsp.focus({ window = \"address:%s\" })' % addr\n"
-      + "    subprocess.call(['hyprctl', 'dispatch', cmd])\n"
-      + "else:\n"
-      + "    subprocess.call(['omarchy-launch-spotify'])\n"
-      + "PY"
-    ]
+    readonly property string script: decodeURIComponent(String(Qt.resolvedUrl("focus-player.py")).replace(/^file:\/\//, ""))
+    command: [script,
+      root.activePlayer ? String(root.activePlayer.dbusName || "") : "",
+      root.activePlayer ? String(root.activePlayer.identity || "") : "",
+      root.activePlayer ? String(root.activePlayer.desktopEntry || "") : "",
+      root.activePlayer ? String(root.activePlayer.trackTitle || "") : ""]
   }
 
   MouseArea {
@@ -241,8 +230,11 @@ BarWidget {
     }
     onWheel: function(wheel) {
       if (!root.activePlayer) return
-      if (wheel.angleDelta.y > 0) root.runMedia("previous")
-      else if (wheel.angleDelta.y < 0) root.runMedia("next")
+      // Physical direction: undo the natural-scroll flip (wheel.inverted),
+      // like the other bar icons (PhysicalWheel.qml in timon.audio).
+      var dy = wheel.inverted ? -wheel.angleDelta.y : wheel.angleDelta.y
+      if (dy > 0) root.runMedia("previous")
+      else if (dy < 0) root.runMedia("next")
     }
   }
 

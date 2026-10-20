@@ -694,6 +694,9 @@ Panel {
       var volume = root.setOutputVolume(root.outputVolume + wheel.steps * 0.05)
       root.showVolumeOsd(volume)
     }
+
+    // Natural-scroll aware wheel (see PhysicalWheel.qml).
+    PhysicalWheel {}
   }
 
   KeyboardPanel {

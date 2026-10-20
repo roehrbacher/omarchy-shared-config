@@ -1,3 +1,17 @@
+# Test run – 2026-10-20 (1.3.0), a laptop and a desktop, Omarchy 4.0.6
+
+Automated: `node tests/history.test.js` all passed; `qmltestrunner
+tests/tst_searchfield.qml` 15 passed; `capture.test.sh` and
+`flux-pause.test.sh` all ok; `omarchy plugin validate` ok.
+
+Live, opened over IPC (no synthetic keys): desktop (1920x1080) popup keeps
+its full size, laptop (1200x750 logical) popup is 20% smaller; top right shows
+`N items · 1 pinned`; footer shows the key hints and "Phone connected" while
+Flux has the phone online; the bar icon has no tooltip. A pinned row armed
+for deletion turns red with "Press Del again to delete" and goes back to
+normal after 3 s. Ctrl/Alt+N paste-on-release and the pinned double Del are
+covered by the key tests; not pressed live.
+
 # Test run – 2026-10-17, a laptop, Omarchy 4.0.4
 
 Automated (both pass):

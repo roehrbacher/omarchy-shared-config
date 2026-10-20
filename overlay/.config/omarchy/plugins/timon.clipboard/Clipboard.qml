@@ -1,5 +1,5 @@
 // timon.clipboard: clipboard history popup with the UX of GNOME Clipboard
-// History (pinned items, private mode, regex search, Ctrl+N), built on
+// History (pinned items, incognito mode, regex search, Ctrl+N), built on
 // Omarchy's stock clipboard overlay (shell/plugins/clipboard/Clipboard.qml).
 //
 // History lives only in ~/.local/share/timon.clipboard/ (folder 0700, files
@@ -35,6 +35,14 @@ Item {
   property bool fluxResync: false
   property bool hasPinned: false
   property var history: []
+  // Ctrl/Alt+N: display index waiting for the modifier release (-1 = none).
+  property int pendingPasteIndex: -1
+  // Pinned entry (history index) armed by a first Del (-1 = none).
+  property int armedDeleteIndex: -1
+  // Flux: a paired phone is online (checked when the popup opens).
+  property bool phoneOnline: false
+  // Texts captured a moment ago, waiting for the Flux "from phone" check.
+  property var originQueue: []
 
   readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl(".")).replace(/^file:\/\//, "")).replace(/\/$/, "")
   readonly property string dataHome: Quickshell.env("XDG_DATA_HOME") || (Quickshell.env("HOME") + "/.local/share")
@@ -59,10 +67,16 @@ Item {
   property int contentMargin: Style.spacing.panelPadding
   property int headerHeight: Math.max(Style.space(34), Style.font.title + Style.spacing.controlPaddingY * 2)
   property int footerHeight: Math.max(Style.space(26), Style.font.caption + Style.spacing.controlPaddingY * 2)
-  property int bannerHeight: privateMode ? Math.max(Style.space(28), Style.font.body + Style.spacing.controlPaddingY * 2) : 0
   property int contentSpacing: Style.spacing.md
-  property int cardWidth: Math.min(Style.space(875), panel.width - Style.gapsOut * 2)
-  property int cardHeight: Math.min(Style.space(640), panel.height - Style.gapsOut * 2)
+  // Scales with the screen's logical height: unchanged from 1080 px up,
+  // 20% smaller on a small laptop screen (ClipboardHistory.popupScale).
+  readonly property real popupScale: ClipboardHistory.popupScale(panel.height)
+  property int cardWidth: Math.min(Math.round(Style.space(875) * popupScale), panel.width - Style.gapsOut * 2)
+  property int cardHeight: Math.min(Math.round(Style.space(640) * popupScale), panel.height - Style.gapsOut * 2)
+  // Secondary text: same size and contrast as the stock Wi-Fi panel's
+  // smallest text (Style.font.caption, foreground darkened 1.4x, no opacity).
+  readonly property color dimText: Qt.darker(foreground, 1.4)
+  readonly property color urgent: Color.urgent
   property int rowHeight: Math.max(Style.space(50), Style.font.body + Style.font.caption + Style.spacing.rowPaddingX * 2)
 
   // ---- open / close (shell host API) ------------------------------------
@@ -73,10 +87,14 @@ Item {
     root.cursorActive = true
     root.disarmPointer()
     root.rebuildDisplay()
+    if (root.fluxPresent && !root.fluxPaused && !statusProc.running) statusProc.running = true
+    else if (!root.fluxPresent || root.fluxPaused) root.phoneOnline = false
     Qt.callLater(function() { searchInput.forceActiveFocus() })
   }
 
   function close() {
+    root.disarmDelete()
+    root.pendingPasteIndex = -1
     root.cancelClearHistory()
     root.opened = false
   }
@@ -97,11 +115,15 @@ Item {
     return root.privateMode ? "private" : "recording"
   }
 
+  // Same as togglePrivate / setPrivateMode (the UI calls it "Incognito").
+  function toggleIncognito(arg) { return root.togglePrivate(arg) }
+  function setIncognito(arg) { return root.setPrivateMode(arg) }
+
   function status(arg) {
-    return JSON.stringify({ private: root.privateMode, fluxPaused: root.fluxPaused, open: root.opened, entries: root.history.length, shown: displayModel.count })
+    return JSON.stringify({ private: root.privateMode, incognito: root.privateMode, fluxPaused: root.fluxPaused, open: root.opened, entries: root.history.length, shown: displayModel.count })
   }
 
-  // ---- private mode -----------------------------------------------------
+  // ---- incognito (private) mode -------------------------------------------
   function setPrivate(value, notify) {
     var fluxWasPaused = root.fluxPaused
     root.privateMode = value
@@ -109,7 +131,7 @@ Item {
     root.syncFlux()
     if (notify) {
       Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "2500",
-        value ? "Clipboard private mode on" : "Clipboard private mode off",
+        value ? "Clipboard incognito on" : "Clipboard incognito off",
         value ? "New copies are not saved." + (root.fluxPresent ? " Flux sync paused." : "")
               : "Copies are saved to history again." + (fluxWasPaused ? " Flux sync resumed." : "")])
     }
@@ -147,6 +169,56 @@ Item {
     root.history = ClipboardHistory.addEntry(root.history, entry, root.historyLimit)
     root.saveHistory()
     if (root.opened) root.rebuildDisplay()
+    if (entry.type === "text" && root.fluxPresent && !root.fluxPaused) {
+      root.originQueue = root.originQueue.concat([entry.text]).slice(-5)
+      originTimer.restart()
+    }
+  }
+
+  // Flux records a copy from the phone (dir "in") before it puts it on the
+  // clipboard, so `flux-cli status --json` read just after the capture tells
+  // whether the new text came from the phone. Read over stdout only.
+  function applyFluxStatus(raw) {
+    var st = null
+    try { st = JSON.parse(String(raw || "")) } catch (e) { st = null }
+    if (!st) return
+    root.phoneOnline = ClipboardHistory.fluxPhoneOnline(st)
+    var queue = root.originQueue
+    root.originQueue = []
+    var now = Math.floor(Date.now() / 1000)
+    var changed = false
+    for (var i = 0; i < queue.length; i++) {
+      if (ClipboardHistory.fluxOrigin(st, queue[i], now) === "phone") {
+        root.history = ClipboardHistory.setOrigin(root.history, queue[i], "phone")
+        changed = true
+      }
+    }
+    if (changed) {
+      root.saveHistory()
+      if (root.opened) root.rebuildDisplay()
+    }
+  }
+
+  // ---- delete confirmation for pinned entries ------------------------------
+  function disarmDelete() {
+    if (root.armedDeleteIndex !== -1) root.armedDeleteIndex = -1
+    armTimer.stop()
+  }
+
+  // First Del on a pinned row arms it (red, "Press Del again to delete"),
+  // a second Del within 3 s deletes it. Unpinned rows go at once.
+  function requestDelete(index) {
+    if (index < 0 || index >= displayModel.count) return
+    var row = displayModel.get(index)
+    var armed = root.armedDeleteIndex === row.historyIndex
+    if (ClipboardHistory.deleteAction(row.pinned, armed) === "arm") {
+      root.selectAbsolute(index)
+      root.armedDeleteIndex = row.historyIndex
+      armTimer.restart()
+      return
+    }
+    root.disarmDelete()
+    root.removeDisplayIndex(index)
   }
 
   // Deleting what is on the clipboard right now puts the next newest entry
@@ -234,6 +306,7 @@ Item {
         pinned: row.pinned,
         slot: row.slot,
         sectionName: row.pinned ? "Pinned" : (pinnedCount > 0 ? "History" : ""),
+        fromPhone: row.fromPhone === true,
         historyIndex: row.index
       })
     }
@@ -249,6 +322,7 @@ Item {
 
   // ---- cursor -----------------------------------------------------------
   function select(delta) {
+    root.disarmDelete()
     if (displayModel.count === 0) return
     root.disarmPointer()
     if (!cursorActive) {
@@ -265,17 +339,34 @@ Item {
     root.disarmPointer()
     root.cursorActive = true
     root.selectedIndex = Math.max(0, Math.min(index, displayModel.count - 1))
+    if (root.armedDeleteIndex !== -1 && displayModel.get(root.selectedIndex).historyIndex !== root.armedDeleteIndex) root.disarmDelete()
     resultList.positionViewAtIndex(root.selectedIndex, ListView.Contain)
   }
 
-  // Ctrl+N: Nth history entry, Alt+N: Nth pinned entry (as shown).
+  // Ctrl+N: Nth history entry, Alt+N: Nth pinned entry (as shown). Pastes
+  // like Enter, but only once Ctrl/Alt is released (or after 1 s), so the
+  // paste key is not sent while the modifier is still held down.
   function activateSlot(pinned, slot) {
-    for (var i = 0; i < displayModel.count; i++) {
-      var row = displayModel.get(i)
-      if (row.pinned === pinned && row.slot === slot) {
-        root.activateIndex(i)
-        return
-      }
+    var rows = []
+    for (var i = 0; i < displayModel.count; i++) rows.push({ pinned: displayModel.get(i).pinned, slot: displayModel.get(i).slot })
+    var index = ClipboardHistory.slotRowIndex(rows, pinned, slot)
+    if (index < 0) return
+    root.selectAbsolute(index)
+    root.pendingPasteIndex = index
+    pasteTimer.restart()
+  }
+
+  function firePendingPaste() {
+    var index = root.pendingPasteIndex
+    root.pendingPasteIndex = -1
+    pasteTimer.stop()
+    if (index >= 0) root.activateIndex(index)
+  }
+
+  function handleSearchKeyRelease(event) {
+    if (root.pendingPasteIndex >= 0 && ClipboardHistory.isModifierKey(event.key)) {
+      root.firePendingPaste()
+      event.accepted = true
     }
   }
 
@@ -291,6 +382,7 @@ Item {
 
   function selectFromPointer(index, item, mouse) {
     if (!pointerGate.moved(item, mouse)) return
+    if (root.armedDeleteIndex !== -1 && index !== root.selectedIndex) root.disarmDelete()
     root.cursorActive = true
     root.selectedIndex = index
   }
@@ -304,6 +396,10 @@ Item {
   }
 
   function activateIndex(index) { root.runOnIndex(index, "paste") }
+  function sendIndex(index) {
+    if (index < 0 || index >= displayModel.count || displayModel.get(index).entryType !== "text" || !root.phoneOnline) return
+    root.runOnIndex(index, "send")
+  }
   function copyIndex(index) { root.runOnIndex(index, "copy") }
   function openIndex(index) { root.runOnIndex(index, "open") }
 
@@ -326,6 +422,8 @@ Item {
       hasSelection: searchInput.selectedText.length > 0
     })
     var digit = event.key >= Qt.Key_1 && event.key <= Qt.Key_9 ? event.key - Qt.Key_0 : 0
+    // Any key other than Del cancels an armed pinned delete.
+    if (action !== "delete" && !ClipboardHistory.isModifierKey(event.key)) root.disarmDelete()
 
     switch (action) {
     case "escape":
@@ -343,7 +441,8 @@ Item {
     case "pin": if (root.cursorActive) root.togglePinDisplayIndex(root.selectedIndex); break
     case "private": root.setPrivate(!root.privateMode, false); break
     case "clear": root.requestClearHistory(); break
-    case "delete": if (root.cursorActive) root.removeDisplayIndex(root.selectedIndex); break
+    case "delete": if (root.cursorActive) root.requestDelete(root.selectedIndex); break
+    case "send": if (root.cursorActive) root.sendIndex(root.selectedIndex); break
     case "up": root.select(-1); break
     case "down": root.select(1); break
     case "pageUp": root.select(-6); break
@@ -428,6 +527,33 @@ Item {
     onTriggered: {
       if (root.history.length > 0) Quickshell.execDetached([root.helper, "copy", "0"])
       else Quickshell.execDetached([root.helper, "clear"])
+    }
+  }
+
+  Timer {
+    id: pasteTimer
+    interval: 1000
+    onTriggered: root.firePendingPaste()
+  }
+
+  Timer {
+    id: armTimer
+    interval: 3000
+    onTriggered: root.armedDeleteIndex = -1
+  }
+
+  Timer {
+    id: originTimer
+    interval: 400
+    onTriggered: if (!statusProc.running) statusProc.running = true; else restart()
+  }
+
+  Process {
+    id: statusProc
+    command: ["flux-cli", "status", "--json"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.applyFluxStatus(text)
     }
   }
 
@@ -581,7 +707,7 @@ Item {
           TextInput {
             id: searchInput
             anchors.left: parent.left
-            anchors.right: countLabel.left
+            anchors.right: incognitoBadge.visible ? incognitoBadge.left : countLabel.left
             anchors.rightMargin: Style.space(12)
             anchors.top: parent.top
             anchors.bottom: parent.bottom
@@ -597,6 +723,7 @@ Item {
             font.pixelSize: Style.font.heading
             Keys.priority: Keys.BeforeItem
             Keys.onPressed: function(event) { root.handleSearchKey(event) }
+            Keys.onReleased: function(event) { root.handleSearchKeyRelease(event) }
             onTextChanged: if (text !== root.filterText) root.setFilter(text)
 
             Text {
@@ -612,31 +739,37 @@ Item {
             }
           }
 
+          // Small badge, only while incognito is on.
+          Rectangle {
+            id: incognitoBadge
+            visible: root.privateMode
+            anchors.right: countLabel.left
+            anchors.rightMargin: Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            width: badgeText.implicitWidth + Style.space(12)
+            height: badgeText.implicitHeight + Style.space(4)
+            radius: root.cornerRadius
+            color: Util.alpha(root.accent, 0.16)
+
+            Text {
+              id: badgeText
+              anchors.centerIn: parent
+              textFormat: Text.PlainText
+              text: "󰗹 Incognito" + (root.fluxPaused ? " · Flux paused" : "")
+              color: root.accent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
+          }
+
           Text {
             id: countLabel
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text: root.filterText ? displayModel.count + " / " + root.history.length : String(root.history.length)
-            color: root.foreground
-            opacity: 0.45
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
-          }
-        }
-
-        // Private mode banner
-        Rectangle {
-          visible: root.privateMode
-          width: parent.width
-          height: root.bannerHeight
-          radius: root.cornerRadius
-          color: Util.alpha(root.accent, 0.14)
-
-          Text {
-            anchors.centerIn: parent
             textFormat: Text.PlainText
-            text: "󰗹  Private mode – new copies are not saved" + (root.fluxPaused ? ", Flux sync paused" : "") + "  (Ctrl+P to turn off)"
-            color: root.accent
+            text: ClipboardHistory.countLabel(root.history.length, ClipboardHistory.pinnedCount(root.history), displayModel.count, root.filterText !== "")
+            color: root.dimText
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
           }
@@ -644,7 +777,7 @@ Item {
 
         Item {
           width: parent.width
-          height: parent.height - root.headerHeight - root.footerHeight - root.contentSpacing * (root.privateMode ? 3 : 2) - root.bannerHeight
+          height: parent.height - root.headerHeight - root.footerHeight - root.contentSpacing * 2
 
           Row {
             anchors.fill: parent
@@ -677,11 +810,11 @@ Item {
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: Style.space(3)
                     text: parent.section.toUpperCase()
-                    color: root.foreground
-                    opacity: 0.5
+                    color: root.dimText
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
-                    font.letterSpacing: 1
+                    font.bold: true
+                    font.letterSpacing: 1.2
                   }
                 }
 
@@ -694,14 +827,17 @@ Item {
                   required property string previewImage
                   required property bool pinned
                   required property int slot
+                  required property bool fromPhone
+                  required property int historyIndex
 
                   readonly property bool hasCursor: root.cursorActive && index === root.selectedIndex
+                  readonly property bool armed: root.armedDeleteIndex !== -1 && historyIndex === root.armedDeleteIndex
                   readonly property bool showActions: hasCursor || rowMouse.containsMouse
 
                   width: ListView.view.width
                   height: root.rowHeight
                   radius: root.cornerRadius
-                  color: hasCursor ? root.selectedBackground : "transparent"
+                  color: armed ? Util.alpha(root.urgent, 0.85) : (hasCursor ? root.selectedBackground : "transparent")
 
                   MouseArea {
                     id: rowMouse
@@ -739,11 +875,12 @@ Item {
                       textFormat: Text.PlainText
                       width: parent.width - actions.width - parent.spacing - (row.previewImage.length > 0 ? parent.height + parent.spacing : 0)
                       height: parent.height
-                      text: row.previewText
-                      color: row.hasCursor ? root.selectedText : root.foreground
+                      text: row.armed ? "Press Del again to delete" : row.previewText
+                      color: row.armed ? "#ffffff" : (row.hasCursor ? root.selectedText : root.foreground)
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.title
-                      opacity: row.entryType === "image" || row.entryType === "file" ? 0.72 : 1.0
+                      font.bold: row.armed
+                      opacity: !row.armed && (row.entryType === "image" || row.entryType === "file") ? 0.72 : 1.0
                       elide: Text.ElideRight
                       wrapMode: Text.NoWrap
                       verticalAlignment: Text.AlignVCenter
@@ -755,8 +892,27 @@ Item {
                       height: parent.height
                       spacing: Style.space(2)
 
+                      // "From phone" label (Flux), on text that arrived from the phone.
                       Item {
-                        visible: !row.showActions && row.slot <= 9
+                        visible: row.fromPhone && !row.armed
+                        width: visible ? phoneLabel.implicitWidth + Style.space(8) : 0
+                        height: actions.height
+
+                        Text {
+                          id: phoneLabel
+                          anchors.left: parent.left
+                          anchors.verticalCenter: parent.verticalCenter
+                          textFormat: Text.PlainText
+                          text: "From phone"
+                          color: row.hasCursor ? root.selectedText : root.dimText
+                          font.family: root.fontFamily
+                          font.pixelSize: Style.font.caption
+                          font.bold: true
+                        }
+                      }
+
+                      Item {
+                        visible: !row.showActions && !row.armed && row.slot <= 9
                         width: visible ? slotHint.implicitWidth + Style.space(6) : 0
                         height: actions.height
 
@@ -765,8 +921,7 @@ Item {
                           anchors.left: parent.left
                           anchors.verticalCenter: parent.verticalCenter
                           text: (row.pinned ? "Alt+" : "Ctrl+") + row.slot
-                          color: root.foreground
-                          opacity: 0.32
+                          color: Qt.darker(root.foreground, 1.5)
                           font.family: root.fontFamily
                           font.pixelSize: Style.font.caption
                         }
@@ -774,8 +929,9 @@ Item {
 
                       Repeater {
                         model: [
-                          { glyph: row.pinned ? "󰐃" : "󰤱", tip: "pin", show: row.showActions || row.pinned },
-                          { glyph: "󰆴", tip: "delete", show: row.showActions }
+                          { glyph: "󰄜", tip: "send", show: row.showActions && !row.armed && root.phoneOnline && row.entryType === "text" },
+                          { glyph: row.pinned ? "󰐃" : "󰤱", tip: "pin", show: !row.armed && (row.showActions || row.pinned) },
+                          { glyph: "󰆴", tip: "delete", show: row.showActions || row.armed }
                         ]
                         delegate: Rectangle {
                           required property var modelData
@@ -788,7 +944,7 @@ Item {
                           Text {
                             anchors.centerIn: parent
                             text: parent.modelData.glyph
-                            color: parent.modelData.tip === "pin" && row.pinned ? root.accent : (row.hasCursor ? root.selectedText : root.foreground)
+                            color: row.armed ? "#ffffff" : (parent.modelData.tip === "pin" && row.pinned ? root.accent : (row.hasCursor ? root.selectedText : root.foreground))
                             opacity: parent.modelData.tip === "pin" && row.pinned ? 1 : 0.75
                             font.family: root.fontFamily
                             font.pixelSize: Style.font.title
@@ -801,7 +957,8 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                               if (parent.modelData.tip === "pin") root.togglePinDisplayIndex(row.index)
-                              else root.removeDisplayIndex(row.index)
+                              else if (parent.modelData.tip === "send") root.sendIndex(row.index)
+                              else root.requestDelete(row.index)
                             }
                           }
                         }
@@ -883,7 +1040,7 @@ Item {
           }
         }
 
-        // Footer: private switch, clear, key hints
+        // Footer: clear, phone status, key hints
         Item {
           width: parent.width
           height: root.footerHeight
@@ -892,42 +1049,40 @@ Item {
             id: footerButtons
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(6)
+            spacing: Style.space(10)
 
-            Repeater {
-              model: [
-                { id: "private", label: root.privateMode ? "󰗹  Private: on" : "󰗹  Private: off" },
-                { id: "clear", label: "󰆴  Clear history" }
-              ]
-              delegate: Rectangle {
-                required property var modelData
-                width: footerLabel.implicitWidth + Style.space(16)
-                height: root.footerHeight
-                radius: root.cornerRadius
-                color: footerMouse.containsMouse ? Util.alpha(root.foreground, 0.10)
-                  : (modelData.id === "private" && root.privateMode ? Util.alpha(root.accent, 0.16) : Util.alpha(root.foreground, 0.04))
+            Rectangle {
+              width: clearLabel.implicitWidth + Style.space(16)
+              height: root.footerHeight
+              radius: root.cornerRadius
+              color: clearMouse.containsMouse ? Util.alpha(root.foreground, 0.10) : Util.alpha(root.foreground, 0.04)
 
-                Text {
-                  id: footerLabel
-                  anchors.centerIn: parent
-                  text: parent.modelData.label
-                  color: parent.modelData.id === "private" && root.privateMode ? root.accent : root.foreground
-                  opacity: parent.modelData.id === "private" && root.privateMode ? 1 : 0.8
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                }
-
-                MouseArea {
-                  id: footerMouse
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: {
-                    if (parent.modelData.id === "private") root.setPrivate(!root.privateMode, false)
-                    else root.requestClearHistory()
-                  }
-                }
+              Text {
+                id: clearLabel
+                anchors.centerIn: parent
+                text: "󰆴  Clear history"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
               }
+
+              MouseArea {
+                id: clearMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.requestClearHistory()
+              }
+            }
+
+            Text {
+              visible: root.phoneOnline && !root.fluxPaused
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: "󰄜 Phone connected"
+              color: root.dimText
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
             }
           }
 
@@ -938,9 +1093,8 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
             textFormat: Text.PlainText
-            text: "↵ paste   ⇧↵ copy   Alt+↵ open   Ctrl+F pin   Del delete   ⇧Del clear   Ctrl+P private"
-            color: root.foreground
-            opacity: 0.45
+            text: "Enter paste · Ctrl+F pin · Del delete · Right-click icon: incognito"
+            color: root.dimText
             elide: Text.ElideLeft
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption

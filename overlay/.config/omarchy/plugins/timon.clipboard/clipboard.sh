@@ -5,6 +5,7 @@
 #   clipboard.sh init                     create the data dir (user-only), import stock history once
 #   clipboard.sh paste <index>            copy entry <index> and paste it (Shift+Insert)
 #   clipboard.sh copy <index>             copy entry <index> only
+#   clipboard.sh send <index>             copy text entry <index> and send it to the phone (flux-cli clip)
 #   clipboard.sh open <index>             open a URL in the browser, text in the editor, an image in the editor
 #   clipboard.sh clear                    empty the live clipboard
 #   clipboard.sh prune                    delete stored images no entry points to
@@ -60,6 +61,15 @@ paste | copy)
   [[ $1 == copy ]] && exit 0
   sleep 0.15
   wtype -M shift -k Insert -m shift 2>/dev/null || true
+  ;;
+send)
+  valid_index "${2:-}" || exit 1
+  [[ $(field "$2" type) == text ]] || exit 1
+  command -v flux-cli >/dev/null || exit 1
+  copy_entry "$2" || exit 1
+  sleep 0.15
+  # No TEXT argument: flux-cli reads the clipboard, so the text never shows up in argv.
+  flux-cli clip >/dev/null 2>&1 || exit 1
   ;;
 open)
   valid_index "${2:-}" || exit 1

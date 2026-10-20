@@ -33,7 +33,7 @@ whatever it replaces, `./install.sh --dry-run` shows what would change, and
 
 - **Apps built from source:** Flux, kept at a reviewed tag (`SOURCE_APPS`)
 - **Look:** themes installed but never applied (switching is manual), one top bar layout for both machines
-- **Clipboard history:** `timon.clipboard`, GNOME Clipboard History style (Super+Shift+V)
+- **Clipboard history:** `timon.clipboard`, GNOME Clipboard History style (Alt+V or Super+Shift+V)
 - **Bar plugins:** audio panel, audio passthrough, now playing, Insomnia eye,
   hover-reveal, local AI toggle, idle and lock tweaks; plus two third-party
   plugins (notification center, Grokbar usage)
@@ -155,8 +155,8 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
 
 - `jankeesvw.notification-center` 1.2.0 – bell with your notification history
   (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 1784e19)
-- `timon.clipboard` 1.2.1 ("Nice Clipboard History") – **my own plugin** (private repo
-  github.com/roehrbacher/omarchy-clipboard, copy of f66e532; details, keys and
+- `timon.clipboard` 1.3.0 ("Nice Clipboard History") – **my own plugin** (private repo
+  github.com/roehrbacher/omarchy-clipboard, copy of 332cbec; details, keys and
   tests in its `README.md`). Clipboard history with the UX of GNOME Clipboard
   History, built on and replacing Omarchy's stock clipboard manager as a clone
   (`omarchy.clipboard` is in `disabledPlugins`, so only one watcher runs and
@@ -288,7 +288,7 @@ default menu (the menu would otherwise blank them).
 - Super+Shift+C Calendar Proton, Super+Shift+E Mail Proton (no HEY keys)
 - Super+Shift+W WhatsApp, Super+Shift+S Signal (replace stock Omawrite and
   Google Maps; the stock Super+Shift+Alt+G / Super+Shift+G still work)
-- Super+Shift+V clipboard history (`timon.clipboard`; stock Super+Ctrl+V opens
+- Alt+V or Super+Shift+V clipboard history (`timon.clipboard`; stock Super+Ctrl+V opens
   it too), Super+Shift+Ctrl+V clipboard private mode on/off. New keys, nothing replaced
 - Super+Shift+Y (YouTube) unbound
 - Print is Omarchy's stock screenshot again (omasnap is gone)

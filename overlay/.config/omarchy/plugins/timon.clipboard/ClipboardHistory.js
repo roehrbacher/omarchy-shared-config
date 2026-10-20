@@ -27,6 +27,7 @@ function normalizeEntry(value) {
     return null
   }
   if (value.pinned === true) entry.pinned = true
+  if (entry.type === "text" && value.origin === "phone") entry.origin = "phone"
   return entry
 }
 
@@ -226,6 +227,7 @@ function cappedEntry(entry) {
   var cut = entry.text.lastIndexOf("\n", displayTextLimit)
   var capped = { type: "text", text: entry.text.slice(0, cut > 0 ? cut : displayTextLimit) }
   if (entry.pinned) capped.pinned = true
+  if (entry.origin) capped.origin = entry.origin
   return capped
 }
 
@@ -255,6 +257,7 @@ function displayRows(history, query, limit) {
       path: isImage ? String(entry.path || "") : (isFile && paths.length === 1 ? paths[0] : ""),
       mime: isImage ? String(entry.mime || "image/png") : "text/plain",
       pinned: entry.pinned === true,
+      fromPhone: entry.origin === "phone",
       index: i
     }
     if (row.pinned) pinnedRows.push(row)
@@ -283,7 +286,8 @@ var KEY = {
   Escape: 0x01000000, Return: 0x01000004, Enter: 0x01000005, Insert: 0x01000006, Delete: 0x01000007,
   Home: 0x01000010, End: 0x01000011, Left: 0x01000012, Up: 0x01000013,
   Right: 0x01000014, Down: 0x01000015, PageUp: 0x01000016, PageDown: 0x01000017,
-  A: 0x41, C: 0x43, F: 0x46, J: 0x4a, K: 0x4b, P: 0x50, U: 0x55, V: 0x56, X: 0x58
+  A: 0x41, C: 0x43, F: 0x46, J: 0x4a, K: 0x4b, P: 0x50, S: 0x53, U: 0x55, V: 0x56, X: 0x58,
+  Shift: 0x01000020, Control: 0x01000021, Meta: 0x01000022, Alt: 0x01000023, AltGr: 0x01001103
 }
 
 // ev: { key, ctrl, alt, shift, hasSelection }
@@ -299,6 +303,7 @@ function searchKeyAction(ev) {
   if (ev.ctrl && !ev.alt && key === KEY.U) return "clearSearch"
   if (ev.ctrl && key === KEY.F) return "pin"
   if (ev.ctrl && key === KEY.P) return "private"
+  if (ev.ctrl && !ev.alt && key === KEY.S) return "send"
   if (key === KEY.Delete) {
     if (ev.shift) return "clear"
     return ev.hasSelection ? "" : "delete"
@@ -311,6 +316,89 @@ function searchKeyAction(ev) {
   if (!ev.shift && key === KEY.End) return "end"
   if (key === KEY.Return || key === KEY.Enter) return "enter"
   return ""
+}
+
+// ---- v1.3 helpers -----------------------------------------------------------
+
+// Ctrl+N / Alt+N: display index of the Nth history / pinned row, or -1.
+function slotRowIndex(rows, pinned, slot) {
+  var list = rows || []
+  for (var i = 0; i < list.length; i++)
+    if ((list[i].pinned === true) === (pinned === true) && list[i].slot === slot) return i
+  return -1
+}
+
+// Ctrl+N / Alt+N paste fires when the held modifier is released, so the
+// synthetic Shift+Insert is not combined with a still-held Ctrl or Alt
+// (Ctrl+Shift+Insert / Alt+Shift+Insert is not "paste" in most apps).
+function isModifierKey(key) {
+  return key === KEY.Shift || key === KEY.Control || key === KEY.Meta || key === KEY.Alt || key === KEY.AltGr
+}
+
+// Del: unpinned rows go at once; a pinned row needs a second Del while armed.
+function deleteAction(pinned, armed) {
+  return pinned === true && armed !== true ? "arm" : "delete"
+}
+
+// "119 items · 3 pinned", "1 item", "4 of 119 items · 3 pinned" while searching.
+function countLabel(total, pinned, shown, filtering) {
+  var n = Math.max(0, Number(total) || 0)
+  var items = n === 1 ? "1 item" : n + " items"
+  var base = filtering ? (Number(shown) || 0) + " of " + items : items
+  var p = Math.max(0, Number(pinned) || 0)
+  return p > 0 ? base + " · " + p + " pinned" : base
+}
+
+function pinnedCount(history) {
+  var values = Array.isArray(history) ? history : []
+  var n = 0
+  for (var i = 0; i < values.length; i++) if (values[i] && values[i].pinned === true) n++
+  return n
+}
+
+// Popup size factor from the screen's logical height: 1.0 from 1080 px up
+// (24" 1080p monitor), down to 0.8 on small laptop screens.
+function popupScale(logicalHeight) {
+  var h = Number(logicalHeight) || 1080
+  return Math.max(0.8, Math.min(1, h / 1080))
+}
+
+// Flux (`flux-cli status --json`): did this text just arrive from a device?
+// fluxd records an incoming copy (dir "in") before it puts it on the
+// clipboard, so a matching recent "in" entry means it came from the phone.
+function fluxOrigin(status, text, nowSec, windowSec) {
+  if (!status || !Array.isArray(status.clipboard) || !text) return ""
+  var win = windowSec === undefined ? 20 : windowSec
+  for (var i = 0; i < status.clipboard.length; i++) {
+    var c = status.clipboard[i]
+    if (c && c.dir === "in" && c.text === text && Math.abs(Number(nowSec) - Number(c.time)) <= win) return "phone"
+  }
+  return ""
+}
+
+// Is a paired phone online in Flux right now?
+function fluxPhoneOnline(status) {
+  if (!status || !Array.isArray(status.devices)) return false
+  for (var i = 0; i < status.devices.length; i++) {
+    var d = status.devices[i]
+    if (d && d.paired === true && d.online === true) return true
+  }
+  return false
+}
+
+// Mark the text entry `text` with an origin ("phone"); returns a new array.
+function setOrigin(history, text, origin) {
+  var values = Array.isArray(history) ? history.slice() : []
+  for (var i = 0; i < values.length; i++) {
+    var e = values[i]
+    if (e && e.type === "text" && e.text === text) {
+      var copy = normalizeEntry(e)
+      if (origin) copy.origin = origin
+      values[i] = copy
+      break
+    }
+  }
+  return values
 }
 
 if (typeof module !== "undefined") {
@@ -331,6 +419,15 @@ if (typeof module !== "undefined") {
     fullText: fullText,
     displayRows: displayRows,
     KEY: KEY,
-    searchKeyAction: searchKeyAction
+    searchKeyAction: searchKeyAction,
+    slotRowIndex: slotRowIndex,
+    isModifierKey: isModifierKey,
+    deleteAction: deleteAction,
+    countLabel: countLabel,
+    pinnedCount: pinnedCount,
+    popupScale: popupScale,
+    fluxOrigin: fluxOrigin,
+    fluxPhoneOnline: fluxPhoneOnline,
+    setOrigin: setOrigin
   }
 }

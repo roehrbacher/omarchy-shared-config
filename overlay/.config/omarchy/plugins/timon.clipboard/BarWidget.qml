@@ -1,7 +1,6 @@
 // Bar icon for timon.clipboard (fixed-width icon slot, like the other bar icons).
-// Left click: open history. Right click: private mode on/off.
-// Shows the incognito icon while private mode is on; the tooltip says when
-// Flux sync is paused too (flux-pause.sh status, read after each change).
+// Left click: open history. Right click: incognito on/off.
+// Shows the incognito icon while incognito is on. No hover tooltip.
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -58,7 +57,7 @@ BarWidget {
     bar: root.bar
     text: root.privateMode ? "󰗹" : "󰅌"
     active: root.privateMode
-    tooltipText: root.privateMode ? ("Clipboard: private mode" + (root.fluxPaused ? ", Flux sync paused" : "") + " (right click to resume)") : "Clipboard history (right click: private mode)"
+    tooltipText: ""
     onPressed: function(b) {
       if (b === Qt.RightButton) root.bar.run("omarchy-shell shell call timon.clipboard togglePrivate x")
       else root.bar.run("omarchy-shell shell toggle timon.clipboard '{}'")

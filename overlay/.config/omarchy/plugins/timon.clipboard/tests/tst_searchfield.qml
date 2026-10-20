@@ -12,6 +12,9 @@ Item {
   height: 60
   property var actions: []
   property var copied: []
+  property string pendingSlot: ""
+  property bool rowPinned: false
+  property bool armed: false
 
   TextInput {
     id: field
@@ -33,8 +36,24 @@ Item {
         root.copied = root.copied.concat([field.selectedText])
         field.remove(field.selectionStart, field.selectionEnd)
       } else if (action === "clearSearch") field.text = ""
-      else root.actions = root.actions.concat([action])
+      else {
+        if (action !== "delete") root.armed = false
+        if (action === "slot" || action === "pinnedSlot") root.pendingSlot = action
+        if (action === "delete") {
+          // Same rule as Clipboard.qml requestDelete()
+          if (ClipboardHistory.deleteAction(root.rowPinned, root.armed) === "arm") action = "arm"
+          root.armed = action === "arm"
+        }
+        root.actions = root.actions.concat([action])
+      }
       event.accepted = true
+    }
+    Keys.onReleased: function(event) {
+      if (root.pendingSlot !== "" && ClipboardHistory.isModifierKey(event.key)) {
+        root.actions = root.actions.concat(["paste:" + root.pendingSlot])
+        root.pendingSlot = ""
+        event.accepted = true
+      }
     }
   }
 
@@ -46,6 +65,9 @@ Item {
       field.text = ""
       root.actions = []
       root.copied = []
+      root.pendingSlot = ""
+      root.rowPinned = false
+      root.armed = false
       field.forceActiveFocus()
     }
 
@@ -105,7 +127,7 @@ Item {
       keyClick(Qt.Key_Up)
       keyClick(Qt.Key_Return)
       keyClick(Qt.Key_3, Qt.ControlModifier)
-      compare(root.actions, ["down", "up", "enter", "slot"])
+      compare(root.actions, ["down", "up", "enter", "slot", "paste:slot"], "Ctrl+3 pastes once Ctrl is up")
       compare(field.text, "x")
     }
 
@@ -117,6 +139,43 @@ Item {
       compare(root.actions, [])
       keyClick(Qt.Key_Delete)
       compare(root.actions, ["delete"], "without a selection Del deletes the entry")
+    }
+    function test_ctrlN_pastes_on_modifier_release() {
+      // (QtTest presses/releases the modifier key itself around a key with modifiers.)
+      keyPress(Qt.Key_2, Qt.ControlModifier)
+      keyRelease(Qt.Key_2)
+      compare(root.actions, ["slot"], "nothing pasted while Ctrl is still held")
+      keyRelease(Qt.Key_Control)
+      compare(root.actions, ["slot", "paste:slot"], "Ctrl released: paste, same as Enter")
+    }
+
+    function test_altN_pastes_pinned_on_release() {
+      keyPress(Qt.Key_1, Qt.AltModifier)
+      keyRelease(Qt.Key_1)
+      compare(root.actions, ["pinnedSlot"])
+      keyRelease(Qt.Key_Alt)
+      compare(root.actions, ["pinnedSlot", "paste:pinnedSlot"])
+    }
+
+    function test_pinned_delete_needs_two_presses() {
+      root.rowPinned = true
+      keyClick(Qt.Key_Delete)
+      compare(root.actions, ["arm"], "first Del only arms a pinned row")
+      keyClick(Qt.Key_Delete)
+      compare(root.actions, ["arm", "delete"], "second Del deletes")
+    }
+
+    function test_pinned_delete_cancelled_by_other_key() {
+      root.rowPinned = true
+      keyClick(Qt.Key_Delete)
+      keyClick(Qt.Key_Down)
+      keyClick(Qt.Key_Delete)
+      compare(root.actions, ["arm", "down", "arm"], "a move cancels; next Del arms again")
+    }
+
+    function test_unpinned_delete_is_immediate() {
+      keyClick(Qt.Key_Delete)
+      compare(root.actions, ["delete"])
     }
   }
 }

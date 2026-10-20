@@ -94,4 +94,47 @@ assert.strictEqual(act(K.Delete, { shift: true }), "clear")
 assert.strictEqual(act(0x61), "", "typing goes to the field")
 assert.strictEqual(act(K.U, { ctrl: true }), "clearSearch", "Ctrl+U clears the search without touching the clipboard")
 
+// ---- 1.3.0 ------------------------------------------------------------------
+// 4: Ctrl+N / Alt+N find the row and paste on modifier release
+{
+  const rows = H.displayRows([{ type: "text", text: "a", pinned: true }, { type: "text", text: "b" }, { type: "text", text: "c" }], "", 50)
+  assert.strictEqual(H.slotRowIndex(rows, true, 1), 0, "Alt+1 = first pinned row")
+  assert.strictEqual(H.slotRowIndex(rows, false, 1), 1, "Ctrl+1 = first history row")
+  assert.strictEqual(H.slotRowIndex(rows, false, 2), 2, "Ctrl+2 = second history row")
+  assert.strictEqual(H.slotRowIndex(rows, true, 2), -1, "no second pinned row")
+  for (const k of [K.Control, K.Alt, K.Shift, K.Meta]) assert.ok(H.isModifierKey(k), "modifier " + k)
+  assert.ok(!H.isModifierKey(0x31), "digit is not a modifier")
+  assert.strictEqual(act(K.S, { ctrl: true }), "send", "Ctrl+S sends to the phone")
+}
+// 5: pinned rows need a second Del
+assert.strictEqual(H.deleteAction(false, false), "delete", "unpinned: delete at once")
+assert.strictEqual(H.deleteAction(true, false), "arm", "pinned: first Del arms")
+assert.strictEqual(H.deleteAction(true, true), "delete", "pinned + armed: second Del deletes")
+// 6: count label
+assert.strictEqual(H.countLabel(119, 3, 119, false), "119 items · 3 pinned")
+assert.strictEqual(H.countLabel(119, 0, 119, false), "119 items", "no pinned part when 0")
+assert.strictEqual(H.countLabel(1, 0, 1, false), "1 item", "singular")
+assert.strictEqual(H.countLabel(0, 0, 0, false), "0 items")
+assert.strictEqual(H.countLabel(119, 3, 4, true), "4 of 119 items · 3 pinned", "while searching")
+assert.strictEqual(H.pinnedCount([{ pinned: true }, {}, { pinned: true }]), 2)
+// 2: popup scale
+assert.strictEqual(H.popupScale(1080), 1, "24in 1080p unchanged")
+assert.strictEqual(H.popupScale(1440), 1, "bigger screens unchanged")
+assert.strictEqual(H.popupScale(750), 0.8, "small laptop screen (1200x750 logical) 20% smaller")
+// 9: Flux origin
+{
+  const st = { clipboard: [{ dir: "in", text: "hello", time: 1000 }, { dir: "out", text: "mine", time: 1000 }],
+               devices: [{ paired: true, online: true }] }
+  assert.strictEqual(H.fluxOrigin(st, "hello", 1005), "phone")
+  assert.strictEqual(H.fluxOrigin(st, "mine", 1005), "", "own copies are not from the phone")
+  assert.strictEqual(H.fluxOrigin(st, "hello", 2000), "", "old incoming copy does not count")
+  assert.strictEqual(H.fluxOrigin(null, "hello", 1005), "")
+  assert.ok(H.fluxPhoneOnline(st))
+  assert.ok(!H.fluxPhoneOnline({ devices: [{ paired: true, online: false }] }))
+  const h = H.setOrigin([{ type: "text", text: "hello" }], "hello", "phone")
+  assert.strictEqual(H.parseHistory(JSON.stringify(h))[0].origin, "phone", "origin survives save/load")
+  assert.strictEqual(H.displayRows(h, "", 5)[0].fromPhone, true)
+  assert.strictEqual(H.addEntry(h, { type: "text", text: "hello" }, 50)[0].origin, undefined, "a local re-copy is not from the phone")
+}
+
 console.log("history tests: all passed")

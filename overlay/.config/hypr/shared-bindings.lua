@@ -63,8 +63,9 @@ o.bind("SUPER + SHIFT + S", "Signal", { omarchy = "signal" })
 -- Clipboard history (timon.clipboard, GNOME Clipboard History style).
 -- New keys, nothing replaced. Stock SUPER + CTRL + V ("Clipboard manager")
 -- still works: it calls omarchy.clipboard, which the shell routes to this clone.
+o.bind("ALT + V", "Clipboard history", "omarchy-shell shell toggle timon.clipboard")
 o.bind("SUPER + SHIFT + V", "Clipboard history", "omarchy-shell shell toggle timon.clipboard")
-o.bind("SUPER + SHIFT + CTRL + V", "Clipboard private mode", "omarchy-shell shell call timon.clipboard togglePrivate x")
+o.bind("SUPER + SHIFT + CTRL + V", "Clipboard incognito", "omarchy-shell shell call timon.clipboard toggleIncognito x")
 
 -- Super+F: browsers keep their tabs visible in full screen (omarchy-fullscreen-smart);
 -- other windows get the normal full screen. Undo: delete these two lines.

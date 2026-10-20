@@ -5,27 +5,30 @@
 var overlay = null
 var button = null
 var bar = null
+var widget = null
 
 function setOverlay(o) {
   overlay = o
-  if (overlay && button) overlay.setAnchor(button, bar)
+  if (overlay && button) overlay.setAnchor(button, bar, widget)
 }
 
 function clearOverlay(o) {
   if (overlay === o) overlay = null
 }
 
-function setAnchor(b, br) {
+function setAnchor(b, br, w) {
   button = b
   bar = br
-  if (overlay) overlay.setAnchor(b, br)
+  widget = w || null
+  if (overlay) overlay.setAnchor(b, br, widget)
 }
 
 function clearAnchor(b) {
   if (button !== b) return
   button = null
   bar = null
-  if (overlay) overlay.setAnchor(null, null)
+  widget = null
+  if (overlay) overlay.setAnchor(null, null, null)
 }
 
 // Bar icon click: toggle the overlay directly (no IPC round trip).

@@ -42,6 +42,7 @@ In the popup:
 | Shift+← → / Shift+Home End, Ctrl+A, mouse drag | select search text |
 | Ctrl+C / Ctrl+X (with search text selected) | copy / cut it to the clipboard (becomes a new history item) |
 | Ctrl+V | paste into the search |
+| F1 / Ctrl+/ (or the gear icon in the footer) | shortcuts & settings view: ↑ ↓ pick a setting, Enter toggles it, Esc goes back to the list |
 | Esc | clear the search, then close |
 
 ## Behaviour
@@ -53,7 +54,8 @@ In the popup:
 - **Pinned:** shown in their own section at the top, survive "clear history"
   and the limit.
 - **Popup:** opens right under the clipboard icon in the bar, like the stock
-  Wi-Fi popup (same look, click outside or open another bar popup to close),
+  Wi-Fi popup (same look, the bar's open-panel underline under the icon,
+  click outside or open another bar popup to close),
   also when opened with Alt+V. Without the bar icon (bar widget not in the
   layout) it opens at the top-left corner. A compact list, no preview pane;
   hover or select a row for its actions: phone (send), trash, pin.
@@ -62,8 +64,12 @@ In the popup:
 - **Touchpad momentum:** a quick two-finger flick keeps the list scrolling
   after the fingers lift and slows down, like GTK apps and browsers. Mouse
   wheel notches scroll a fixed step.
-- **Count:** top right shows e.g. `119 items · 3 pinned` (`4 of 119 items` while
+- **Count:** top right shows e.g. `119 items` (`4 of 119 items` while
   searching).
+- **Footer:** Clear history, the Incognito switch, "Phone connected via Flux"
+  and a gear icon for the shortcuts & settings view (incognito, clear
+  history, Flux status, history limit, all keys). Hovering the phone action
+  shows "Send via Flux".
 - **Incognito:** nothing new is saved (text or images) until you turn it
   off; a small "Incognito" badge in the popup shows it. Survives a restart.
 - **Incognito pauses Flux too:** if [Flux](https://github.com/bjarneo/flux)

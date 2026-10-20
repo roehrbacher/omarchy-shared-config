@@ -1,3 +1,16 @@
+# Test run – 2026-10-20 (1.5.0), a desktop (visual QA), Omarchy 4.0.6
+
+Automated: history tests all passed (count without the pinned part);
+`tst_searchfield.qml` 15 and `tst_kinetic.qml` 6 passed; `capture.test.sh` /
+`flux-pause.test.sh` all ok; `omarchy plugin validate` ok.
+
+Live on the desktop, opened over IPC: popup 5% bigger, search text at the
+list's size, count "325 items", Incognito switch without On/Off, no hint
+lines, gear icon; bar icon gets the stock open-panel underline while open
+(none in 1.4.0); shortcuts & settings view, also with incognito on (Flux
+"paused"); "Send via Flux" tooltip (shown through a temporary debug call,
+not committed). Flux running again after incognito off. No synthetic keys.
+
 # Test run – 2026-10-20 (1.4.0), a desktop (visual QA), Omarchy 4.0.6
 
 Automated: history tests all passed (new: row action order phone, trash,

@@ -29,6 +29,13 @@ Item {
   property int selectedIndex: 0
   property bool cursorActive: false
   property bool clearConfirmOpen: false
+  // Shortcuts & settings view (gear icon in the footer, or F1 / Ctrl+/).
+  property bool infoOpen: false
+  property int infoIndex: 0
+  readonly property var infoActions: ["incognito", "clear", "back"]
+  readonly property string fluxStatusText: !root.fluxPresent ? "not installed"
+    : (root.fluxPaused ? "paused (incognito)"
+    : (root.phoneOnline ? "running · phone connected" : "running · no phone connected"))
   property bool privateMode: false
   // Flux (fluxd) clipboard sync: paused by flux-pause.sh while private mode is on.
   property bool fluxPresent: false
@@ -78,12 +85,13 @@ Item {
   // 20% smaller on a small laptop screen (ClipboardHistory.popupScale).
   readonly property real popupScale: ClipboardHistory.popupScale(panel.screenH)
   // List only (no preview column): half the old 875 px width.
-  property int cardWidth: panel.fittedContentWidth(Math.round(Style.space(440) * popupScale))
-  property int cardHeight: panel.cappedContentHeight(Math.round(Style.space(600) * popupScale))
+  property int cardWidth: panel.fittedContentWidth(Math.round(Style.space(462) * popupScale))
+  property int cardHeight: panel.cappedContentHeight(Math.round(Style.space(630) * popupScale))
   // Bar icon the popup hangs from (set by BarWidget.qml through Bridge.js).
   property Item anchorButton: null
   property QtObject anchorBar: null
-  function setAnchor(button, bar) { root.anchorButton = button; root.anchorBar = bar }
+  property Item anchorWidget: null
+  function setAnchor(button, bar, widget) { root.anchorButton = button; root.anchorBar = bar; root.anchorWidget = widget || null }
   // Secondary text: same size and contrast as the stock Wi-Fi panel's
   // smallest text (foreground darkened 1.4x, no opacity); hints use the count size (Style.font.body).
   readonly property color dimText: Qt.darker(foreground, 1.4)
@@ -94,6 +102,7 @@ Item {
   // ---- open / close (shell host API) ------------------------------------
   function open(payloadJson) {
     root.opened = true
+    root.infoOpen = false
     root.filterText = ""
     root.selectedIndex = 0
     root.cursorActive = true
@@ -104,7 +113,40 @@ Item {
     Qt.callLater(function() { searchInput.forceActiveFocus() })
   }
 
+  function openInfo() {
+    root.disarmDelete()
+    root.infoIndex = 0
+    root.infoOpen = true
+  }
+
+  function closeInfo() {
+    root.infoOpen = false
+    root.disarmPointer()
+    Qt.callLater(function() { searchInput.forceActiveFocus() })
+  }
+
+  function runInfoAction(name) {
+    if (name === "incognito") root.setPrivate(!root.privateMode, false)
+    else if (name === "clear") { root.infoOpen = false; root.requestClearHistory() }
+    else root.closeInfo()
+  }
+
+  // Keys while the shortcuts & settings view is shown: ↑↓/Tab pick a
+  // setting, Enter/Space toggle it, PgUp/PgDn scroll, Esc goes back.
+  function handleInfoKey(event) {
+    var k = event.key
+    var n = root.infoActions.length
+    if (k === Qt.Key_Escape || k === Qt.Key_F1 || ((event.modifiers & Qt.ControlModifier) && k === Qt.Key_Slash)) root.closeInfo()
+    else if (k === Qt.Key_Down || k === Qt.Key_Tab) root.infoIndex = (root.infoIndex + 1) % n
+    else if (k === Qt.Key_Up || k === Qt.Key_Backtab) root.infoIndex = (root.infoIndex + n - 1) % n
+    else if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) root.runInfoAction(root.infoActions[root.infoIndex])
+    else if (k === Qt.Key_PageDown) infoFlick.contentY = Math.min(Math.max(0, infoFlick.contentHeight - infoFlick.height), infoFlick.contentY + infoFlick.height * 0.8)
+    else if (k === Qt.Key_PageUp) infoFlick.contentY = Math.max(0, infoFlick.contentY - infoFlick.height * 0.8)
+    event.accepted = true
+  }
+
   function close() {
+    root.infoOpen = false
     root.disarmDelete()
     root.pendingPasteIndex = -1
     root.cancelClearHistory()
@@ -433,6 +475,12 @@ Item {
       event.accepted = true
       return
     }
+    if (root.infoOpen) { root.handleInfoKey(event); return }
+    if (event.key === Qt.Key_F1 || ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Slash)) {
+      root.openInfo()
+      event.accepted = true
+      return
+    }
 
     var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
     var alt = (event.modifiers & Qt.AltModifier) !== 0
@@ -678,7 +726,9 @@ Item {
     id: panel
     anchorItem: root.anchorButton
     bar: root.anchorBar
-    owner: root
+    // The bar widget owns the popout (stock underline under the icon); its
+    // close() closes this overlay.
+    owner: root.anchorWidget || root
     open: root.opened
     focusTarget: searchInput
     contentWidth: root.cardWidth
@@ -736,7 +786,7 @@ Item {
             selectionColor: root.selectedBackground
             selectedTextColor: root.selectedText
             font.family: root.fontFamily
-            font.pixelSize: Style.font.heading
+            font.pixelSize: Style.font.title
             Keys.priority: Keys.BeforeItem
             Keys.onPressed: function(event) { root.handleSearchKey(event) }
             Keys.onReleased: function(event) { root.handleSearchKeyRelease(event) }
@@ -795,8 +845,208 @@ Item {
           width: parent.width
           height: parent.height - root.headerHeight - footer.implicitHeight - root.contentSpacing * 2
 
+          // Shortcuts & settings view, shown over the list.
+          Rectangle {
+            id: infoView
+            anchors.fill: parent
+            visible: root.infoOpen
+            z: 5
+            color: root.background
+
+            Flickable {
+              id: infoFlick
+              anchors.fill: parent
+              clip: true
+              contentWidth: width
+              contentHeight: infoColumn.implicitHeight
+              boundsBehavior: Flickable.StopAtBounds
+
+              Column {
+                id: infoColumn
+                width: infoFlick.width
+                spacing: Style.space(2)
+
+                Text {
+                  text: "SETTINGS"
+                  color: root.dimText
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  topPadding: Style.space(2)
+                  bottomPadding: Style.space(4)
+                  leftPadding: Style.space(10)
+                }
+
+                Repeater {
+                  model: [
+                    { key: "incognito", label: "󰗹  Incognito", value: root.privateMode ? "on" : "off", hint: "Ctrl+I" },
+                    { key: "clear", label: "󰩺  Clear history", value: "", hint: "Shift+Del" },
+                    { key: "back", label: "󰁍  Back to the list", value: "", hint: "Esc" }
+                  ]
+                  delegate: Rectangle {
+                    required property var modelData
+                    required property int index
+                    width: infoColumn.width
+                    height: root.rowHeight
+                    radius: root.cornerRadius
+                    readonly property bool current: root.infoIndex === index
+                    color: current ? root.selectedBackground : (infoRowMouse.containsMouse ? Util.alpha(root.foreground, 0.08) : "transparent")
+
+                    Text {
+                      anchors.left: parent.left
+                      anchors.leftMargin: Style.space(10)
+                      anchors.verticalCenter: parent.verticalCenter
+                      textFormat: Text.PlainText
+                      text: parent.modelData.label
+                      color: parent.modelData.key === "incognito" && root.privateMode ? root.accent : root.foreground
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.title
+                    }
+
+                    Row {
+                      anchors.right: parent.right
+                      anchors.rightMargin: Style.space(10)
+                      anchors.verticalCenter: parent.verticalCenter
+                      spacing: Style.space(10)
+
+                      Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        textFormat: Text.PlainText
+                        text: parent.parent.modelData.hint
+                        color: root.dimText
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.body
+                      }
+
+                      Rectangle {
+                        visible: parent.parent.modelData.key === "incognito"
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.round(Style.font.body * 2.2)
+                        height: Math.round(Style.font.body * 1.2)
+                        radius: height / 2
+                        color: root.privateMode ? root.accent : Util.alpha(root.foreground, 0.22)
+
+                        Rectangle {
+                          width: parent.height - Style.space(4)
+                          height: width
+                          radius: width / 2
+                          y: Style.space(2)
+                          x: root.privateMode ? parent.width - width - Style.space(2) : Style.space(2)
+                          color: root.privateMode ? root.background : root.foreground
+                          Behavior on x { NumberAnimation { duration: 120 } }
+                        }
+                      }
+                    }
+
+                    MouseArea {
+                      id: infoRowMouse
+                      anchors.fill: parent
+                      hoverEnabled: true
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: { root.infoIndex = parent.index; root.runInfoAction(parent.modelData.key) }
+                    }
+                  }
+                }
+
+                Repeater {
+                  model: [
+                    ["Flux sync", root.fluxStatusText],
+                    ["History", "last " + root.historyLimit + " items · pinned items kept"]
+                  ]
+                  delegate: Item {
+                    required property var modelData
+                    width: infoColumn.width
+                    height: root.rowHeight
+
+                    Text {
+                      anchors.left: parent.left
+                      anchors.leftMargin: Style.space(10)
+                      anchors.verticalCenter: parent.verticalCenter
+                      textFormat: Text.PlainText
+                      text: parent.modelData[0]
+                      color: root.foreground
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.title
+                    }
+
+                    Text {
+                      anchors.right: parent.right
+                      anchors.rightMargin: Style.space(10)
+                      anchors.verticalCenter: parent.verticalCenter
+                      textFormat: Text.PlainText
+                      text: parent.modelData[1]
+                      color: root.dimText
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                    }
+                  }
+                }
+
+                Text {
+                  text: "SHORTCUTS"
+                  color: root.dimText
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  topPadding: Style.space(10)
+                  bottomPadding: Style.space(4)
+                  leftPadding: Style.space(10)
+                }
+
+                Repeater {
+                  model: [
+                    ["Enter", "paste"],
+                    ["Shift+Enter", "copy only"],
+                    ["Alt+Enter", "open"],
+                    ["Alt+1…9", "quick paste"],
+                    ["↑ ↓  Ctrl+K Ctrl+J", "move"],
+                    ["→ ←", "row actions"],
+                    ["Ctrl+P", "pin / unpin"],
+                    ["Del", "delete"],
+                    ["Ctrl+S", "send via Flux"],
+                    ["Shift+Del", "clear history"],
+                    ["Ctrl+I", "incognito"],
+                    ["Ctrl+U", "clear search"],
+                    ["F1  Ctrl+/", "this view"],
+                    ["Esc", "back / close"],
+                    ["Alt+V", "open from anywhere"],
+                    ["Super+Shift+Ctrl+V", "incognito from anywhere"]
+                  ]
+                  delegate: Item {
+                    required property var modelData
+                    width: infoColumn.width
+                    height: Style.font.body + Style.space(10)
+
+                    Text {
+                      anchors.left: parent.left
+                      anchors.leftMargin: Style.space(10)
+                      anchors.verticalCenter: parent.verticalCenter
+                      textFormat: Text.PlainText
+                      text: parent.modelData[0]
+                      color: root.foreground
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                    }
+
+                    Text {
+                      anchors.right: parent.right
+                      anchors.rightMargin: Style.space(10)
+                      anchors.verticalCenter: parent.verticalCenter
+                      textFormat: Text.PlainText
+                      text: parent.modelData[1]
+                      color: root.dimText
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                    }
+                  }
+                }
+              }
+            }
+          }
+
           Item {
             anchors.fill: parent
+            visible: !root.infoOpen
 
             Item {
               width: parent.width
@@ -982,6 +1232,11 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.runRowAction(parent.modelData.tip, row.index)
                           }
+
+                          PanelToolTip {
+                            visible: btnMouse.containsMouse && parent.modelData.tip === "send"
+                            text: "Send via Flux"
+                          }
                         }
                       }
                     }
@@ -995,7 +1250,7 @@ Item {
           Column {
             anchors.centerIn: parent
             spacing: Style.space(8)
-            visible: displayModel.count === 0
+            visible: displayModel.count === 0 && !root.infoOpen
 
             Text {
               text: root.privateMode && root.history.length === 0 ? "󰗹" : "󰅌"
@@ -1027,9 +1282,13 @@ Item {
           spacing: Style.space(6)
 
           // Wraps onto a second line when the popup is narrow.
+          Item {
+            width: parent.width
+            height: Math.max(footerButtons.implicitHeight, gearButton.height)
+
           Flow {
               id: footerButtons
-              width: parent.width
+              width: parent.width - gearButton.width - Style.space(8)
               spacing: Style.space(10)
 
               Rectangle {
@@ -1098,14 +1357,6 @@ Item {
                     }
                   }
 
-                  Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    textFormat: Text.PlainText
-                    text: root.privateMode ? "On" : "Off"
-                    color: root.privateMode ? root.accent : root.dimText
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.body
-                  }
                 }
 
                 MouseArea {
@@ -1129,17 +1380,39 @@ Item {
               }
             }
 
-          Text {
-            width: parent.width
-            horizontalAlignment: Text.AlignLeft
-            textFormat: Text.PlainText
-            text: "Enter paste · Shift+Enter copy · Alt+1…9 quick paste · → actions · Ctrl+P pin · Del delete · Ctrl+I incognito"
-            color: root.dimText
-            wrapMode: Text.WordWrap
-            maximumLineCount: 2
-            elide: Text.ElideRight
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
+            // Shortcuts & settings (also F1 or Ctrl+/).
+            Rectangle {
+              id: gearButton
+              anchors.right: parent.right
+              anchors.top: parent.top
+              width: root.footerRowHeight
+              height: root.footerRowHeight
+              radius: root.cornerRadius
+              color: root.infoOpen ? Util.alpha(root.accent, 0.20)
+                : (gearMouse.containsMouse ? Util.alpha(root.foreground, 0.10) : Util.alpha(root.foreground, 0.04))
+
+              Text {
+                anchors.centerIn: parent
+                textFormat: Text.PlainText
+                text: "󰒓"
+                color: root.infoOpen ? root.accent : root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.title
+              }
+
+              MouseArea {
+                id: gearMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.infoOpen ? root.closeInfo() : root.openInfo()
+              }
+
+              PanelToolTip {
+                visible: gearMouse.containsMouse
+                text: "Shortcuts & settings (F1)"
+              }
+            }
           }
         }
       }

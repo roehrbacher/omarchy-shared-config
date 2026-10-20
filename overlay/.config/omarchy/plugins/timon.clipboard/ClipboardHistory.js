@@ -379,9 +379,8 @@ function deleteAction(pinned, armed) {
 function countLabel(total, pinned, shown, filtering) {
   var n = Math.max(0, Number(total) || 0)
   var items = n === 1 ? "1 item" : n + " items"
-  var base = filtering ? (Number(shown) || 0) + " of " + items : items
-  var p = Math.max(0, Number(pinned) || 0)
-  return p > 0 ? base + " · " + p + " pinned" : base
+  // Pinned items are not counted separately (their section shows them).
+  return filtering ? (Number(shown) || 0) + " of " + items : items
 }
 
 function pinnedCount(history) {

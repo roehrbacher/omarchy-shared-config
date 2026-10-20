@@ -53,8 +53,13 @@ BarWidget {
   }
 
   // Hand the icon to the overlay so the popup opens right under it.
-  Component.onCompleted: Bridge.setAnchor(button, root.bar)
-  onBarChanged: Bridge.setAnchor(button, root.bar)
+  // This widget is the popup's owner in the bar (like the Wi-Fi widget), so
+  // the bar draws its stock open-panel underline under the icon.
+  Component.onCompleted: Bridge.setAnchor(button, root.bar, root)
+  onBarChanged: Bridge.setAnchor(button, root.bar, root)
+
+  // Called by the bar when another popup opens, and by the popup itself.
+  function close() { if (Bridge.overlay) Bridge.overlay.close() }
   Component.onDestruction: Bridge.clearAnchor(button)
 
   BarIconButton {

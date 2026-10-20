@@ -113,11 +113,11 @@ assert.strictEqual(H.deleteAction(false, false), "delete", "unpinned: delete at 
 assert.strictEqual(H.deleteAction(true, false), "arm", "pinned: first Del arms")
 assert.strictEqual(H.deleteAction(true, true), "delete", "pinned + armed: second Del deletes")
 // 6: count label
-assert.strictEqual(H.countLabel(119, 3, 119, false), "119 items · 3 pinned")
+assert.strictEqual(H.countLabel(119, 3, 119, false), "119 items", "1.5.0: no pinned part")
 assert.strictEqual(H.countLabel(119, 0, 119, false), "119 items", "no pinned part when 0")
 assert.strictEqual(H.countLabel(1, 0, 1, false), "1 item", "singular")
 assert.strictEqual(H.countLabel(0, 0, 0, false), "0 items")
-assert.strictEqual(H.countLabel(119, 3, 4, true), "4 of 119 items · 3 pinned", "while searching")
+assert.strictEqual(H.countLabel(119, 3, 4, true), "4 of 119 items", "while searching")
 assert.strictEqual(H.pinnedCount([{ pinned: true }, {}, { pinned: true }]), 2)
 // 2: popup scale
 assert.strictEqual(H.popupScale(1080), 1, "24in 1080p unchanged")

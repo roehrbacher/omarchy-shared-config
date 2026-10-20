@@ -289,7 +289,7 @@ default menu (the menu would otherwise blank them).
 - Super+Shift+W WhatsApp, Super+Shift+S Signal (replace stock Omawrite and
   Google Maps; the stock Super+Shift+Alt+G / Super+Shift+G still work)
 - Alt+V or Super+Shift+V clipboard history (`timon.clipboard`; stock Super+Ctrl+V opens
-  it too), Super+Shift+Ctrl+V clipboard private mode on/off. New keys, nothing replaced
+  it too), Super+Shift+Ctrl+V clipboard incognito on/off. New keys, nothing replaced
 - Super+Shift+Y (YouTube) unbound
 - Print is Omarchy's stock screenshot again (omasnap is gone)
 - Insert is unbound again (it used to run the screen-off script; Insomnia

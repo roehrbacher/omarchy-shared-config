@@ -230,13 +230,16 @@ BarWidget {
     }
     onWheel: function(wheel) {
       if (!root.activePlayer) return
-      // Physical direction: undo the natural-scroll flip (wheel.inverted),
-      // like the other bar icons (PhysicalWheel.qml in timon.audio).
-      var dy = wheel.inverted ? -wheel.angleDelta.y : wheel.angleDelta.y
-      if (dy > 0) root.runMedia("previous")
-      else if (dy < 0) root.runMedia("next")
+      // Physical direction (see PhysicalWheel.qml for the Hyprland bug).
+      // One track per notch / per ~1 notch of touchpad travel, not per event.
+      root.wheelAcc += wheelFix.physicalDy(wheel)
+      if (root.wheelAcc >= 120) { root.wheelAcc = 0; root.runMedia("previous") }
+      else if (root.wheelAcc <= -120) { root.wheelAcc = 0; root.runMedia("next") }
     }
+
+    PhysicalWheel { id: wheelFix; handle: false }
   }
+  property real wheelAcc: 0
 
   PopupCard {
     id: popup

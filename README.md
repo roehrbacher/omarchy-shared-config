@@ -146,7 +146,7 @@ keyboard layout, now playing, updates. Right: tray,
 Tailscale, agents, Grokbar, local AI, audio (`timon.audio`), Bluetooth, network, monitor,
 battery with percentage, notification center. Now playing (`<title> |
 <artist>`) keeps its place but stays invisible until the pointer is over the
-bar (`"revealOnHover": true`, see `timon.hover-reveal`). Grokbar shows only the
+bar (picked in Omarchy menu > Hover Reveal, see `timon.hover-reveal`). Grokbar shows only the
 Grok Bot logo; click it for the usage panel.
 
 **Plugins**
@@ -194,18 +194,9 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
   via `showCursorUsage`/`showGrokBotUsage: false` in `00-shared.json`). Own
   additions: `"iconOnly": true` (logo only on the bar), tighter spacing, safer
   panel close. No longer tracked in `plugins.lock`.
-- `timon.hover-reveal` 1.1.0 – invisible helper in the left section. Any bar
-  entry with `"revealOnHover": true` stays invisible in its normal place
-  (space kept, nothing moves) and fades in exactly like the stock indicators
-  next to the clock: it follows the stock bar's own peek state (opens when the
-  pointer enters the bar outside the left/right widget groups, holds while it is
-  anywhere on the bar, closes 120 ms after it leaves) with the stock 140 ms
-  OutCubic fade. It stays visible while its own popup is open, so popups opened
-  from a key or IPC work as before. Add `"revealCollapse": true` to an entry to
-  fold it to zero width instead and let it slide in. Tunable: `revealMs`,
-  `hideMs` on the helper entry. Works with stock and third-party widgets alike
-  without changing them; if Omarchy ever renames the bar internals it relies
-  on, everything simply stays visible.
+- `timon.hover-reveal` – now its own repo (github.com/roehrbacher/omarchy-hover-reveal),
+  installed with `omarchy plugin add` and no longer copied from this overlay.
+  Choices live in `~/.config/omarchy/hover-reveal.json`.
 - `timon.local-ai` 0.2.0 – skull-and-crossbones icon (filled = a local model is
   running, outline = none, pulsing = loading). Click opens a popup with one
   switch per model that starts/stops its systemd user unit (never enables it);

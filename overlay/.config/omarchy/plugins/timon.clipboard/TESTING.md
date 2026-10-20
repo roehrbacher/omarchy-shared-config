@@ -1,4 +1,4 @@
-# Test run – 2026-10-21 (1.6.0): header phone icon (tooltip, opens the Flux settings), crossed-out phone in the Incognito badge while Flux is paused, one-row footer, Flux section (phone, last sync, Send current clipboard / Ctrl+S), list-styled settings rows, search placeholder with F1 hint. Unit tests pass; installed and loaded without QML warnings.
+# Test run – 2026-10-21 (1.6.1): phone button moved from the header to the footer, left of the gear, same size and hover as the gear; icon + tooltip per Flux state; click opens Flux (flux-cli open). Unit tests pass.
 
 # Test run – 2026-10-20 (1.5.0), a desktop (visual QA), Omarchy 4.0.6
 

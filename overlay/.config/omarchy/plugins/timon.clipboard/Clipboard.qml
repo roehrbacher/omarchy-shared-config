@@ -38,7 +38,10 @@ Item {
   property int lastSync: 0
   property int nowSec: Math.floor(Date.now() / 1000)
   // Header phone icon: "online", "paused" (incognito) or "" (hidden).
-  readonly property string phoneIcon: ClipboardHistory.phoneIconState(root.fluxPresent, root.fluxPaused, root.phoneOnline)
+  // flux-pause.sh's last answer: absent, running, paused or off.
+  property string fluxState: ""
+  // Footer phone button: "online", "nophone", "paused", "off" or "" (hidden).
+  readonly property string phoneIcon: ClipboardHistory.phoneIconState(root.fluxState, root.phoneOnline)
   readonly property string fluxStatusText: !root.fluxPresent ? "not installed"
     : (root.fluxPaused ? "paused (incognito)"
     : (root.phoneOnline ? "running · phone connected" : "running · no phone connected"))
@@ -131,6 +134,16 @@ Item {
       infoFlick.contentY = Math.max(0, Math.min(fluxSection.y, infoFlick.contentHeight - infoFlick.height))
     })
     else infoFlick.contentY = 0
+  }
+
+  // Footer phone button: open Flux's own window (flux-cli open: its shell
+  // plugin, else flux-gui) and close the popup; without flux-cli, the Flux
+  // section of the settings view.
+  function openFlux() {
+    if (root.fluxPresent) {
+      root.close()
+      Quickshell.execDetached(["flux-cli", "open"])
+    } else root.openInfo("flux")
   }
 
   // Send what is on the clipboard now to the phone (flux-cli clip).
@@ -694,6 +707,7 @@ Item {
       waitForEnd: true
       onStreamFinished: {
         var s = String(text).trim()
+        root.fluxState = s
         root.fluxPresent = s !== "" && s !== "absent"
         root.fluxPaused = s === "paused"
       }
@@ -799,7 +813,7 @@ Item {
           TextInput {
             id: searchInput
             anchors.left: parent.left
-            anchors.right: incognitoBadge.visible ? incognitoBadge.left : (phoneHeader.visible ? phoneHeader.left : countLabel.left)
+            anchors.right: incognitoBadge.visible ? incognitoBadge.left : countLabel.left
             anchors.rightMargin: Style.space(12)
             anchors.top: parent.top
             anchors.bottom: parent.bottom
@@ -835,7 +849,7 @@ Item {
           Rectangle {
             id: incognitoBadge
             visible: root.privateMode
-            anchors.right: phoneHeader.visible ? phoneHeader.left : countLabel.left
+            anchors.right: countLabel.left
             anchors.rightMargin: Style.space(10)
             anchors.verticalCenter: parent.verticalCenter
             width: badgeText.implicitWidth + Style.space(12)
@@ -847,40 +861,11 @@ Item {
               id: badgeText
               anchors.centerIn: parent
               textFormat: Text.PlainText
-              text: "󰗹 Incognito" + (root.phoneIcon === "paused" ? "  󰥐" : "")
+              text: "󰗹 Incognito"
               color: root.accent
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
               font.bold: true
-            }
-          }
-
-          // Phone icon (Flux): shown while a phone is connected; while
-          // incognito pauses Flux the crossed-out icon sits in the badge.
-          Text {
-            id: phoneHeader
-            visible: root.phoneIcon === "online"
-            anchors.right: countLabel.left
-            anchors.rightMargin: Style.space(8)
-            anchors.verticalCenter: parent.verticalCenter
-            textFormat: Text.PlainText
-            text: "󰄜"
-            color: phoneMouse.containsMouse ? root.foreground : root.dimText
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
-
-            MouseArea {
-              id: phoneMouse
-              anchors.fill: parent
-              anchors.margins: -Style.space(4)
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: root.openInfo("flux")
-            }
-
-            PanelToolTip {
-              visible: phoneMouse.containsMouse
-              text: (root.phoneName || "Phone") + " connected via Flux"
             }
           }
 
@@ -889,12 +874,10 @@ Item {
             anchors.fill: incognitoBadge
             visible: incognitoBadge.visible
             hoverEnabled: true
-            cursorShape: root.phoneIcon === "paused" ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: if (root.phoneIcon === "paused") root.openInfo("flux")
 
             PanelToolTip {
               visible: badgeMouse.containsMouse
-              text: root.phoneIcon === "paused" ? "Incognito: copies not saved, Flux sync paused" : "Incognito: copies not saved"
+              text: root.fluxPaused ? "Incognito: copies not saved, Flux sync paused" : "Incognito: copies not saved"
             }
           }
 
@@ -1473,7 +1456,7 @@ Item {
               // Incognito on/off switch (also Ctrl+I, or right-click the bar icon).
               Rectangle {
                 id: incognitoSwitch
-                anchors.right: gearButton.left
+                anchors.right: phoneButton.visible ? phoneButton.left : gearButton.left
                 anchors.rightMargin: Style.space(8)
                 width: incognitoRow.implicitWidth + Style.space(16)
                 height: root.footerRowHeight
@@ -1524,6 +1507,42 @@ Item {
                   onClicked: root.setPrivate(!root.privateMode, false)
                 }
               }
+
+            // Flux phone button: state as icon + tooltip; click opens Flux.
+            Rectangle {
+              id: phoneButton
+              visible: root.phoneIcon !== ""
+              anchors.right: gearButton.left
+              anchors.rightMargin: Style.space(8)
+              anchors.top: parent.top
+              width: root.footerRowHeight
+              height: root.footerRowHeight
+              radius: root.cornerRadius
+              color: phoneMouse.containsMouse ? Util.alpha(root.foreground, 0.10) : Util.alpha(root.foreground, 0.04)
+
+              Text {
+                anchors.centerIn: parent
+                textFormat: Text.PlainText
+                text: root.phoneIcon === "online" ? "󰄜" : "󰥐"
+                color: root.phoneIcon === "paused" ? root.accent
+                  : (root.phoneIcon === "online" ? root.foreground : root.dimText)
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.title
+              }
+
+              MouseArea {
+                id: phoneMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.openFlux()
+              }
+
+              PanelToolTip {
+                visible: phoneMouse.containsMouse
+                text: ClipboardHistory.phoneTooltip(root.phoneIcon, root.phoneName)
+              }
+            }
 
             // Shortcuts & settings (also F1 or Ctrl+/).
             Rectangle {

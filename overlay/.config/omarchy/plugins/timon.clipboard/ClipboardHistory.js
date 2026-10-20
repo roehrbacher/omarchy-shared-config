@@ -451,12 +451,23 @@ function agoLabel(timeSec, nowSec) {
   return Math.floor(d / 86400) + " d ago"
 }
 
-// Header phone icon: "online" (phone connected), "paused" (incognito paused
-// Flux) or "" (hidden: no phone, or Flux not installed).
-function phoneIconState(fluxPresent, fluxPaused, phoneOnline) {
-  if (!fluxPresent) return ""
-  if (fluxPaused) return "paused"
-  return phoneOnline ? "online" : ""
+// Footer phone button state from flux-pause.sh's answer ("absent",
+// "running", "paused", "off") and whether a phone is online: "" (hidden,
+// Flux not installed), "online", "nophone", "paused" (incognito) or "off".
+function phoneIconState(fluxState, phoneOnline) {
+  if (!fluxState || fluxState === "absent") return ""
+  if (fluxState === "paused") return "paused"
+  if (fluxState === "off") return "off"
+  return phoneOnline ? "online" : "nophone"
+}
+
+// Tooltip for the footer phone button.
+function phoneTooltip(state, phoneName) {
+  if (state === "online") return (phoneName || "Phone") + " connected via Flux"
+  if (state === "paused") return "Flux paused (incognito)"
+  if (state === "off") return "Flux not running"
+  if (state === "nophone") return "No phone connected"
+  return ""
 }
 
 // Mark the text entry `text` with an origin ("phone"); returns a new array.
@@ -523,6 +534,7 @@ if (typeof module !== "undefined") {
     fluxLastSync: fluxLastSync,
     agoLabel: agoLabel,
     phoneIconState: phoneIconState,
+    phoneTooltip: phoneTooltip,
     setOrigin: setOrigin,
     kineticVelocity: kineticVelocity,
     kineticFlickVelocity: kineticFlickVelocity,

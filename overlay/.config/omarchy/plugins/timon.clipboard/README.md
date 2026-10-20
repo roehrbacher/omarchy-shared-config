@@ -66,11 +66,12 @@ In the popup:
   wheel notches scroll a fixed step.
 - **Count:** top right shows e.g. `119 items` (`4 of 119 items` while
   searching).
-- **Header:** search field ("Search clipboard… (F1 for keys)"), a small
-  phone icon left of the count while a phone is connected through Flux
-  (tooltip with the phone name; click it for the Flux settings), and the count.
-- **Footer (one row):** Clear history on the left; the Incognito switch and
-  a gear icon on the right. The gear (or F1) opens the shortcuts & settings
+- **Header:** search field ("Search clipboard… (F1 for keys)") and the count.
+- **Footer (one row):** Clear history on the left; the Incognito switch, a
+  phone button (only when Flux is installed) and a gear icon on the right.
+  The phone button's icon and tooltip show the Flux state ("<phone> connected
+  via Flux", "No phone connected", "Flux paused (incognito)", "Flux not
+  running"); clicking it closes the popup and opens Flux (`flux-cli open`). The gear (or F1) opens the shortcuts & settings
   view: incognito, clear history, Flux (phone, last sync, "Send current
   clipboard" with Ctrl+S), history limit, all keys. Hovering the phone action
   of a row shows "Send via Flux".
@@ -79,7 +80,7 @@ In the popup:
 - **Incognito pauses Flux too:** if [Flux](https://github.com/bjarneo/flux)
   (`fluxd.service`) runs, incognito stops it, so copies are not synced to
   the phone or saved in Flux's history; turning incognito off starts it
-  again. The Incognito badge then shows a crossed-out phone icon, and the notification says "Flux sync paused". See "Flux" below.
+  again. The footer phone button then shows a crossed-out phone, and the notification says "Flux sync paused". See "Flux" below.
 - **Deleting an item** only removes it from the history; the current
   clipboard stays as it is, even when it holds the same text. ("Clear history"
   still empties the clipboard if it held an unpinned item.)
@@ -96,7 +97,7 @@ In the popup:
   clipboard after the popup closes.
 
 - **From phone:** with Flux, text that came from the phone gets a small
-  "From phone" label, and the header shows a phone icon while a paired
+  "From phone" label, and the footer phone button shows a phone while a paired
   phone is online.
 
 Bar icon: add `{ "id": "timon.clipboard" }` to a bar section (for example the
@@ -178,7 +179,7 @@ To only switch it off and keep it installed: `omarchy plugin disable timon.clipb
 ## Tests
 
 ```bash
-node tests/history.test.js     # history model: limit, pins, search, clear, key routing, count label, delete confirm, Ctrl/Alt+N, popup size, Flux origin, phone name, last sync, header phone icon state
+node tests/history.test.js     # history model: limit, pins, search, clear, key routing, count label, delete confirm, Ctrl/Alt+N, popup size, Flux origin, phone name, last sync, phone button state and tooltip
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/tst_searchfield.qml  # search field keys, Ctrl/Alt+N paste on release, pinned Del twice (real Qt)
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/tst_kinetic.qml      # wheel step, touchpad 1:1, momentum after lift-off
 bash tests/capture.test.sh     # capture: incognito, password hint, size caps, 0600/0700, import, prune

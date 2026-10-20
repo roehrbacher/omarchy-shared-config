@@ -1,3 +1,18 @@
+# Test run – 2026-10-20 (1.4.0), a desktop (visual QA), Omarchy 4.0.6
+
+Automated: history tests all passed (new: row action order phone, trash,
+pin); `tst_searchfield.qml` 15 and `tst_kinetic.qml` 6 passed;
+`capture.test.sh` / `flux-pause.test.sh` all ok; `omarchy plugin validate` ok.
+
+Live on the desktop, opened over IPC (the same call the Alt+V binding makes):
+popup opens under the bar's clipboard icon in the Wi-Fi popup style, half the
+old width, no preview pane, compact rows (12 visible instead of 9); footer
+wraps to two lines and stays readable; selected row shows phone, trash, pin
+with pin in the same slot as on an unselected pinned row; keyboard action
+focus on trash (temporary debug call, not committed). Incognito on, then off
+right away: Flux is running again (fixed: a quick on/off could leave it
+paused). No synthetic input.
+
 # Test run – 2026-10-20 (1.3.2), a desktop (visual QA), Omarchy 4.0.6
 
 Automated: history tests all passed (Alt+N top-to-bottom slots, row-action

@@ -332,6 +332,17 @@ function slotRowIndex(rows, slot) {
 // ev: { key, ctrl, alt, shift, atTextEnd }. Returns { focus, consumed, trigger }.
 // Right enters the actions only when the search cursor is at the end, so
 // Left/Right keep moving the text cursor while you edit the search.
+// Row actions left to right: phone (send), trash, pin. Pin is last so it
+// stays in the slot where a pinned row shows it when not hovered.
+function rowActionNames(armed, phoneOnline, isText) {
+  if (armed) return ["delete"]
+  var out = []
+  if (phoneOnline && isText) out.push("send")
+  out.push("delete")
+  out.push("pin")
+  return out
+}
+
 function actionFocusStep(focus, count, ev) {
   var f = count > 0 ? Math.min(focus, count - 1) : -1
   var plain = !ev.ctrl && !ev.alt && !ev.shift
@@ -473,6 +484,7 @@ if (typeof module !== "undefined") {
     setOrigin: setOrigin,
     kineticVelocity: kineticVelocity,
     kineticFlickVelocity: kineticFlickVelocity,
-    actionFocusStep: actionFocusStep
+    actionFocusStep: actionFocusStep,
+    rowActionNames: rowActionNames
   }
 }

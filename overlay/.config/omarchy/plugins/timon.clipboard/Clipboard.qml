@@ -11,6 +11,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "ClipboardHistory.js" as ClipboardHistory
+import "Bridge.js" as Bridge
 
 Item {
   id: root
@@ -58,31 +59,37 @@ Item {
   readonly property string fluxScript: pluginDir + "/flux-pause.sh"
 
   // Same [menu] surface tokens as the stock clipboard, so every theme styles it.
-  property color background: Color.menu.background
-  property color foreground: Color.menu.text
-  property color border: Color.menu.border
+  // Popup surface tokens, same as the stock Wi-Fi popup (KeyboardPanel).
+  property color background: Color.popups.background
+  property color foreground: Color.popups.text
+  property color border: Color.popups.border
   property var borderSpec: Border.surfaceSpec("menu", "border", border, Math.max(1, Style.space(2)))
   property color scrim: Color.menu.scrim
-  property color selectedBackground: Color.menu.selectedBackground
-  property color selectedText: Color.menu.selectedText
+  property color selectedBackground: Style.selectedFillFor(foreground, Color.accent)
+  property color selectedText: foreground
   property color accent: Color.accent
   readonly property int cornerRadius: Style.cornerRadius
   property string fontFamily: Style.font.menuFamily
   property int contentMargin: Style.spacing.panelPadding
   property int headerHeight: Math.max(Style.space(34), Style.font.title + Style.spacing.controlPaddingY * 2)
   property int footerRowHeight: Math.max(Style.space(26), Style.font.body + Style.spacing.controlPaddingY * 2)
-  property int footerHeight: footerRowHeight + Style.space(4) + Style.font.body + Style.space(4)
   property int contentSpacing: Style.spacing.md
   // Scales with the screen's logical height: unchanged from 1080 px up,
   // 20% smaller on a small laptop screen (ClipboardHistory.popupScale).
-  readonly property real popupScale: ClipboardHistory.popupScale(panel.height)
-  property int cardWidth: Math.min(Math.round(Style.space(875) * popupScale), panel.width - Style.gapsOut * 2)
-  property int cardHeight: Math.min(Math.round(Style.space(640) * popupScale), panel.height - Style.gapsOut * 2)
+  readonly property real popupScale: ClipboardHistory.popupScale(panel.screenH)
+  // List only (no preview column): half the old 875 px width.
+  property int cardWidth: panel.fittedContentWidth(Math.round(Style.space(440) * popupScale))
+  property int cardHeight: panel.cappedContentHeight(Math.round(Style.space(600) * popupScale))
+  // Bar icon the popup hangs from (set by BarWidget.qml through Bridge.js).
+  property Item anchorButton: null
+  property QtObject anchorBar: null
+  function setAnchor(button, bar) { root.anchorButton = button; root.anchorBar = bar }
   // Secondary text: same size and contrast as the stock Wi-Fi panel's
   // smallest text (foreground darkened 1.4x, no opacity); hints use the count size (Style.font.body).
   readonly property color dimText: Qt.darker(foreground, 1.4)
   readonly property color urgent: Color.urgent
-  property int rowHeight: Math.max(Style.space(50), Style.font.body + Style.font.caption + Style.spacing.rowPaddingX * 2)
+  // Compact rows like the Wi-Fi list: one line plus a small padding.
+  property int rowHeight: Math.max(Style.space(30), Style.font.title + Style.spacing.rowPaddingX + Style.space(6))
 
   // ---- open / close (shell host API) ------------------------------------
   function open(payloadJson) {
@@ -150,7 +157,7 @@ Item {
     root.syncFlux()
   }
 
-  // Make Flux match private mode (flux-pause.sh sync reads state.json).
+  // Make Flux match private mode (pause or resume fluxd via flux-pause.sh).
   function syncFlux() {
     if (fluxProc.running) root.fluxResync = true
     else fluxProc.running = true
@@ -405,12 +412,7 @@ Item {
   function rowActions(index, armedIndex, phone, count) {
     if (index < 0 || index >= displayModel.count) return []
     var row = displayModel.get(index)
-    if (row.historyIndex === root.armedDeleteIndex) return ["delete"]
-    var out = []
-    if (root.phoneOnline && row.entryType === "text") out.push("send")
-    out.push("pin")
-    out.push("delete")
-    return out
+    return ClipboardHistory.rowActionNames(row.historyIndex === root.armedDeleteIndex, root.phoneOnline, row.entryType === "text")
   }
 
   function runRowAction(name, index) {
@@ -528,13 +530,17 @@ Item {
   }
 
   // ---- startup ----------------------------------------------------------
-  Component.onCompleted: initProc.running = true
+  Component.onCompleted: {
+    Bridge.setOverlay(root)
+    initProc.running = true
+  }
+  Component.onDestruction: Bridge.clearOverlay(root)
 
   ListModel { id: displayModel }
 
   PointerMoveGate {
     id: pointerGate
-    referenceItem: card
+    referenceItem: resultList
   }
 
   FileView {
@@ -606,7 +612,10 @@ Item {
 
   Process {
     id: fluxProc
-    command: [root.fluxScript, "sync"]
+    // Pass the wanted state instead of "sync": state.json is written
+    // asynchronously, so a quick on→off could read the old value and leave
+    // Flux paused.
+    command: [root.fluxScript, root.privateMode ? "pause" : "resume"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -661,37 +670,22 @@ Item {
   }
 
   // ---- UI ---------------------------------------------------------------
-  PanelWindow {
+  // Same popup as the stock Wi-Fi panel: Omarchy's KeyboardPanel, anchored
+  // under the bar icon (also when opened with the keyboard shortcut), with
+  // its look, outside-click dismissal and one-popup-at-a-time coordination.
+  // Without the bar icon it opens at the top-left corner.
+  KeyboardPanel {
     id: panel
-    visible: root.opened
-    anchors { top: true; bottom: true; left: true; right: true }
-    color: "transparent"
-    WlrLayershell.namespace: "omarchy-clipboard"
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-    exclusionMode: ExclusionMode.Ignore
+    anchorItem: root.anchorButton
+    bar: root.anchorBar
+    owner: root
+    open: root.opened
+    focusTarget: searchInput
+    contentWidth: root.cardWidth
+    contentHeight: root.cardHeight
 
-    Rectangle {
+    Item {
       anchors.fill: parent
-      color: root.scrim
-    }
-
-    MouseArea {
-      anchors.fill: parent
-      onClicked: root.close()
-    }
-
-    BorderSurface {
-      id: card
-      width: root.cardWidth
-      height: root.cardHeight
-      radius: root.cornerRadius
-      anchors.centerIn: parent
-      color: root.background
-      borderSpec: root.borderSpec
-      padding: root.contentMargin
-
-      MouseArea { anchors.fill: parent; onClicked: {} }
 
       Item {
         id: confirmLayer
@@ -719,10 +713,6 @@ Item {
 
       Column {
         anchors.fill: parent
-        anchors.topMargin: card.contentTopInset
-        anchors.rightMargin: card.contentRightInset
-        anchors.bottomMargin: card.contentBottomInset
-        anchors.leftMargin: card.contentLeftInset
         spacing: root.contentSpacing
 
         // Search line + entry count
@@ -803,24 +793,22 @@ Item {
 
         Item {
           width: parent.width
-          height: parent.height - root.headerHeight - root.footerHeight - root.contentSpacing * 2
+          height: parent.height - root.headerHeight - footer.implicitHeight - root.contentSpacing * 2
 
-          Row {
+          Item {
             anchors.fill: parent
-            spacing: 0
 
             Item {
-              width: parent.width / 2
+              width: parent.width
               height: parent.height
               clip: true
 
               ListView {
                 id: resultList
                 anchors.fill: parent
-                anchors.rightMargin: root.contentMargin
                 model: displayModel
                 clip: true
-                spacing: Style.space(4)
+                spacing: Style.space(2)
                 boundsBehavior: Flickable.StopAtBounds
                 flickDeceleration: 2500
                 maximumFlickVelocity: 6000
@@ -888,10 +876,10 @@ Item {
                   Row {
                     id: rowContent
                     anchors.fill: parent
-                    anchors.leftMargin: Style.space(12)
-                    anchors.rightMargin: Style.space(8)
-                    anchors.topMargin: Style.space(8)
-                    anchors.bottomMargin: Style.space(8)
+                    anchors.leftMargin: Style.space(10)
+                    anchors.rightMargin: Style.space(4)
+                    anchors.topMargin: Style.space(2)
+                    anchors.bottomMargin: Style.space(2)
                     spacing: Style.space(10)
 
                     Image {
@@ -962,9 +950,9 @@ Item {
 
                       Repeater {
                         model: [
-                          { glyph: "󰒊", tip: "send", show: row.showActions && !row.armed && root.phoneOnline && row.entryType === "text" },
-                          { glyph: row.pinned ? "󰐃" : "󰤱", tip: "pin", show: !row.armed && (row.showActions || row.pinned) },
-                          { glyph: "󰩺", tip: "delete", show: row.showActions || row.armed }
+                          { glyph: "󰄜", tip: "send", show: row.showActions && !row.armed && root.phoneOnline && row.entryType === "text" },
+                          { glyph: "󰩺", tip: "delete", show: row.showActions || row.armed },
+                          { glyph: row.pinned ? "󰐃" : "󰤱", tip: "pin", show: !row.armed && (row.showActions || row.pinned) }
                         ]
                         delegate: Rectangle {
                           required property var modelData
@@ -1002,47 +990,6 @@ Item {
               }
             }
 
-            // Full preview of the selected entry
-            Item {
-              width: parent.width / 2
-              height: parent.height
-              clip: true
-
-              property var activeRow: displayModel.count > 0 && root.selectedIndex >= 0 && root.selectedIndex < displayModel.count ? displayModel.get(root.selectedIndex) : null
-
-              Rectangle {
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                width: Style.normalBorderWidth
-                color: Util.alpha(root.border, 0.28)
-              }
-
-              Text {
-                textFormat: Text.PlainText
-                visible: parent.activeRow && !parent.activeRow.previewImage
-                anchors.fill: parent
-                anchors.leftMargin: root.contentMargin
-                text: parent.activeRow ? parent.activeRow.fullText : ""
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.title
-                wrapMode: Text.WrapAnywhere
-                elide: Text.ElideRight
-                verticalAlignment: Text.AlignTop
-              }
-
-              Image {
-                visible: parent.activeRow && parent.activeRow.previewImage
-                anchors.fill: parent
-                anchors.leftMargin: root.contentMargin
-                source: parent.activeRow ? parent.activeRow.previewImage : ""
-                fillMode: Image.PreserveAspectFit
-                verticalAlignment: Image.AlignTop
-                asynchronous: true
-                smooth: true
-              }
-            }
           }
 
           Column {
@@ -1077,17 +1024,12 @@ Item {
         Column {
           id: footer
           width: parent.width
-          height: root.footerHeight
-          spacing: Style.space(4)
+          spacing: Style.space(6)
 
-          Item {
-            width: parent.width
-            height: root.footerRowHeight
-
-            Row {
+          // Wraps onto a second line when the popup is narrow.
+          Flow {
               id: footerButtons
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
+              width: parent.width
               spacing: Style.space(10)
 
               Rectangle {
@@ -1177,7 +1119,8 @@ Item {
 
               Text {
                 visible: root.phoneOnline && !root.fluxPaused
-                anchors.verticalCenter: parent.verticalCenter
+                height: root.footerRowHeight
+                verticalAlignment: Text.AlignVCenter
                 textFormat: Text.PlainText
                 text: "󰄜 Phone connected via Flux"
                 color: root.dimText
@@ -1185,14 +1128,15 @@ Item {
                 font.pixelSize: Style.font.body
               }
             }
-          }
 
           Text {
             width: parent.width
-            horizontalAlignment: Text.AlignRight
+            horizontalAlignment: Text.AlignLeft
             textFormat: Text.PlainText
-            text: "Enter paste · Shift+Enter copy · Alt+1…9 quick paste · → actions · Ctrl+P pin · Del delete · Ctrl+I incognito"
+            text: "Enter paste · Shift+Enter copy · Alt+1…9 quick paste · → actions · Ctrl+P pin · Del delete · Ctrl+I incognito"
             color: root.dimText
+            wrapMode: Text.WordWrap
+            maximumLineCount: 2
             elide: Text.ElideRight
             font.family: root.fontFamily
             font.pixelSize: Style.font.body

@@ -148,7 +148,13 @@ assert.strictEqual(H.kineticFlickVelocity(2600, 16), 2600, "fingers lifted while
 assert.strictEqual(H.kineticFlickVelocity(2600, 200), 0, "fingers stopped before lifting: no flick")
 assert.strictEqual(H.kineticFlickVelocity(100, 10), 0, "slow drag: no flick")
 
-// 1.3.2: row actions by keyboard (send, pin, trash)
+// 1.4.0: action order phone, trash, pin (pin rightmost, never moves)
+assert.deepStrictEqual(H.rowActionNames(false, true, true), ["send", "delete", "pin"])
+assert.deepStrictEqual(H.rowActionNames(false, false, true), ["delete", "pin"], "no phone: no send")
+assert.deepStrictEqual(H.rowActionNames(false, true, false), ["delete", "pin"], "images are not sent")
+assert.deepStrictEqual(H.rowActionNames(true, true, true), ["delete"], "armed delete: only trash")
+
+// 1.3.2: row actions by keyboard
 {
   const st = (f, n, key, extra) => H.actionFocusStep(f, n, Object.assign({ key: key, ctrl: false, alt: false, shift: false, atTextEnd: true }, extra || {}))
   assert.deepStrictEqual(st(-1, 3, K.Right), { focus: 0, consumed: true, trigger: false }, "Right enters the actions")

@@ -31,10 +31,10 @@ In the popup:
 | Shift+Enter | copy only (select it without pasting) |
 | Alt+Enter | open (URL in browser, text in editor, image in editor) |
 | Alt+1…9 | paste the Nth item from the top, pinned items first (pastes when you let go of Alt) |
-| → / ← (search cursor at the end) | move between the selected row's actions (send, pin, trash); Enter presses the focused one; Esc, ↑ or ↓ go back to the row |
+| → / ← (search cursor at the end) | move between the selected row's actions (phone, trash, pin); Enter presses the focused one; Esc, ↑ or ↓ go back to the row |
 | Ctrl+P (or the pin icon) | pin / unpin (Ctrl+F works too) |
 | Delete (or the trash icon) | delete the item (with search text selected: delete that text). A pinned item turns red first: press Del again within 3 s to delete it; any other key cancels |
-| Ctrl+S (or the send icon) | send a text item to the phone (Flux, when a phone is connected) |
+| Ctrl+S (or the phone icon) | send a text item to the phone (Flux, when a phone is connected) |
 | Shift+Delete | clear history (asks first; pinned items stay) |
 | Ctrl+I (or the Incognito switch in the footer, or right-click the bar icon) | incognito on/off |
 | Backspace, Ctrl+Backspace, ← →, Ctrl+Z | edit the search |
@@ -52,6 +52,11 @@ In the popup:
   …); copied files show their file name and an image preview.
 - **Pinned:** shown in their own section at the top, survive "clear history"
   and the limit.
+- **Popup:** opens right under the clipboard icon in the bar, like the stock
+  Wi-Fi popup (same look, click outside or open another bar popup to close),
+  also when opened with Alt+V. Without the bar icon (bar widget not in the
+  layout) it opens at the top-left corner. A compact list, no preview pane;
+  hover or select a row for its actions: phone (send), trash, pin.
 - **Size:** the popup scales with the screen: full size from 1080 px logical
   height up, down to 85% on small laptop screens.
 - **Touchpad momentum:** a quick two-finger flick keeps the list scrolling

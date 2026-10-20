@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Ui
+import "Bridge.js" as Bridge
 
 BarWidget {
   id: root
@@ -51,6 +52,11 @@ BarWidget {
     }
   }
 
+  // Hand the icon to the overlay so the popup opens right under it.
+  Component.onCompleted: Bridge.setAnchor(button, root.bar)
+  onBarChanged: Bridge.setAnchor(button, root.bar)
+  Component.onDestruction: Bridge.clearAnchor(button)
+
   BarIconButton {
     id: button
     anchors.fill: parent
@@ -60,7 +66,7 @@ BarWidget {
     tooltipText: ""
     onPressed: function(b) {
       if (b === Qt.RightButton) root.bar.run("omarchy-shell shell call timon.clipboard togglePrivate x")
-      else root.bar.run("omarchy-shell shell toggle timon.clipboard '{}'")
+      else if (!Bridge.toggle()) root.bar.run("omarchy-shell shell toggle timon.clipboard '{}'")
     }
   }
 }

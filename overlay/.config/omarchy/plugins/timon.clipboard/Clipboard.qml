@@ -32,7 +32,13 @@ Item {
   // Shortcuts & settings view (gear icon in the footer, or F1 / Ctrl+/).
   property bool infoOpen: false
   property int infoIndex: 0
-  readonly property var infoActions: ["incognito", "clear", "back"]
+  readonly property var infoActions: ["incognito", "clear", "back", "send"]
+  // Flux details for the settings view (from `flux-cli status --json`).
+  property string phoneName: ""
+  property int lastSync: 0
+  property int nowSec: Math.floor(Date.now() / 1000)
+  // Header phone icon: "online", "paused" (incognito) or "" (hidden).
+  readonly property string phoneIcon: ClipboardHistory.phoneIconState(root.fluxPresent, root.fluxPaused, root.phoneOnline)
   readonly property string fluxStatusText: !root.fluxPresent ? "not installed"
     : (root.fluxPaused ? "paused (incognito)"
     : (root.phoneOnline ? "running · phone connected" : "running · no phone connected"))
@@ -81,6 +87,8 @@ Item {
   property int headerHeight: Math.max(Style.space(34), Style.font.title + Style.spacing.controlPaddingY * 2)
   property int footerRowHeight: Math.max(Style.space(26), Style.font.body + Style.spacing.controlPaddingY * 2)
   property int contentSpacing: Style.spacing.md
+  // Small extra gap between the list and the footer.
+  property int footerGap: Style.space(4)
   // Scales with the screen's logical height: unchanged from 1080 px up,
   // 20% smaller on a small laptop screen (ClipboardHistory.popupScale).
   readonly property real popupScale: ClipboardHistory.popupScale(panel.screenH)
@@ -113,10 +121,24 @@ Item {
     Qt.callLater(function() { searchInput.forceActiveFocus() })
   }
 
-  function openInfo() {
+  function openInfo(section) {
     root.disarmDelete()
-    root.infoIndex = 0
+    root.nowSec = Math.floor(Date.now() / 1000)
+    root.infoIndex = section === "flux" ? root.infoActions.indexOf("send") : 0
     root.infoOpen = true
+    if (root.fluxPresent && !root.fluxPaused && !statusProc.running) statusProc.running = true
+    if (section === "flux") Qt.callLater(function() {
+      infoFlick.contentY = Math.max(0, Math.min(fluxSection.y, infoFlick.contentHeight - infoFlick.height))
+    })
+    else infoFlick.contentY = 0
+  }
+
+  // Send what is on the clipboard now to the phone (flux-cli clip).
+  function sendCurrentClipboard() {
+    if (!root.phoneOnline || root.fluxPaused) return
+    Quickshell.execDetached(["flux-cli", "clip"])
+    root.lastSync = Math.floor(Date.now() / 1000)
+    root.nowSec = root.lastSync
   }
 
   function closeInfo() {
@@ -128,6 +150,7 @@ Item {
   function runInfoAction(name) {
     if (name === "incognito") root.setPrivate(!root.privateMode, false)
     else if (name === "clear") { root.infoOpen = false; root.requestClearHistory() }
+    else if (name === "send") root.sendCurrentClipboard()
     else root.closeInfo()
   }
 
@@ -136,7 +159,8 @@ Item {
   function handleInfoKey(event) {
     var k = event.key
     var n = root.infoActions.length
-    if (k === Qt.Key_Escape || k === Qt.Key_F1 || ((event.modifiers & Qt.ControlModifier) && k === Qt.Key_Slash)) root.closeInfo()
+    if ((event.modifiers & Qt.ControlModifier) && k === Qt.Key_S) root.sendCurrentClipboard()
+    else if (k === Qt.Key_Escape || k === Qt.Key_F1 || ((event.modifiers & Qt.ControlModifier) && k === Qt.Key_Slash)) root.closeInfo()
     else if (k === Qt.Key_Down || k === Qt.Key_Tab) root.infoIndex = (root.infoIndex + 1) % n
     else if (k === Qt.Key_Up || k === Qt.Key_Backtab) root.infoIndex = (root.infoIndex + n - 1) % n
     else if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) root.runInfoAction(root.infoActions[root.infoIndex])
@@ -237,6 +261,8 @@ Item {
     try { st = JSON.parse(String(raw || "")) } catch (e) { st = null }
     if (!st) return
     root.phoneOnline = ClipboardHistory.fluxPhoneOnline(st)
+    root.phoneName = ClipboardHistory.fluxPhoneName(st)
+    root.lastSync = Math.max(root.lastSync, ClipboardHistory.fluxLastSync(st))
     var queue = root.originQueue
     root.originQueue = []
     var now = Math.floor(Date.now() / 1000)
@@ -773,7 +799,7 @@ Item {
           TextInput {
             id: searchInput
             anchors.left: parent.left
-            anchors.right: incognitoBadge.visible ? incognitoBadge.left : countLabel.left
+            anchors.right: incognitoBadge.visible ? incognitoBadge.left : (phoneHeader.visible ? phoneHeader.left : countLabel.left)
             anchors.rightMargin: Style.space(12)
             anchors.top: parent.top
             anchors.bottom: parent.bottom
@@ -797,7 +823,7 @@ Item {
               verticalAlignment: Text.AlignVCenter
               visible: searchInput.text === ""
               textFormat: Text.PlainText
-              text: "Search clipboard…"
+              text: "Search clipboard… (F1 for keys)"
               color: root.foreground
               opacity: 0.58
               font: searchInput.font
@@ -809,7 +835,7 @@ Item {
           Rectangle {
             id: incognitoBadge
             visible: root.privateMode
-            anchors.right: countLabel.left
+            anchors.right: phoneHeader.visible ? phoneHeader.left : countLabel.left
             anchors.rightMargin: Style.space(10)
             anchors.verticalCenter: parent.verticalCenter
             width: badgeText.implicitWidth + Style.space(12)
@@ -821,11 +847,54 @@ Item {
               id: badgeText
               anchors.centerIn: parent
               textFormat: Text.PlainText
-              text: "󰗹 Incognito" + (root.fluxPaused ? " · Flux paused" : "")
+              text: "󰗹 Incognito" + (root.phoneIcon === "paused" ? "  󰥐" : "")
               color: root.accent
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
               font.bold: true
+            }
+          }
+
+          // Phone icon (Flux): shown while a phone is connected; while
+          // incognito pauses Flux the crossed-out icon sits in the badge.
+          Text {
+            id: phoneHeader
+            visible: root.phoneIcon === "online"
+            anchors.right: countLabel.left
+            anchors.rightMargin: Style.space(8)
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
+            text: "󰄜"
+            color: phoneMouse.containsMouse ? root.foreground : root.dimText
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.body
+
+            MouseArea {
+              id: phoneMouse
+              anchors.fill: parent
+              anchors.margins: -Style.space(4)
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.openInfo("flux")
+            }
+
+            PanelToolTip {
+              visible: phoneMouse.containsMouse
+              text: (root.phoneName || "Phone") + " connected via Flux"
+            }
+          }
+
+          MouseArea {
+            id: badgeMouse
+            anchors.fill: incognitoBadge
+            visible: incognitoBadge.visible
+            hoverEnabled: true
+            cursorShape: root.phoneIcon === "paused" ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: if (root.phoneIcon === "paused") root.openInfo("flux")
+
+            PanelToolTip {
+              visible: badgeMouse.containsMouse
+              text: root.phoneIcon === "paused" ? "Incognito: copies not saved, Flux sync paused" : "Incognito: copies not saved"
             }
           }
 
@@ -860,6 +929,13 @@ Item {
               contentWidth: width
               contentHeight: infoColumn.implicitHeight
               boundsBehavior: Flickable.StopAtBounds
+              flickDeceleration: 2500
+              maximumFlickVelocity: 6000
+
+              KineticScroll {
+                flickable: infoFlick
+                wheelStep: root.rowHeight * 1.5
+              }
 
               Column {
                 id: infoColumn
@@ -889,7 +965,7 @@ Item {
                     width: infoColumn.width
                     height: root.rowHeight
                     radius: root.cornerRadius
-                    readonly property bool current: root.infoIndex === index
+                    readonly property bool current: root.infoIndex === root.infoActions.indexOf(modelData.key)
                     color: current ? root.selectedBackground : (infoRowMouse.containsMouse ? Util.alpha(root.foreground, 0.08) : "transparent")
 
                     Text {
@@ -943,43 +1019,89 @@ Item {
                       anchors.fill: parent
                       hoverEnabled: true
                       cursorShape: Qt.PointingHandCursor
-                      onClicked: { root.infoIndex = parent.index; root.runInfoAction(parent.modelData.key) }
+                      onClicked: { root.infoIndex = root.infoActions.indexOf(parent.modelData.key); root.runInfoAction(parent.modelData.key) }
                     }
                   }
                 }
 
+                // Flux section (the header phone icon opens the view here).
+                Text {
+                  id: fluxSection
+                  text: "FLUX"
+                  color: root.dimText
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  topPadding: Style.space(10)
+                  bottomPadding: Style.space(4)
+                  leftPadding: Style.space(10)
+                }
+
                 Repeater {
                   model: [
-                    ["Flux sync", root.fluxStatusText],
-                    ["History", "last " + root.historyLimit + " items · pinned items kept"]
+                    { icon: "󰄜", label: root.phoneOnline ? (root.phoneName || "Phone") : "No phone connected", value: root.fluxStatusText },
+                    { icon: "󰓦", label: "Last sync", value: ClipboardHistory.agoLabel(root.lastSync, root.nowSec) }
                   ]
-                  delegate: Item {
-                    required property var modelData
-                    width: infoColumn.width
-                    height: root.rowHeight
+                  delegate: infoValueRow
+                }
 
-                    Text {
-                      anchors.left: parent.left
-                      anchors.leftMargin: Style.space(10)
-                      anchors.verticalCenter: parent.verticalCenter
-                      textFormat: Text.PlainText
-                      text: parent.modelData[0]
-                      color: root.foreground
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.title
-                    }
+                Rectangle {
+                  id: sendRow
+                  readonly property bool enabled: root.phoneOnline && !root.fluxPaused
+                  readonly property bool current: root.infoIndex === root.infoActions.indexOf("send")
+                  width: infoColumn.width
+                  height: root.rowHeight
+                  radius: root.cornerRadius
+                  color: current ? root.selectedBackground : (sendMouse.containsMouse && enabled ? Util.alpha(root.foreground, 0.08) : "transparent")
+                  opacity: enabled ? 1 : 0.5
 
-                    Text {
-                      anchors.right: parent.right
-                      anchors.rightMargin: Style.space(10)
-                      anchors.verticalCenter: parent.verticalCenter
-                      textFormat: Text.PlainText
-                      text: parent.modelData[1]
-                      color: root.dimText
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.body
-                    }
+                  Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    text: "󰒊  Send current clipboard"
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.title
                   }
+
+                  Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    text: "Ctrl+S"
+                    color: root.dimText
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                  }
+
+                  MouseArea {
+                    id: sendMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: sendRow.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: { root.infoIndex = root.infoActions.indexOf("send"); root.sendCurrentClipboard() }
+                  }
+                }
+
+                Text {
+                  text: "HISTORY"
+                  color: root.dimText
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  topPadding: Style.space(10)
+                  bottomPadding: Style.space(4)
+                  leftPadding: Style.space(10)
+                }
+
+                Repeater {
+                  model: [
+                    { icon: "󰋚", label: "Keeps the last " + root.historyLimit, value: "pinned items kept" }
+                  ]
+                  delegate: infoValueRow
                 }
 
                 Text {
@@ -1015,7 +1137,7 @@ Item {
                   delegate: Item {
                     required property var modelData
                     width: infoColumn.width
-                    height: Style.font.body + Style.space(10)
+                    height: root.rowHeight
 
                     Text {
                       anchors.left: parent.left
@@ -1040,6 +1162,42 @@ Item {
                     }
                   }
                 }
+              }
+            }
+          }
+
+          // Read-only settings row, styled like a list row (icon + label, value right).
+          Component {
+            id: infoValueRow
+            Item {
+              required property var modelData
+              width: infoColumn.width
+              height: root.rowHeight
+
+              Text {
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(10)
+                anchors.right: valueText.left
+                anchors.rightMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: parent.modelData.icon + "  " + parent.modelData.label
+                color: root.foreground
+                elide: Text.ElideRight
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.title
+              }
+
+              Text {
+                id: valueText
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: parent.modelData.value
+                color: root.dimText
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
               }
             }
           }
@@ -1275,23 +1433,20 @@ Item {
           }
         }
 
-        // Footer: clear, incognito switch, phone status; key hints below
-        Column {
+        // Footer, one row: Clear history left; Incognito switch and gear right.
+        Item {
           id: footer
           width: parent.width
-          spacing: Style.space(6)
+          implicitHeight: root.footerRowHeight + root.footerGap
+          height: implicitHeight
 
-          // Wraps onto a second line when the popup is narrow.
           Item {
+            y: root.footerGap
             width: parent.width
-            height: Math.max(footerButtons.implicitHeight, gearButton.height)
-
-          Flow {
-              id: footerButtons
-              width: parent.width - gearButton.width - Style.space(8)
-              spacing: Style.space(10)
+            height: root.footerRowHeight
 
               Rectangle {
+                anchors.left: parent.left
                 width: clearLabel.implicitWidth + Style.space(16)
                 height: root.footerRowHeight
                 radius: root.cornerRadius
@@ -1318,6 +1473,8 @@ Item {
               // Incognito on/off switch (also Ctrl+I, or right-click the bar icon).
               Rectangle {
                 id: incognitoSwitch
+                anchors.right: gearButton.left
+                anchors.rightMargin: Style.space(8)
                 width: incognitoRow.implicitWidth + Style.space(16)
                 height: root.footerRowHeight
                 radius: root.cornerRadius
@@ -1367,18 +1524,6 @@ Item {
                   onClicked: root.setPrivate(!root.privateMode, false)
                 }
               }
-
-              Text {
-                visible: root.phoneOnline && !root.fluxPaused
-                height: root.footerRowHeight
-                verticalAlignment: Text.AlignVCenter
-                textFormat: Text.PlainText
-                text: "󰄜 Phone connected via Flux"
-                color: root.dimText
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-              }
-            }
 
             // Shortcuts & settings (also F1 or Ctrl+/).
             Rectangle {

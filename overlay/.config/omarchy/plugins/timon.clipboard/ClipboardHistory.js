@@ -420,6 +420,45 @@ function fluxPhoneOnline(status) {
   return false
 }
 
+// Name of the first online paired phone, "" when none.
+function fluxPhoneName(status) {
+  if (!status || !Array.isArray(status.devices)) return ""
+  for (var i = 0; i < status.devices.length; i++) {
+    var d = status.devices[i]
+    if (d && d.paired === true && d.online === true) return String(d.name || "Phone")
+  }
+  return ""
+}
+
+// Newest clipboard sync time (unix seconds) in a Flux status, 0 when none.
+function fluxLastSync(status) {
+  if (!status || !Array.isArray(status.clipboard)) return 0
+  var t = 0
+  for (var i = 0; i < status.clipboard.length; i++) {
+    var c = status.clipboard[i]
+    if (c && Number(c.time) > t) t = Number(c.time)
+  }
+  return t
+}
+
+// "just now", "5 min ago", "2 h ago", "3 d ago", or "never".
+function agoLabel(timeSec, nowSec) {
+  if (!timeSec) return "never"
+  var d = Math.max(0, Math.floor(Number(nowSec) - Number(timeSec)))
+  if (d < 60) return "just now"
+  if (d < 3600) return Math.floor(d / 60) + " min ago"
+  if (d < 86400) return Math.floor(d / 3600) + " h ago"
+  return Math.floor(d / 86400) + " d ago"
+}
+
+// Header phone icon: "online" (phone connected), "paused" (incognito paused
+// Flux) or "" (hidden: no phone, or Flux not installed).
+function phoneIconState(fluxPresent, fluxPaused, phoneOnline) {
+  if (!fluxPresent) return ""
+  if (fluxPaused) return "paused"
+  return phoneOnline ? "online" : ""
+}
+
 // Mark the text entry `text` with an origin ("phone"); returns a new array.
 function setOrigin(history, text, origin) {
   var values = Array.isArray(history) ? history.slice() : []
@@ -480,6 +519,10 @@ if (typeof module !== "undefined") {
     popupScale: popupScale,
     fluxOrigin: fluxOrigin,
     fluxPhoneOnline: fluxPhoneOnline,
+    fluxPhoneName: fluxPhoneName,
+    fluxLastSync: fluxLastSync,
+    agoLabel: agoLabel,
+    phoneIconState: phoneIconState,
     setOrigin: setOrigin,
     kineticVelocity: kineticVelocity,
     kineticFlickVelocity: kineticFlickVelocity,

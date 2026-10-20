@@ -86,8 +86,9 @@ assert.strictEqual(act(K.Return, { shift: true }), "enter")
 assert.strictEqual(act(K.Escape), "escape")
 assert.strictEqual(act(0x33, { ctrl: true }), "slot", "Ctrl+3")
 assert.strictEqual(act(0x33, { alt: true }), "pinnedSlot", "Alt+3")
-assert.strictEqual(act(K.F, { ctrl: true }), "pin")
-assert.strictEqual(act(K.P, { ctrl: true }), "private")
+assert.strictEqual(act(K.P, { ctrl: true }), "pin", "Ctrl+P pins")
+assert.strictEqual(act(K.F, { ctrl: true }), "pin", "Ctrl+F still pins")
+assert.strictEqual(act(K.I, { ctrl: true }), "private", "Ctrl+I toggles incognito")
 assert.strictEqual(act(K.Delete), "delete", "Del removes the entry")
 assert.strictEqual(act(K.Delete, { hasSelection: true }), "", "Del with selected search text deletes the text")
 assert.strictEqual(act(K.Delete, { shift: true }), "clear")
@@ -120,7 +121,8 @@ assert.strictEqual(H.pinnedCount([{ pinned: true }, {}, { pinned: true }]), 2)
 // 2: popup scale
 assert.strictEqual(H.popupScale(1080), 1, "24in 1080p unchanged")
 assert.strictEqual(H.popupScale(1440), 1, "bigger screens unchanged")
-assert.strictEqual(H.popupScale(750), 0.8, "small laptop screen (1200x750 logical) 20% smaller")
+assert.strictEqual(H.popupScale(750), 0.85, "small laptop screen (1200x750 logical) 15% smaller")
+assert.strictEqual(H.popupScale(1000), 1000 / 1080, "in between: proportional")
 // 9: Flux origin
 {
   const st = { clipboard: [{ dir: "in", text: "hello", time: 1000 }, { dir: "out", text: "mine", time: 1000 }],
@@ -136,5 +138,13 @@ assert.strictEqual(H.popupScale(750), 0.8, "small laptop screen (1200x750 logica
   assert.strictEqual(H.displayRows(h, "", 5)[0].fromPhone, true)
   assert.strictEqual(H.addEntry(h, { type: "text", text: "hello" }, 50)[0].origin, undefined, "a local re-copy is not from the phone")
 }
+
+// 1.3.1: touchpad momentum
+assert.strictEqual(H.kineticVelocity(0, 30, 150), 200, "first delta after a pause: instant speed")
+assert.strictEqual(H.kineticVelocity(1000, 30, 200), 150, "a long pause starts over")
+assert.strictEqual(Math.round(H.kineticVelocity(3000, 20, 10)), 2600, "smoothed")
+assert.strictEqual(H.kineticFlickVelocity(2600, 16), 2600, "fingers lifted while moving: flick")
+assert.strictEqual(H.kineticFlickVelocity(2600, 200), 0, "fingers stopped before lifting: no flick")
+assert.strictEqual(H.kineticFlickVelocity(100, 10), 0, "slow drag: no flick")
 
 console.log("history tests: all passed")

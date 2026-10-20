@@ -66,7 +66,7 @@ Item {
   property string fontFamily: Style.font.menuFamily
   property int contentMargin: Style.spacing.panelPadding
   property int headerHeight: Math.max(Style.space(34), Style.font.title + Style.spacing.controlPaddingY * 2)
-  property int footerHeight: Math.max(Style.space(26), Style.font.caption + Style.spacing.controlPaddingY * 2)
+  property int footerHeight: Math.max(Style.space(26), Style.font.body + Style.spacing.controlPaddingY * 2)
   property int contentSpacing: Style.spacing.md
   // Scales with the screen's logical height: unchanged from 1080 px up,
   // 20% smaller on a small laptop screen (ClipboardHistory.popupScale).
@@ -74,7 +74,7 @@ Item {
   property int cardWidth: Math.min(Math.round(Style.space(875) * popupScale), panel.width - Style.gapsOut * 2)
   property int cardHeight: Math.min(Math.round(Style.space(640) * popupScale), panel.height - Style.gapsOut * 2)
   // Secondary text: same size and contrast as the stock Wi-Fi panel's
-  // smallest text (Style.font.caption, foreground darkened 1.4x, no opacity).
+  // smallest text (foreground darkened 1.4x, no opacity); hints use the count size (Style.font.body).
   readonly property color dimText: Qt.darker(foreground, 1.4)
   readonly property color urgent: Color.urgent
   property int rowHeight: Math.max(Style.space(50), Style.font.body + Style.font.caption + Style.spacing.rowPaddingX * 2)
@@ -221,13 +221,6 @@ Item {
     root.removeDisplayIndex(index)
   }
 
-  // Deleting what is on the clipboard right now puts the next newest entry
-  // back on it (GNOME does the same), or empties it.
-  function restoreLatest() {
-    if (root.privateMode) return
-    restoreTimer.restart()
-  }
-
   function requestClearHistory() {
     if (root.history.length === 0) return
     clearConfirm.selectedIndex = 1
@@ -256,10 +249,9 @@ Item {
   function removeDisplayIndex(index) {
     if (index < 0 || index >= displayModel.count) return
     var row = displayModel.get(index)
-    var wasCurrent = row.historyIndex === 0
+    // Only the history changes; the system clipboard is left as it is.
     root.history = ClipboardHistory.removeEntryAt(root.history, row.historyIndex)
     root.saveHistory()
-    if (wasCurrent) root.restoreLatest()
 
     if (displayModel.count <= 1) {
       root.selectedIndex = 0
@@ -518,16 +510,6 @@ Item {
     printErrors: false
     onLoaded: root.loadState(text())
     onFileChanged: reload()
-  }
-
-  // Give the history write a moment to land before the helper reads it.
-  Timer {
-    id: restoreTimer
-    interval: 250
-    onTriggered: {
-      if (root.history.length > 0) Quickshell.execDetached([root.helper, "copy", "0"])
-      else Quickshell.execDetached([root.helper, "clear"])
-    }
   }
 
   Timer {
@@ -796,6 +778,13 @@ Item {
                 clip: true
                 spacing: Style.space(4)
                 boundsBehavior: Flickable.StopAtBounds
+                flickDeceleration: 2500
+                maximumFlickVelocity: 6000
+
+                KineticScroll {
+                  flickable: resultList
+                  wheelStep: root.rowHeight * 1.5
+                }
 
                 section.property: "sectionName"
                 section.criteria: ViewSection.FullString
@@ -923,7 +912,7 @@ Item {
                           text: (row.pinned ? "Alt+" : "Ctrl+") + row.slot
                           color: Qt.darker(root.foreground, 1.5)
                           font.family: root.fontFamily
-                          font.pixelSize: Style.font.caption
+                          font.pixelSize: Style.font.body
                         }
                       }
 
@@ -1063,7 +1052,7 @@ Item {
                 text: "󰆴  Clear history"
                 color: root.foreground
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.body
               }
 
               MouseArea {
@@ -1082,7 +1071,7 @@ Item {
               text: "󰄜 Phone connected"
               color: root.dimText
               font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
+              font.pixelSize: Style.font.body
             }
           }
 
@@ -1093,11 +1082,11 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
             textFormat: Text.PlainText
-            text: "Enter paste · Ctrl+F pin · Del delete · Right-click icon: incognito"
+            text: "Enter paste · Ctrl+P pin · Del delete · Right-click icon: incognito"
             color: root.dimText
             elide: Text.ElideLeft
             font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
+            font.pixelSize: Style.font.body
           }
         }
       }

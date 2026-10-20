@@ -32,11 +32,11 @@ In the popup:
 | Alt+Enter | open (URL in browser, text in editor, image in editor) |
 | Ctrl+1…9 | paste the Nth history item (pastes when you let go of Ctrl) |
 | Alt+1…9 | paste the Nth pinned item (pastes when you let go of Alt) |
-| Ctrl+F (or the pin icon) | pin / unpin |
+| Ctrl+P (or the pin icon) | pin / unpin (Ctrl+F works too) |
 | Delete (or the trash icon) | delete the item (with search text selected: delete that text). A pinned item turns red first: press Del again within 3 s to delete it; any other key cancels |
 | Ctrl+S (or the phone icon) | send a text item to the phone (Flux, when a phone is connected) |
 | Shift+Delete | clear history (asks first; pinned items stay) |
-| Ctrl+P (or right-click the bar icon) | incognito on/off |
+| Ctrl+I (or right-click the bar icon) | incognito on/off |
 | Backspace, Ctrl+Backspace, ← →, Ctrl+Z | edit the search |
 | Ctrl+U | clear the search |
 | Shift+← → / Shift+Home End, Ctrl+A, mouse drag | select search text |
@@ -53,7 +53,10 @@ In the popup:
 - **Pinned:** shown in their own section at the top, survive "clear history"
   and the limit.
 - **Size:** the popup scales with the screen: full size from 1080 px logical
-  height up, down to 80% on small laptop screens.
+  height up, down to 85% on small laptop screens.
+- **Touchpad momentum:** a quick two-finger flick keeps the list scrolling
+  after the fingers lift and slows down, like GTK apps and browsers. Mouse
+  wheel notches scroll a fixed step.
 - **Count:** top right shows e.g. `119 items · 3 pinned` (`4 of 119 items` while
   searching).
 - **Incognito:** nothing new is saved (text or images) until you turn it
@@ -62,8 +65,9 @@ In the popup:
   (`fluxd.service`) runs, incognito stops it, so copies are not synced to
   the phone or saved in Flux's history; turning incognito off starts it
   again. The popup badge and the notification say "Flux paused". See "Flux" below.
-- **Deleting the item that is on the clipboard right now** puts the next newest
-  item back on the clipboard (or empties it), like GNOME.
+- **Deleting an item** only removes it from the history; the current
+  clipboard stays as it is, even when it holds the same text. ("Clear history"
+  still empties the clipboard if it held an unpinned item.)
 - **Skipped automatically:** copies from password managers
   (`x-kde-passwordManagerHint`, `CLIPBOARD_STATE=sensitive`), text over 4 MiB,
   images over 25 MiB.
@@ -161,6 +165,7 @@ To only switch it off and keep it installed: `omarchy plugin disable timon.clipb
 ```bash
 node tests/history.test.js     # history model: limit, pins, search, clear, key routing, count label, delete confirm, Ctrl/Alt+N, popup size, Flux origin
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/tst_searchfield.qml  # search field keys, Ctrl/Alt+N paste on release, pinned Del twice (real Qt)
+QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/tst_kinetic.qml      # wheel step, touchpad 1:1, momentum after lift-off
 bash tests/capture.test.sh     # capture: incognito, password hint, size caps, 0600/0700, import, prune
 bash tests/flux-pause.test.sh  # Flux pause/resume with a stub systemctl (never touches the real fluxd)
 ```

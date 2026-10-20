@@ -1,3 +1,15 @@
+# Test run – 2026-10-20 (1.3.1), a laptop and a desktop, Omarchy 4.0.6
+
+Automated: history tests all passed; `tst_searchfield.qml` and the new
+`tst_kinetic.qml` (wheel notch step, touchpad 1:1, flick continues after
+lift-off and stops, no flick when the fingers stopped) all passed;
+`capture.test.sh` / `flux-pause.test.sh` all ok; `omarchy plugin validate` ok.
+
+Live (opened over IPC, no synthetic input): laptop popup 15% smaller, desktop
+unchanged; hints and footer at the count's size. Real touchpad flicks were
+not performed by the test (no synthetic input); the momentum logic is covered
+by the offscreen tests.
+
 # Test run – 2026-10-20 (1.3.0), a laptop and a desktop, Omarchy 4.0.6
 
 Automated: `node tests/history.test.js` all passed; `qmltestrunner

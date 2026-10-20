@@ -286,7 +286,7 @@ var KEY = {
   Escape: 0x01000000, Return: 0x01000004, Enter: 0x01000005, Insert: 0x01000006, Delete: 0x01000007,
   Home: 0x01000010, End: 0x01000011, Left: 0x01000012, Up: 0x01000013,
   Right: 0x01000014, Down: 0x01000015, PageUp: 0x01000016, PageDown: 0x01000017,
-  A: 0x41, C: 0x43, F: 0x46, J: 0x4a, K: 0x4b, P: 0x50, S: 0x53, U: 0x55, V: 0x56, X: 0x58,
+  A: 0x41, C: 0x43, F: 0x46, I: 0x49, J: 0x4a, K: 0x4b, P: 0x50, S: 0x53, U: 0x55, V: 0x56, X: 0x58,
   Shift: 0x01000020, Control: 0x01000021, Meta: 0x01000022, Alt: 0x01000023, AltGr: 0x01001103
 }
 
@@ -301,8 +301,9 @@ function searchKeyAction(ev) {
   if (ev.ctrl && !ev.alt && key === KEY.X) return ev.hasSelection ? "cutSelection" : ""
   // Qt's own Ctrl+U would also copy the line to the clipboard; just clear.
   if (ev.ctrl && !ev.alt && key === KEY.U) return "clearSearch"
-  if (ev.ctrl && key === KEY.F) return "pin"
-  if (ev.ctrl && key === KEY.P) return "private"
+  // Ctrl+P pins (Ctrl+F still works); Ctrl+I toggles incognito.
+  if (ev.ctrl && (key === KEY.P || key === KEY.F)) return "pin"
+  if (ev.ctrl && key === KEY.I) return "private"
   if (ev.ctrl && !ev.alt && key === KEY.S) return "send"
   if (key === KEY.Delete) {
     if (ev.shift) return "clear"
@@ -357,10 +358,10 @@ function pinnedCount(history) {
 }
 
 // Popup size factor from the screen's logical height: 1.0 from 1080 px up
-// (24" 1080p monitor), down to 0.8 on small laptop screens.
+// (24" 1080p monitor), down to 0.85 on small laptop screens.
 function popupScale(logicalHeight) {
   var h = Number(logicalHeight) || 1080
-  return Math.max(0.8, Math.min(1, h / 1080))
+  return Math.max(0.85, Math.min(1, h / 1080))
 }
 
 // Flux (`flux-cli status --json`): did this text just arrive from a device?
@@ -401,6 +402,24 @@ function setOrigin(history, text, origin) {
   return values
 }
 
+// ---- touchpad momentum ------------------------------------------------------
+// Velocity (px/s) of a touchpad scroll, from its pixel deltas. A pause longer
+// than 100 ms starts over; otherwise the speed is smoothed so the last few
+// events count most. When the fingers lift (ScrollEnd) the list is flicked
+// with this speed and slows down by itself (Flickable deceleration).
+function kineticVelocity(prevVelocity, dy, dtMs) {
+  var dt = Math.max(1, Number(dtMs) || 1)
+  var instant = Number(dy) * 1000 / dt
+  if (dt > 100) return instant
+  return prevVelocity * 0.6 + instant * 0.4
+}
+
+// Flick after lift-off only if the fingers were still moving at the end.
+function kineticFlickVelocity(velocity, msSinceLastDelta) {
+  if (msSinceLastDelta > 80) return 0
+  return Math.abs(velocity) < 150 ? 0 : velocity
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     normalizeEntry: normalizeEntry,
@@ -428,6 +447,8 @@ if (typeof module !== "undefined") {
     popupScale: popupScale,
     fluxOrigin: fluxOrigin,
     fluxPhoneOnline: fluxPhoneOnline,
-    setOrigin: setOrigin
+    setOrigin: setOrigin,
+    kineticVelocity: kineticVelocity,
+    kineticFlickVelocity: kineticFlickVelocity
   }
 }

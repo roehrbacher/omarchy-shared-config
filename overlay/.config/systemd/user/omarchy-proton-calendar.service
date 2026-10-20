@@ -1,0 +1,7 @@
+[Unit]
+Description=Refresh Proton Calendar events for the clock popup
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/omarchy-proton-calendar-sync

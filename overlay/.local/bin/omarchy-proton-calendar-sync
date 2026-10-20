@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Fetch Proton Calendar "share with anyone" ICS links and expand them into
+# ~/.cache/omarchy/proton-calendar/events.json for the clock popup.
+# Links live outside any repo, one per file:
+#   ~/.config/omarchy/proton-calendar/<name>.url   (chmod 600; e.g. private.url, work.url)
+# Python deps come from pacman (python-icalendar, python-recurring-ical-events)
+# or, if missing, a private venv that this script creates on first run.
+set -euo pipefail
+VENV="$HOME/.local/share/omarchy-proton-calendar/venv"
+PY=python3
+if ! python3 -c 'import icalendar, recurring_ical_events' 2>/dev/null; then
+  if [[ ! -x $VENV/bin/python ]] || ! "$VENV/bin/python" -c 'import recurring_ical_events' 2>/dev/null; then
+    python3 -m venv "$VENV"
+    "$VENV/bin/pip" install -q --disable-pip-version-check icalendar recurring-ical-events
+  fi
+  PY="$VENV/bin/python"
+fi
+exec "$PY" - "$@" <<'PYEOF'
+import datetime as dt, json, os, pathlib, sys, tempfile, urllib.request, zoneinfo
+import icalendar, recurring_ical_events
+
+home = pathlib.Path.home()
+conf = home / ".config/omarchy/proton-calendar"
+cache = home / ".cache/omarchy/proton-calendar"
+cache.mkdir(parents=True, exist_ok=True)
+tz = zoneinfo.ZoneInfo(os.environ.get("TZ_CAL", "Europe/Vienna"))
+today = dt.date.today()
+start = (today.replace(day=1) - dt.timedelta(days=100))
+end = today + dt.timedelta(days=400)
+ORDER = {"private": 0, "work": 1}
+
+days, calendars, errors = {}, [], []
+for f in sorted(conf.glob("*.url"), key=lambda p: (ORDER.get(p.stem, 9), p.stem)):
+    name = f.stem
+    url = f.read_text().strip()
+    raw_path = cache / f"{name}.ics"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "omarchy-clock"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = r.read()
+        if b"BEGIN:VCALENDAR" not in data[:200]:
+            raise ValueError("not ICS")
+        raw_path.write_bytes(data)
+        os.chmod(raw_path, 0o600)
+    except Exception as e:  # keep last good copy
+        errors.append(f"{name}: {type(e).__name__}")
+        if not raw_path.exists():
+            continue
+        data = raw_path.read_bytes()
+    cal = icalendar.Calendar.from_ical(data)
+    calendars.append(name)
+    for ev in recurring_ical_events.of(cal).between(start, end):
+        if str(ev.get("STATUS", "")).upper() == "CANCELLED":
+            continue
+        s = ev.decoded("DTSTART")
+        e = ev.decoded("DTEND") if ev.get("DTEND") else None
+        title = str(ev.get("SUMMARY", "")) or "(no title)"
+        if isinstance(s, dt.datetime):
+            s = s.astimezone(tz) if s.tzinfo else s.replace(tzinfo=tz)
+            if e is None:
+                e = s + (ev.decoded("DURATION") if ev.get("DURATION") else dt.timedelta(0))
+            elif isinstance(e, dt.datetime):
+                e = e.astimezone(tz) if e.tzinfo else e.replace(tzinfo=tz)
+            d0, d1 = s.date(), (e - dt.timedelta(microseconds=1)).date() if e > s else s.date()
+            all_day = False
+        else:
+            if e is None or not isinstance(e, dt.date):
+                e = s + dt.timedelta(days=1)
+            d0, d1 = s, max(s, e - dt.timedelta(days=1))
+            all_day = True
+        d = d0
+        while d <= d1 and d <= end:
+            if d >= start:
+                if all_day:
+                    t = ""
+                elif d == d0:
+                    t = s.strftime("%H:%M") + ("–" + e.strftime("%H:%M") if d1 == d0 and e > s else "")
+                else:
+                    t = "…" + (e.strftime("%H:%M") if d == d1 else "")
+                    all_day = all_day
+                days.setdefault(d.isoformat(), []).append({
+                    "time": t, "title": title, "calendar": name,
+                    "allDay": all_day or (d != d0 and d != d1),
+                    "sort": "" if all_day else (s.strftime("%H:%M") if d == d0 else "00:00"),
+                })
+            d += dt.timedelta(days=1)
+
+for k in days:
+    days[k].sort(key=lambda x: (not x["allDay"], x["sort"], ORDER.get(x["calendar"], 9), x["title"]))
+    for x in days[k]:
+        x.pop("sort")
+out = {"updated": dt.datetime.now(tz).isoformat(timespec="seconds"),
+       "calendars": calendars, "errors": errors, "days": days}
+fd, tmp = tempfile.mkstemp(dir=cache)
+with os.fdopen(fd, "w") as fh:
+    json.dump(out, fh, ensure_ascii=False)
+os.chmod(tmp, 0o600)
+os.replace(tmp, cache / "events.json")
+print(f"{len(calendars)} calendars, {sum(len(v) for v in days.values())} day-entries, errors={errors}")
+PYEOF

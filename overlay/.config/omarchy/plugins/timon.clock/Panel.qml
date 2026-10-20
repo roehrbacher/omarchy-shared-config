@@ -65,6 +65,21 @@ Panel {
   // Weeks-of-your-life view (Tim Urban). Exact birthday from an optional
   // "birthDate": "YYYY-MM-DD" setting, else 1 January of the birth year.
   property bool lifeView: false
+
+  // ---- Proton Calendar (CalendarEvents.qml). The list under the month
+  //      shows the hovered day, else the clicked one, else today.
+  property string selectedKey: ""
+  property string hoverKey: ""
+  readonly property string listKey: hoverKey || selectedKey || todayKey
+  readonly property var listEvents: events.eventsFor(listKey)
+  function keyLabel(key) {
+    var m = String(key).match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!m) return ""
+    if (key === todayKey) return "TODAY"
+    return Qt.formatDate(new Date(+m[1], +m[2] - 1, +m[3], 12), "ddd d MMM").toUpperCase()
+  }
+
+  CalendarEvents { id: events }
   readonly property date birthDate: {
     var m = String(setting("birthDate", "")).match(/^(\d{4})-(\d{2})-(\d{2})$/)
     if (m) return new Date(+m[1], +m[2] - 1, +m[3], 12)
@@ -92,7 +107,7 @@ Panel {
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
   readonly property int cellWidth: Style.space(52)
-  readonly property int cellHeight: Style.space(34)
+  readonly property int cellHeight: Style.space(30)
   readonly property int cellSpacing: Style.space(2)
   readonly property int weekColumnWidth: Style.space(32)
   readonly property int gutterWidth: Style.space(14)
@@ -703,7 +718,9 @@ Panel {
                           radius: Style.cornerRadius
                           // Today is outlined, not filled: a lit-up block shouts
                           // over a grid this quiet.
-                          color: "transparent"
+                          color: modelData.key === root.listKey && !modelData.today
+                            ? Style.hoverFillFor(root.contentForeground, Commons.Color.accent)
+                            : "transparent"
                           border.width: modelData.today ? Style.spacing.hairline : 0
                           border.color: Style.normalBorderFor(root.contentForeground, Commons.Color.accent)
 
@@ -717,6 +734,34 @@ Panel {
                             font.family: root.contentFontFamily
                             font.pixelSize: Style.font.body
                             font.bold: modelData.today
+                          }
+
+                          // One dot per calendar with events that day.
+                          Row {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: Style.space(2)
+                            spacing: Style.space(2)
+                            Repeater {
+                              model: events.calendarsOn(modelData.key)
+                              Rectangle {
+                                required property var modelData
+                                width: Style.space(4); height: width; radius: width / 2
+                                color: events.colorFor(modelData)
+                              }
+                            }
+                          }
+
+                          MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onEntered: root.hoverKey = modelData.key
+                            onExited: if (root.hoverKey === modelData.key) root.hoverKey = ""
+                            onClicked: {
+                              root.selectedKey = modelData.key
+                              events.openDay(modelData.year, modelData.month, modelData.day)
+                            }
                           }
                         }
                       }
@@ -790,6 +835,89 @@ Panel {
                     foreground: root.contentForeground
                     fontFamily: root.contentFontFamily
                     onClicked: root.moveMonth(1)
+                  }
+                }
+              }
+
+              // ---- Events of the listed day, labelled by calendar.
+              Item {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: gridColumn.width
+                height: Style.space(64)
+
+                Text {
+                  id: eventsHeading
+                  textFormat: Text.PlainText
+                  text: root.keyLabel(root.listKey)
+                  color: Qt.darker(root.contentForeground, 1.5)
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.caption
+                  font.letterSpacing: 1
+                  font.bold: true
+                }
+
+                Text {
+                  anchors.top: eventsHeading.bottom
+                  anchors.topMargin: Style.space(4)
+                  visible: root.listEvents.length === 0
+                  textFormat: Text.PlainText
+                  text: events.calendars.length ? "No events" : "Calendar not synced yet"
+                  color: Qt.darker(root.contentForeground, 2.0)
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.caption
+                }
+
+                ListView {
+                  id: eventList
+                  anchors.top: eventsHeading.bottom
+                  anchors.topMargin: Style.space(4)
+                  anchors.left: parent.left
+                  anchors.right: parent.right
+                  anchors.bottom: parent.bottom
+                  clip: true
+                  interactive: false
+                  boundsBehavior: Flickable.StopAtBounds
+                  flickDeceleration: 1500
+                  model: root.listEvents
+                  spacing: Style.space(1)
+
+                  KineticScroll { flickable: eventList }
+
+                  delegate: Row {
+                    required property var modelData
+                    width: eventList.width
+                    spacing: Style.space(6)
+
+                    Rectangle {
+                      anchors.verticalCenter: parent.verticalCenter
+                      width: Style.space(5); height: width; radius: width / 2
+                      color: events.colorFor(modelData.calendar)
+                    }
+                    Text {
+                      width: Style.space(78)
+                      textFormat: Text.PlainText
+                      text: modelData.allDay && !modelData.time ? "All day" : modelData.time
+                      color: Qt.darker(root.contentForeground, 1.4)
+                      font.family: root.contentFontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+                    Text {
+                      width: eventList.width - Style.space(78) - Style.space(5) - calLabel.width - Style.space(24)
+                      textFormat: Text.PlainText
+                      elide: Text.ElideRight
+                      text: modelData.title
+                      color: root.contentForeground
+                      font.family: root.contentFontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+                    Text {
+                      id: calLabel
+                      textFormat: Text.PlainText
+                      text: events.labelFor(modelData.calendar)
+                      color: events.colorFor(modelData.calendar)
+                      font.family: root.contentFontFamily
+                      font.pixelSize: Style.font.caption
+                    }
                   }
                 }
               }

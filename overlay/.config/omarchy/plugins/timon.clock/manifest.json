@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "timon.clock",
   "name": "My Clock",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "Timon Röhrbacher",
-  "description": "Stock clock + calendar popup with a toggleable weeks-of-your-life view",
+  "description": "Stock clock + calendar popup with a weeks-of-your-life view and Proton Calendar event dots",
   "kinds": [
     "bar-widget"
   ],

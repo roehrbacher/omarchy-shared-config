@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh Proton Calendar events every 30 minutes
+
+[Timer]
+OnStartupSec=20s
+OnUnitActiveSec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

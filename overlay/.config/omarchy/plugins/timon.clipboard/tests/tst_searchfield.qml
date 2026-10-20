@@ -38,7 +38,7 @@ Item {
       } else if (action === "clearSearch") field.text = ""
       else {
         if (action !== "delete") root.armed = false
-        if (action === "slot" || action === "pinnedSlot") root.pendingSlot = action
+        if (action === "slot") root.pendingSlot = action
         if (action === "delete") {
           // Same rule as Clipboard.qml requestDelete()
           if (ClipboardHistory.deleteAction(root.rowPinned, root.armed) === "arm") action = "arm"
@@ -126,8 +126,8 @@ Item {
       keyClick(Qt.Key_Down)
       keyClick(Qt.Key_Up)
       keyClick(Qt.Key_Return)
-      keyClick(Qt.Key_3, Qt.ControlModifier)
-      compare(root.actions, ["down", "up", "enter", "slot", "paste:slot"], "Ctrl+3 pastes once Ctrl is up")
+      keyClick(Qt.Key_3, Qt.AltModifier)
+      compare(root.actions, ["down", "up", "enter", "slot", "paste:slot"], "Alt+3 pastes once Alt is up")
       compare(field.text, "x")
     }
 
@@ -140,21 +140,18 @@ Item {
       keyClick(Qt.Key_Delete)
       compare(root.actions, ["delete"], "without a selection Del deletes the entry")
     }
-    function test_ctrlN_pastes_on_modifier_release() {
-      // (QtTest presses/releases the modifier key itself around a key with modifiers.)
-      keyPress(Qt.Key_2, Qt.ControlModifier)
-      keyRelease(Qt.Key_2)
-      compare(root.actions, ["slot"], "nothing pasted while Ctrl is still held")
-      keyRelease(Qt.Key_Control)
-      compare(root.actions, ["slot", "paste:slot"], "Ctrl released: paste, same as Enter")
+    function test_ctrlN_is_not_a_shortcut() {
+      keyClick(Qt.Key_2, Qt.ControlModifier)
+      compare(root.actions, [], "Ctrl+N no longer pastes")
     }
 
-    function test_altN_pastes_pinned_on_release() {
+    function test_altN_pastes_on_release() {
+      // (QtTest presses/releases the modifier key itself around a key with modifiers.)
       keyPress(Qt.Key_1, Qt.AltModifier)
       keyRelease(Qt.Key_1)
-      compare(root.actions, ["pinnedSlot"])
+      compare(root.actions, ["slot"], "nothing pasted while Alt is still held")
       keyRelease(Qt.Key_Alt)
-      compare(root.actions, ["pinnedSlot", "paste:pinnedSlot"])
+      compare(root.actions, ["slot", "paste:slot"], "Alt released: paste, same as Enter")
     }
 
     function test_pinned_delete_needs_two_presses() {

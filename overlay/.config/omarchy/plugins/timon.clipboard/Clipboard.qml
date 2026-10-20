@@ -1,5 +1,5 @@
 // timon.clipboard: clipboard history popup with the UX of GNOME Clipboard
-// History (pinned items, incognito mode, regex search, Ctrl+N), built on
+// History (pinned items, incognito mode, regex search, Alt+N), built on
 // Omarchy's stock clipboard overlay (shell/plugins/clipboard/Clipboard.qml).
 //
 // History lives only in ~/.local/share/timon.clipboard/ (folder 0700, files
@@ -37,6 +37,10 @@ Item {
   property var history: []
   // Ctrl/Alt+N: display index waiting for the modifier release (-1 = none).
   property int pendingPasteIndex: -1
+  // Keyboard focus on a row action of the selected row (-1 = the row itself).
+  property int actionFocus: -1
+  readonly property var selectedActions: root.rowActions(root.selectedIndex, root.armedDeleteIndex, root.phoneOnline, displayModel.count)
+  readonly property string focusedAction: root.actionFocus >= 0 && root.actionFocus < selectedActions.length ? selectedActions[root.actionFocus] : ""
   // Pinned entry (history index) armed by a first Del (-1 = none).
   property int armedDeleteIndex: -1
   // Flux: a paired phone is online (checked when the popup opens).
@@ -66,7 +70,8 @@ Item {
   property string fontFamily: Style.font.menuFamily
   property int contentMargin: Style.spacing.panelPadding
   property int headerHeight: Math.max(Style.space(34), Style.font.title + Style.spacing.controlPaddingY * 2)
-  property int footerHeight: Math.max(Style.space(26), Style.font.body + Style.spacing.controlPaddingY * 2)
+  property int footerRowHeight: Math.max(Style.space(26), Style.font.body + Style.spacing.controlPaddingY * 2)
+  property int footerHeight: footerRowHeight + Style.space(4) + Style.font.body + Style.space(4)
   property int contentSpacing: Style.spacing.md
   // Scales with the screen's logical height: unchanged from 1080 px up,
   // 20% smaller on a small laptop screen (ClipboardHistory.popupScale).
@@ -335,13 +340,13 @@ Item {
     resultList.positionViewAtIndex(root.selectedIndex, ListView.Contain)
   }
 
-  // Ctrl+N: Nth history entry, Alt+N: Nth pinned entry (as shown). Pastes
-  // like Enter, but only once Ctrl/Alt is released (or after 1 s), so the
-  // paste key is not sent while the modifier is still held down.
-  function activateSlot(pinned, slot) {
+  // Alt+N: Nth row from the top (pinned first). Pastes like Enter, but only
+  // once Alt is released (or after 1 s), so the paste key is not sent while
+  // Alt is still held down.
+  function activateSlot(slot) {
     var rows = []
-    for (var i = 0; i < displayModel.count; i++) rows.push({ pinned: displayModel.get(i).pinned, slot: displayModel.get(i).slot })
-    var index = ClipboardHistory.slotRowIndex(rows, pinned, slot)
+    for (var i = 0; i < displayModel.count; i++) rows.push({ slot: displayModel.get(i).slot })
+    var index = ClipboardHistory.slotRowIndex(rows, slot)
     if (index < 0) return
     root.selectAbsolute(index)
     root.pendingPasteIndex = index
@@ -395,6 +400,27 @@ Item {
   function copyIndex(index) { root.runOnIndex(index, "copy") }
   function openIndex(index) { root.runOnIndex(index, "open") }
 
+  // Actions shown on a selected row, left to right (the extra arguments only
+  // make the binding update).
+  function rowActions(index, armedIndex, phone, count) {
+    if (index < 0 || index >= displayModel.count) return []
+    var row = displayModel.get(index)
+    if (row.historyIndex === root.armedDeleteIndex) return ["delete"]
+    var out = []
+    if (root.phoneOnline && row.entryType === "text") out.push("send")
+    out.push("pin")
+    out.push("delete")
+    return out
+  }
+
+  function runRowAction(name, index) {
+    if (name === "send") root.sendIndex(index)
+    else if (name === "pin") root.togglePinDisplayIndex(index)
+    else if (name === "delete") root.requestDelete(index)
+  }
+
+  onSelectedIndexChanged: root.actionFocus = -1
+
   // ---- search field keys --------------------------------------------------
   // The search line is a real text field. Popup shortcuts are taken first
   // (ClipboardHistory.searchKeyAction); every other key edits the text, so
@@ -409,6 +435,22 @@ Item {
     var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
     var alt = (event.modifiers & Qt.AltModifier) !== 0
     var shift = (event.modifiers & Qt.ShiftModifier) !== 0
+
+    // Left/Right walk the selected row's actions, Enter presses the focused one.
+    if (root.cursorActive && displayModel.count > 0) {
+      var step = ClipboardHistory.actionFocusStep(root.actionFocus, root.selectedActions.length, {
+        key: event.key, ctrl: ctrl, alt: alt, shift: shift,
+        atTextEnd: searchInput.cursorPosition === searchInput.text.length && searchInput.selectedText.length === 0
+      })
+      var pressed = step.trigger ? root.focusedAction : ""
+      root.actionFocus = step.focus
+      if (pressed) {
+        var keepFocus = pressed === "delete" && root.armedDeleteIndex === -1
+        root.runRowAction(pressed, root.selectedIndex)
+        if (keepFocus && root.armedDeleteIndex !== -1) root.actionFocus = 0
+      }
+      if (step.consumed) { event.accepted = true; return }
+    }
     var action = ClipboardHistory.searchKeyAction({
       key: event.key, ctrl: ctrl, alt: alt, shift: shift,
       hasSelection: searchInput.selectedText.length > 0
@@ -422,8 +464,7 @@ Item {
       if (root.filterText) root.setFilter("")
       else root.close()
       break
-    case "slot": root.activateSlot(false, digit); break
-    case "pinnedSlot": root.activateSlot(true, digit); break
+    case "slot": root.activateSlot(digit); break
     case "copySelection": root.copyText(searchInput.selectedText); break
     case "cutSelection":
       root.copyText(searchInput.selectedText)
@@ -462,7 +503,10 @@ Item {
     if (!copyProc.running) copyProc.startCopy()
   }
 
-  onFilterTextChanged: if (searchInput.text !== root.filterText) searchInput.text = root.filterText
+  onFilterTextChanged: {
+    root.actionFocus = -1
+    if (searchInput.text !== root.filterText) searchInput.text = root.filterText
+  }
 
   Process {
     id: copyProc
@@ -895,7 +939,7 @@ Item {
                           text: "From phone"
                           color: row.hasCursor ? root.selectedText : root.dimText
                           font.family: root.fontFamily
-                          font.pixelSize: Style.font.caption
+                          font.pixelSize: Style.font.body
                           font.bold: true
                         }
                       }
@@ -909,7 +953,7 @@ Item {
                           id: slotHint
                           anchors.left: parent.left
                           anchors.verticalCenter: parent.verticalCenter
-                          text: (row.pinned ? "Alt+" : "Ctrl+") + row.slot
+                          text: "Alt+" + row.slot
                           color: Qt.darker(root.foreground, 1.5)
                           font.family: root.fontFamily
                           font.pixelSize: Style.font.body
@@ -918,9 +962,9 @@ Item {
 
                       Repeater {
                         model: [
-                          { glyph: "󰄜", tip: "send", show: row.showActions && !row.armed && root.phoneOnline && row.entryType === "text" },
+                          { glyph: "󰒊", tip: "send", show: row.showActions && !row.armed && root.phoneOnline && row.entryType === "text" },
                           { glyph: row.pinned ? "󰐃" : "󰤱", tip: "pin", show: !row.armed && (row.showActions || row.pinned) },
-                          { glyph: "󰆴", tip: "delete", show: row.showActions || row.armed }
+                          { glyph: "󰩺", tip: "delete", show: row.showActions || row.armed }
                         ]
                         delegate: Rectangle {
                           required property var modelData
@@ -928,13 +972,17 @@ Item {
                           width: visible ? actions.height : 0
                           height: actions.height
                           radius: root.cornerRadius
-                          color: btnMouse.containsMouse ? Util.alpha(root.foreground, 0.10) : "transparent"
+                          readonly property bool keyFocused: row.hasCursor && root.focusedAction === modelData.tip
+                          color: keyFocused ? Util.alpha(row.armed ? "#ffffff" : root.accent, 0.28)
+                            : (btnMouse.containsMouse ? Util.alpha(root.foreground, 0.10) : "transparent")
+                          border.width: keyFocused ? Math.max(1, Style.space(2)) : 0
+                          border.color: row.armed ? "#ffffff" : root.accent
 
                           Text {
                             anchors.centerIn: parent
                             text: parent.modelData.glyph
                             color: row.armed ? "#ffffff" : (parent.modelData.tip === "pin" && row.pinned ? root.accent : (row.hasCursor ? root.selectedText : root.foreground))
-                            opacity: parent.modelData.tip === "pin" && row.pinned ? 1 : 0.75
+                            opacity: parent.keyFocused || (parent.modelData.tip === "pin" && row.pinned) ? 1 : 0.75
                             font.family: root.fontFamily
                             font.pixelSize: Style.font.title
                           }
@@ -944,11 +992,7 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                              if (parent.modelData.tip === "pin") root.togglePinDisplayIndex(row.index)
-                              else if (parent.modelData.tip === "send") root.sendIndex(row.index)
-                              else root.requestDelete(row.index)
-                            }
+                            onClicked: root.runRowAction(parent.modelData.tip, row.index)
                           }
                         }
                       }
@@ -1029,62 +1073,127 @@ Item {
           }
         }
 
-        // Footer: clear, phone status, key hints
-        Item {
+        // Footer: clear, incognito switch, phone status; key hints below
+        Column {
+          id: footer
           width: parent.width
           height: root.footerHeight
+          spacing: Style.space(4)
 
-          Row {
-            id: footerButtons
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(10)
+          Item {
+            width: parent.width
+            height: root.footerRowHeight
 
-            Rectangle {
-              width: clearLabel.implicitWidth + Style.space(16)
-              height: root.footerHeight
-              radius: root.cornerRadius
-              color: clearMouse.containsMouse ? Util.alpha(root.foreground, 0.10) : Util.alpha(root.foreground, 0.04)
+            Row {
+              id: footerButtons
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(10)
+
+              Rectangle {
+                width: clearLabel.implicitWidth + Style.space(16)
+                height: root.footerRowHeight
+                radius: root.cornerRadius
+                color: clearMouse.containsMouse ? Util.alpha(root.foreground, 0.10) : Util.alpha(root.foreground, 0.04)
+
+                Text {
+                  id: clearLabel
+                  anchors.centerIn: parent
+                  text: "󰩺  Clear history"
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                }
+
+                MouseArea {
+                  id: clearMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.requestClearHistory()
+                }
+              }
+
+              // Incognito on/off switch (also Ctrl+I, or right-click the bar icon).
+              Rectangle {
+                id: incognitoSwitch
+                width: incognitoRow.implicitWidth + Style.space(16)
+                height: root.footerRowHeight
+                radius: root.cornerRadius
+                color: incognitoMouse.containsMouse ? Util.alpha(root.foreground, 0.10)
+                  : (root.privateMode ? Util.alpha(root.accent, 0.16) : Util.alpha(root.foreground, 0.04))
+
+                Row {
+                  id: incognitoRow
+                  anchors.centerIn: parent
+                  spacing: Style.space(8)
+
+                  Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    text: "󰗹  Incognito"
+                    color: root.privateMode ? root.accent : root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                  }
+
+                  Rectangle {
+                    id: track
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.round(Style.font.body * 2.2)
+                    height: Math.round(Style.font.body * 1.2)
+                    radius: height / 2
+                    color: root.privateMode ? root.accent : Util.alpha(root.foreground, 0.22)
+
+                    Rectangle {
+                      width: track.height - Style.space(4)
+                      height: width
+                      radius: width / 2
+                      y: Style.space(2)
+                      x: root.privateMode ? track.width - width - Style.space(2) : Style.space(2)
+                      color: root.privateMode ? root.background : root.foreground
+                      Behavior on x { NumberAnimation { duration: 120 } }
+                    }
+                  }
+
+                  Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    text: root.privateMode ? "On" : "Off"
+                    color: root.privateMode ? root.accent : root.dimText
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                  }
+                }
+
+                MouseArea {
+                  id: incognitoMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.setPrivate(!root.privateMode, false)
+                }
+              }
 
               Text {
-                id: clearLabel
-                anchors.centerIn: parent
-                text: "󰆴  Clear history"
-                color: root.foreground
+                visible: root.phoneOnline && !root.fluxPaused
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: "󰄜 Phone connected via Flux"
+                color: root.dimText
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
               }
-
-              MouseArea {
-                id: clearMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.requestClearHistory()
-              }
-            }
-
-            Text {
-              visible: root.phoneOnline && !root.fluxPaused
-              anchors.verticalCenter: parent.verticalCenter
-              textFormat: Text.PlainText
-              text: "󰄜 Phone connected"
-              color: root.dimText
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
             }
           }
 
           Text {
-            anchors.right: parent.right
-            anchors.left: footerButtons.right
-            anchors.leftMargin: Style.space(12)
-            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width
             horizontalAlignment: Text.AlignRight
             textFormat: Text.PlainText
-            text: "Enter paste · Ctrl+P pin · Del delete · Right-click icon: incognito"
+            text: "Enter paste · Shift+Enter copy · Alt+1…9 quick paste · → actions · Ctrl+P pin · Del delete · Ctrl+I incognito"
             color: root.dimText
-            elide: Text.ElideLeft
+            elide: Text.ElideRight
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
           }

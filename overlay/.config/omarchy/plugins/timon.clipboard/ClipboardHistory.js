@@ -232,7 +232,7 @@ function cappedEntry(entry) {
 }
 
 // Rows for the popup: pinned entries first, then history, both newest first.
-// `slot` is the 1-based position inside its section (Ctrl+N / Alt+N).
+// `slot` is the 1-based position in display order, pinned first (Alt+N).
 function displayRows(history, query, limit) {
   var values = Array.isArray(history) ? history : []
   var max = limitOf(limit, 200)
@@ -266,11 +266,11 @@ function displayRows(history, query, limit) {
 
   var out = []
   for (var p = 0; p < pinnedRows.length && out.length < max; p++) {
-    pinnedRows[p].slot = p + 1
+    pinnedRows[p].slot = out.length + 1
     out.push(pinnedRows[p])
   }
   for (var r = 0; r < rows.length && out.length < max; r++) {
-    rows[r].slot = r + 1
+    rows[r].slot = out.length + 1
     out.push(rows[r])
   }
   return out
@@ -295,8 +295,7 @@ function searchKeyAction(ev) {
   var key = ev.key
   var digit = key >= 0x31 && key <= 0x39
   if (key === KEY.Escape) return "escape"
-  if (digit && ev.ctrl && !ev.alt) return "slot"
-  if (digit && ev.alt && !ev.ctrl) return "pinnedSlot"
+  if (digit && ev.alt && !ev.ctrl) return "slot"
   if (ev.ctrl && !ev.alt && (key === KEY.C || key === KEY.Insert)) return ev.hasSelection ? "copySelection" : ""
   if (ev.ctrl && !ev.alt && key === KEY.X) return ev.hasSelection ? "cutSelection" : ""
   // Qt's own Ctrl+U would also copy the line to the clipboard; just clear.
@@ -321,15 +320,39 @@ function searchKeyAction(ev) {
 
 // ---- v1.3 helpers -----------------------------------------------------------
 
-// Ctrl+N / Alt+N: display index of the Nth history / pinned row, or -1.
-function slotRowIndex(rows, pinned, slot) {
+// Alt+N: display index of the Nth row (top to bottom), or -1.
+function slotRowIndex(rows, slot) {
   var list = rows || []
-  for (var i = 0; i < list.length; i++)
-    if ((list[i].pinned === true) === (pinned === true) && list[i].slot === slot) return i
+  for (var i = 0; i < list.length; i++) if (list[i].slot === slot) return i
   return -1
 }
 
-// Ctrl+N / Alt+N paste fires when the held modifier is released, so the
+// Row actions (send, pin, trash) on the selected row, by keyboard.
+// focus: -1 = the row itself, else index into the visible actions.
+// ev: { key, ctrl, alt, shift, atTextEnd }. Returns { focus, consumed, trigger }.
+// Right enters the actions only when the search cursor is at the end, so
+// Left/Right keep moving the text cursor while you edit the search.
+function actionFocusStep(focus, count, ev) {
+  var f = count > 0 ? Math.min(focus, count - 1) : -1
+  var plain = !ev.ctrl && !ev.alt && !ev.shift
+  var out = { focus: f, consumed: false, trigger: false }
+  if (count <= 0) { out.focus = -1; return out }
+  if (plain && ev.key === KEY.Right) {
+    if (f >= 0) { out.focus = Math.min(count - 1, f + 1); out.consumed = true }
+    else if (ev.atTextEnd) { out.focus = 0; out.consumed = true }
+  } else if (plain && ev.key === KEY.Left) {
+    if (f >= 0) { out.focus = f - 1; out.consumed = true }
+  } else if (f >= 0 && plain && (ev.key === KEY.Return || ev.key === KEY.Enter)) {
+    out.consumed = true; out.trigger = true
+  } else if (f >= 0 && ev.key === KEY.Escape) {
+    out.focus = -1; out.consumed = true
+  } else if (f >= 0 && (ev.key === KEY.Up || ev.key === KEY.Down)) {
+    out.focus = -1
+  }
+  return out
+}
+
+// Alt+N paste fires when the held modifier is released, so the
 // synthetic Shift+Insert is not combined with a still-held Ctrl or Alt
 // (Ctrl+Shift+Insert / Alt+Shift+Insert is not "paste" in most apps).
 function isModifierKey(key) {
@@ -449,6 +472,7 @@ if (typeof module !== "undefined") {
     fluxPhoneOnline: fluxPhoneOnline,
     setOrigin: setOrigin,
     kineticVelocity: kineticVelocity,
-    kineticFlickVelocity: kineticFlickVelocity
+    kineticFlickVelocity: kineticFlickVelocity,
+    actionFocusStep: actionFocusStep
   }
 }

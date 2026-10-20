@@ -5,7 +5,7 @@
 
 Clipboard history for [Omarchy](https://omarchy.org) with the feel of
 [GNOME Clipboard History](https://github.com/SUPERCILEX/gnome-clipboard-history):
-pinned items, incognito mode, instant regex search and Ctrl+1…9 quick picks.
+pinned items, incognito mode, instant regex search and Alt+1…9 quick picks.
 
 It is built on Omarchy's own clipboard manager (`omarchy.clipboard`) and
 **replaces** it as a clone (`"clonedFrom": "omarchy.clipboard"`), so there is
@@ -28,15 +28,15 @@ In the popup:
 | type | search (case-insensitive regex; invalid regex = plain text) |
 | ↑ ↓ / Ctrl+K Ctrl+J, PgUp PgDn, Home End | move through the list |
 | Enter / click | paste into the window you came from |
-| Shift+Enter | copy only |
+| Shift+Enter | copy only (select it without pasting) |
 | Alt+Enter | open (URL in browser, text in editor, image in editor) |
-| Ctrl+1…9 | paste the Nth history item (pastes when you let go of Ctrl) |
-| Alt+1…9 | paste the Nth pinned item (pastes when you let go of Alt) |
+| Alt+1…9 | paste the Nth item from the top, pinned items first (pastes when you let go of Alt) |
+| → / ← (search cursor at the end) | move between the selected row's actions (send, pin, trash); Enter presses the focused one; Esc, ↑ or ↓ go back to the row |
 | Ctrl+P (or the pin icon) | pin / unpin (Ctrl+F works too) |
 | Delete (or the trash icon) | delete the item (with search text selected: delete that text). A pinned item turns red first: press Del again within 3 s to delete it; any other key cancels |
-| Ctrl+S (or the phone icon) | send a text item to the phone (Flux, when a phone is connected) |
+| Ctrl+S (or the send icon) | send a text item to the phone (Flux, when a phone is connected) |
 | Shift+Delete | clear history (asks first; pinned items stay) |
-| Ctrl+I (or right-click the bar icon) | incognito on/off |
+| Ctrl+I (or the Incognito switch in the footer, or right-click the bar icon) | incognito on/off |
 | Backspace, Ctrl+Backspace, ← →, Ctrl+Z | edit the search |
 | Ctrl+U | clear the search |
 | Shift+← → / Shift+Home End, Ctrl+A, mouse drag | select search text |
@@ -81,7 +81,7 @@ In the popup:
   clipboard after the popup closes.
 
 - **From phone:** with Flux, text that came from the phone gets a small
-  "From phone" label, and the footer shows "Phone connected" while a paired
+  "From phone" label, and the footer shows "Phone connected via Flux" while a paired
   phone is online.
 
 Bar icon: add `{ "id": "timon.clipboard" }` to a bar section (for example the

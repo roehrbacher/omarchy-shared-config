@@ -1,3 +1,14 @@
+# Test run – 2026-10-20 (1.3.2), a desktop (visual QA), Omarchy 4.0.6
+
+Automated: history tests all passed (Alt+N top-to-bottom slots, row-action
+keyboard focus); `tst_searchfield.qml`, `tst_kinetic.qml` passed;
+`capture.test.sh` / `flux-pause.test.sh` all ok; `omarchy plugin validate` ok.
+
+Live on the desktop, opened over IPC: footer Incognito switch (off and on),
+"Phone connected via Flux", key hints line, Alt+N hints top to bottom, and a
+keyboard-focused row action (set through a temporary debug call that was not
+committed). Keys were not pressed live (no synthetic input).
+
 # Test run – 2026-10-20 (1.3.1), a laptop and a desktop, Omarchy 4.0.6
 
 Automated: history tests all passed; `tst_searchfield.qml` and the new

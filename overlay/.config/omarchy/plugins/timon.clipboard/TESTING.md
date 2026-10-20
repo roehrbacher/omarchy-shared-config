@@ -1,4 +1,4 @@
-# Test run – 2026-10-17, Dell XPS 14, Omarchy 4.0.4
+# Test run – 2026-10-17, a laptop, Omarchy 4.0.4
 
 Automated (both pass):
 
@@ -46,7 +46,7 @@ Not tested live: Enter/click paste (Shift+Insert into the focused window) and
 the bar icon, to avoid typing into windows that were in use during the test.
 The paste path is the stock Omarchy one (`wl-copy` + `wtype` Shift+Insert).
 
-# Test run – 2026-10-17 (1.1.0: search field + bar icon), XPS laptop and gaming PC
+# Test run – 2026-10-17 (1.1.0: search field + bar icon), a laptop and a desktop
 
 Automated (all pass):
 
@@ -78,14 +78,14 @@ Live:
 |---|---|
 | `hyprctl configerrors` | empty (both machines) |
 | shell log after restart | no QML errors from timon.clipboard |
-| bar icon (`timon.clipboard` in `shell.json` right section, before audio) | present, same slot size/spacing as its neighbours (checked on a private screenshot) |
+| bar icon (`timon.clipboard` in `shell.json` right section, before audio) | present, same slot size/spacing as its neighbours (checked on a screenshot) |
 
 Not tested live: the real Ctrl+A / Ctrl+C keystrokes in the popup and the new
-history entry, because the laptop was in use and the PC was locked (no
+history entry, because the laptop was in use and the desktop was locked (no
 synthetic keys sent). To try: Super+Shift+V, type something, Ctrl+A, Ctrl+C,
 Esc → the text is on the clipboard and at the top of the history.
 
-# Test run – 2026-10-17 (1.2.0: private mode pauses Flux), XPS laptop and gaming PC
+# Test run – 2026-10-17 (1.2.0: private mode pauses Flux), a laptop and a desktop
 
 Automated (all pass):
 

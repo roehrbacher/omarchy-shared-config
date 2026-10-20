@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "timon.clipboard",
-  "name": "Clipboard History",
-  "version": "1.2.0",
+  "name": "Nice Clipboard History",
+  "version": "1.2.1",
   "author": "Timon Röhrbacher (based on Omarchy's clipboard manager)",
   "license": "MIT",
   "description": "Clipboard history with pinned items, private mode and regex search, modelled on GNOME Clipboard History",
@@ -16,7 +16,7 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Clipboard History",
+    "displayName": "Nice Clipboard History",
     "description": "Open clipboard history; shows when private mode is on",
     "category": "Utilities",
     "allowMultiple": false,

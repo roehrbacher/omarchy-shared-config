@@ -1,4 +1,7 @@
-# timon.clipboard
+# Nice Clipboard History
+
+<!-- Preview image goes here once it exists, e.g. ![Nice Clipboard History](preview.png) -->
+
 
 Clipboard history for [Omarchy](https://omarchy.org) with the feel of
 [GNOME Clipboard History](https://github.com/SUPERCILEX/gnome-clipboard-history):
@@ -49,7 +52,7 @@ In the popup:
   and the limit.
 - **Private mode:** nothing new is saved (text or images) until you turn it
   off; a banner in the popup shows it. Survives a restart.
-- **Private mode pauses Flux too:** if [Flux](https://github.com/roehrbacher/flux)
+- **Private mode pauses Flux too:** if [Flux](https://github.com/bjarneo/flux)
   (`fluxd.service`) runs, private mode stops it, so copies are not synced to
   the phone or saved in Flux's history; turning private mode off starts it
   again. The popup banner, the bar tooltip and the notification say
@@ -68,8 +71,8 @@ In the popup:
   Ctrl+C goes to `wl-copy` over stdin for the same reason, and stays on the
   clipboard after the popup closes.
 
-Bar icon: add `{ "id": "timon.clipboard" }` to a bar section (omarchy-shared-config
-puts it in the right section, before the audio icon). It uses the standard
+Bar icon: add `{ "id": "timon.clipboard" }` to a bar section (for example the
+right section, before the audio icon). It uses the standard
 fixed-width bar icon slot, so switching icons never shifts its neighbours.
 Left click opens / closes the history, right click toggles private mode, and it
 turns into the incognito icon (󰗹) while private mode is on.
@@ -107,18 +110,13 @@ IPC (for scripts): `omarchy-shell shell call timon.clipboard togglePrivate x`,
 
 ## Install
 
-In [omarchy-shared-config](https://github.com/roehrbacher/omarchy-shared-config)
-this plugin is vendored and installed by `./install.sh` (bindings in
-`hypr/shared-bindings.lua`, enabled in `shell.d/00-shared.json`). On its own:
-
 ```bash
-gh repo clone roehrbacher/omarchy-clipboard ~/.config/omarchy/plugins/timon.clipboard
+omarchy plugin add https://github.com/roehrbacher/omarchy-clipboard --enable
 ```
 
-then add to `~/.config/omarchy/shell.json` (or a `shell.d` fragment):
-`"plugins": [{ "id": "timon.clipboard" }]`, `"omarchy.clipboard"` in
-`"disabledPlugins"` and `"timon.clipboard"` in `"cloneSourceRestores"`, the
-two bindings from above to `~/.config/hypr/bindings.lua`:
+The plugin ID is `timon.clipboard`. Enabling it switches off the stock
+`omarchy.clipboard` (it is a clone of it), so only one clipboard watcher runs.
+Then add the two shortcuts to `~/.config/hypr/bindings.lua`:
 
 ```lua
 o.bind("SUPER + SHIFT + V", "Clipboard history", "omarchy-shell shell toggle timon.clipboard")
@@ -130,26 +128,22 @@ and run `omarchy restart shell`.
 ## Update
 
 ```bash
-git -C ~/.config/omarchy/plugins/timon.clipboard pull && omarchy restart shell
+omarchy plugin update timon.clipboard && omarchy restart shell
 ```
 
-(In the shared config: copy the new files into
-`overlay/.config/omarchy/plugins/timon.clipboard/`, then `./install.sh`.) The
-plugin is `keepLoaded`, so code changes need a shell restart.
+The plugin is `keepLoaded`, so code changes need a shell restart.
 
 ## Uninstall
 
 ```bash
 ~/.config/omarchy/plugins/timon.clipboard/flux-pause.sh resume   # start Flux again if private mode had paused it
-omarchy plugin disable timon.clipboard      # switches back to stock omarchy.clipboard
-rm -rf ~/.config/omarchy/plugins/timon.clipboard
-rm -rf ~/.local/share/timon.clipboard       # optional: deletes the saved history
+omarchy plugin remove timon.clipboard      # brings back the stock omarchy.clipboard
+rm -rf ~/.local/share/timon.clipboard      # optional: deletes the saved history
 omarchy restart shell
 ```
 
 Remove the two bindings too. Super+Ctrl+V then opens the stock manager again.
-With omarchy-shared-config, see "Undo" in its README instead (a `shell.d`
-rebuild would otherwise turn it back on).
+To only switch it off and keep it installed: `omarchy plugin disable timon.clipboard`.
 
 ## Tests
 

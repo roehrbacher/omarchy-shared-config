@@ -18,7 +18,8 @@ Clone plugins retired by the restore-idle hook are listed in
 ~/.local/state/omarchy-config/retired-plugins as "<clone> <stock>" lines; they
 are dropped from the result and the stock plugin is re-enabled.
 
-Live additions are kept: a bar widget or a "plugins" entry that is in the
+Live additions are kept (except a stock widget whose clone is in the
+layout, see cloned_sources): a bar widget or a "plugins" entry that is in the
 current shell.json but in no fragment (added with omarchy bar/plugin commands
 or by an app such as Flux) stays where it is, next to its live neighbours, and
 the build prints "not in repo yet: ...". Add it to a fragment to make it
@@ -132,10 +133,27 @@ def all_ids(cfg):
     return ids
 
 
+def cloned_sources(ids):
+    """Stock ids that a built widget is a clone of (manifest omarchy.clonedFrom)."""
+    out = set()
+    for wid in ids:
+        try:
+            data = json.loads((HOME / ".config/omarchy/plugins" / str(wid) / "manifest.json").read_text())
+            src = (data.get("omarchy") or {}).get("clonedFrom")
+        except (OSError, ValueError, AttributeError):
+            src = None
+        if src:
+            out.add(src)
+    return out
+
+
 def keep_live(cfg, live):
     """Put live-only bar widgets and plugin entries into cfg. Returns their ids."""
     kept = []
     built_ids = all_ids(cfg)
+    # A live stock widget whose clone is now in the layout was replaced, not
+    # added (e.g. omarchy.monitor -> timon.monitor): do not keep both.
+    built_ids |= cloned_sources(built_ids)
     for section in SECTIONS:
         entries = (live.get("bar", {}).get("layout", {}) or {}).get(section) or []
         for i, entry in enumerate(entries):

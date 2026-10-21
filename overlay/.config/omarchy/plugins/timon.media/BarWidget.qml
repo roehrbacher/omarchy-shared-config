@@ -228,18 +228,39 @@ BarWidget {
         root.popupOpen = !root.popupOpen
       }
     }
+    // Scroll = output volume, exactly like the timon.audio icon: mouse 3 % per
+    // notch, touchpad 9 px of finger travel = 1 %. Goes through timon.audio's
+    // own nudge (same sink, OSD, unmute) over IPC, coalesced so at most one
+    // qs call runs at a time.
     onWheel: function(wheel) {
-      if (!root.activePlayer) return
-      // Physical direction (see PhysicalWheel.qml for the Hyprland bug).
-      // One track per notch / per ~1 notch of touchpad travel, not per event.
-      root.wheelAcc += wheelFix.physicalDy(wheel)
-      if (root.wheelAcc >= 120) { root.wheelAcc = 0; root.runMedia("previous") }
-      else if (root.wheelAcc <= -120) { root.wheelAcc = 0; root.runMedia("next") }
+      var dy = wheelFix.physicalDy(wheel)
+      if (dy === 0) { wheel.accepted = true; return }
+      if (wheelFix.isFinger(wheel)) root.volPending += (dy / 12) / 9
+      else {
+        root.wheelAcc += dy
+        var steps = root.wheelAcc > 0 ? Math.floor(root.wheelAcc / 120) : Math.ceil(root.wheelAcc / 120)
+        root.wheelAcc -= steps * 120
+        root.volPending += steps * 3
+      }
+      root.flushVolume()
+      wheel.accepted = true
     }
 
     PhysicalWheel { id: wheelFix; handle: false }
   }
   property real wheelAcc: 0
+  property real volPending: 0
+  function flushVolume() {
+    if (nudgeProc.running || Math.abs(root.volPending) < 1) return
+    var p = Math.trunc(root.volPending)
+    root.volPending -= p
+    nudgeProc.command = ["qs", "ipc", "-p", "/usr/share/omarchy/shell", "call", "timon.audio", "nudge", String(p)]
+    nudgeProc.running = true
+  }
+  Process {
+    id: nudgeProc
+    onExited: root.flushVolume()
+  }
 
   PopupCard {
     id: popup

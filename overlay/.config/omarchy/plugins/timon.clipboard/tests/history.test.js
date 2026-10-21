@@ -190,4 +190,13 @@ assert.deepStrictEqual(H.rowActionNames(true, true, true), ["delete"], "armed de
   assert.strictEqual(st(-1, 0, K.Right).focus, -1, "no actions: nothing to focus")
 }
 
+// clear button label
+assert.strictEqual(H.clearLabelText(162, true), "󰩺  Clear history (162 items)")
+assert.strictEqual(H.clearLabelText(162, false), "󰩺  Clear history (162)")
+assert.strictEqual(H.clearLabelText(1, true), "󰩺  Clear history (1 item)")
+assert.strictEqual(H.clearLabelText(-3, false), "󰩺  Clear history (0)")
+assert.strictEqual(H.clearLabel(162, 200, 230, 24), "󰩺  Clear history (162 items)", "fits with gap")
+assert.strictEqual(H.clearLabel(162, 200, 220, 24), "󰩺  Clear history (162)", "too tight: short")
+assert.strictEqual(H.clearLabel(162, 200, 224, 24), "󰩺  Clear history (162 items)", "exact fit")
+
 console.log("history tests: all passed")

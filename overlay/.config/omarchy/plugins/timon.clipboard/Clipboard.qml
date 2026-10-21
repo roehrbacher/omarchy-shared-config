@@ -29,7 +29,7 @@ Item {
   property int selectedIndex: 0
   property bool cursorActive: false
   property bool clearConfirmOpen: false
-  // Shortcuts & settings view (gear icon in the footer, or F1 / Ctrl+/).
+  // Settings view (gear icon in the footer).
   property bool infoOpen: false
   property int infoIndex: 0
   readonly property var infoActions: ["incognito", "clear", "back", "send"]
@@ -173,7 +173,7 @@ Item {
     var k = event.key
     var n = root.infoActions.length
     if ((event.modifiers & Qt.ControlModifier) && k === Qt.Key_S) root.sendCurrentClipboard()
-    else if (k === Qt.Key_Escape || k === Qt.Key_F1 || ((event.modifiers & Qt.ControlModifier) && k === Qt.Key_Slash)) root.closeInfo()
+    else if (k === Qt.Key_Escape) root.closeInfo()
     else if (k === Qt.Key_Down || k === Qt.Key_Tab) root.infoIndex = (root.infoIndex + 1) % n
     else if (k === Qt.Key_Up || k === Qt.Key_Backtab) root.infoIndex = (root.infoIndex + n - 1) % n
     else if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) root.runInfoAction(root.infoActions[root.infoIndex])
@@ -515,11 +515,6 @@ Item {
       return
     }
     if (root.infoOpen) { root.handleInfoKey(event); return }
-    if (event.key === Qt.Key_F1 || ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Slash)) {
-      root.openInfo()
-      event.accepted = true
-      return
-    }
 
     var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
     var alt = (event.modifiers & Qt.AltModifier) !== 0
@@ -837,7 +832,7 @@ Item {
               verticalAlignment: Text.AlignVCenter
               visible: searchInput.text === ""
               textFormat: Text.PlainText
-              text: "Search clipboard… (F1 for keys)"
+              text: "Search clipboard…"
               color: root.foreground
               opacity: 0.58
               font: searchInput.font
@@ -1085,65 +1080,6 @@ Item {
                     { icon: "󰋚", label: "Keeps the last " + root.historyLimit, value: "pinned items kept" }
                   ]
                   delegate: infoValueRow
-                }
-
-                Text {
-                  text: "SHORTCUTS"
-                  color: root.dimText
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                  topPadding: Style.space(10)
-                  bottomPadding: Style.space(4)
-                  leftPadding: Style.space(10)
-                }
-
-                Repeater {
-                  model: [
-                    ["Enter", "paste"],
-                    ["Shift+Enter", "copy only"],
-                    ["Alt+Enter", "open"],
-                    ["Alt+1…9", "quick paste"],
-                    ["↑ ↓  Ctrl+K Ctrl+J", "move"],
-                    ["→ ←", "row actions"],
-                    ["Ctrl+P", "pin / unpin"],
-                    ["Del", "delete"],
-                    ["Ctrl+S", "send via Flux"],
-                    ["Shift+Del", "clear history"],
-                    ["Ctrl+I", "incognito"],
-                    ["Ctrl+U", "clear search"],
-                    ["F1  Ctrl+/", "this view"],
-                    ["Esc", "back / close"],
-                    ["Alt+V", "open from anywhere"],
-                    ["Super+Shift+Ctrl+V", "incognito from anywhere"]
-                  ]
-                  delegate: Item {
-                    required property var modelData
-                    width: infoColumn.width
-                    height: root.rowHeight
-
-                    Text {
-                      anchors.left: parent.left
-                      anchors.leftMargin: Style.space(10)
-                      anchors.verticalCenter: parent.verticalCenter
-                      textFormat: Text.PlainText
-                      text: parent.modelData[0]
-                      color: root.foreground
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.body
-                    }
-
-                    Text {
-                      anchors.right: parent.right
-                      anchors.rightMargin: Style.space(10)
-                      anchors.verticalCenter: parent.verticalCenter
-                      textFormat: Text.PlainText
-                      text: parent.modelData[1]
-                      color: root.dimText
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.body
-                    }
-                  }
                 }
               }
             }
@@ -1438,11 +1374,24 @@ Item {
                 Text {
                   id: clearLabel
                   anchors.centerIn: parent
-                  text: "󰩺  Clear history"
+                  // "Clear history (162 items)" when it fits next to the
+                  // incognito/phone/gear buttons with room to spare, else
+                  // "Clear history (162)"; see ClipboardHistory.clearLabel.
+                  text: ClipboardHistory.clearLabel(root.history.length, clearLongMetrics.advanceWidth,
+                    Math.max(0, (phoneButton.visible ? phoneButton.x : gearButton.x) - incognitoSwitch.width - Style.space(8) - Style.space(16)),
+                    Style.space(24))
                   color: root.foreground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
                 }
+
+                TextMetrics {
+                  id: clearLongMetrics
+                  font: clearLabel.font
+                  text: ClipboardHistory.clearLabelText(root.history.length, true)
+                }
+                onWidthChanged: console.debug("timon.clipboard clear label: " + clearLabel.text + " width=" + Math.round(width)
+                  + " long=" + Math.round(clearLongMetrics.advanceWidth))
 
                 MouseArea {
                   id: clearMouse
@@ -1472,7 +1421,7 @@ Item {
                   Text {
                     anchors.verticalCenter: parent.verticalCenter
                     textFormat: Text.PlainText
-                    text: "󰗹  Incognito"
+                    text: "󰗹"
                     color: root.privateMode ? root.accent : root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
@@ -1544,7 +1493,7 @@ Item {
               }
             }
 
-            // Shortcuts & settings (also F1 or Ctrl+/).
+            // Settings view.
             Rectangle {
               id: gearButton
               anchors.right: parent.right
@@ -1574,7 +1523,7 @@ Item {
 
               PanelToolTip {
                 visible: gearMouse.containsMouse
-                text: "Shortcuts & settings (F1)"
+                text: "Settings"
               }
             }
           }

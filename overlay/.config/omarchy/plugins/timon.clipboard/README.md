@@ -42,7 +42,7 @@ In the popup:
 | Shift+← → / Shift+Home End, Ctrl+A, mouse drag | select search text |
 | Ctrl+C / Ctrl+X (with search text selected) | copy / cut it to the clipboard (becomes a new history item) |
 | Ctrl+V | paste into the search |
-| F1 / Ctrl+/ (or the gear icon in the footer) | shortcuts & settings view: ↑ ↓ pick a setting, Enter toggles it, Esc goes back to the list |
+| the gear icon in the footer | settings view: ↑ ↓ pick a setting, Enter toggles it, Esc goes back to the list |
 | Esc | clear the search, then close |
 
 ## Behaviour
@@ -66,12 +66,12 @@ In the popup:
   wheel notches scroll a fixed step.
 - **Count:** top right shows e.g. `119 items` (`4 of 119 items` while
   searching).
-- **Header:** search field ("Search clipboard… (F1 for keys)") and the count.
+- **Header:** search field ("Search clipboard…") and the count.
 - **Footer (one row):** Clear history on the left; the Incognito switch, a
   phone button (only when Flux is installed) and a gear icon on the right.
   The phone button's icon and tooltip show the Flux state ("<phone> connected
   via Flux", "No phone connected", "Flux paused (incognito)", "Flux not
-  running"); clicking it closes the popup and opens Flux (`flux-cli open`). The gear (or F1) opens the shortcuts & settings
+  running"); clicking it closes the popup and opens Flux (`flux-cli open`). The gear opens the settings
   view: incognito, clear history, Flux (phone, last sync, "Send current
   clipboard" with Ctrl+S), history limit, all keys. Hovering the phone action
   of a row shows "Send via Flux".

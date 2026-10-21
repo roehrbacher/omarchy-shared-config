@@ -462,6 +462,19 @@ function phoneIconState(fluxState, phoneOnline) {
 }
 
 // Tooltip for the footer phone button.
+// Footer clear button text. long = "󰩺  Clear history (162 items)",
+// short = "󰩺  Clear history (162)".
+function clearLabelText(count, long) {
+  var n = Math.max(0, count | 0)
+  return "󰩺  Clear history (" + n + (long ? (n === 1 ? " item)" : " items)") : ")")
+}
+
+// Pick the long label only if its width plus a comfortable gap fits in the
+// free footer space; otherwise the short one.
+function clearLabel(count, longWidth, available, minGap) {
+  return clearLabelText(count, longWidth + minGap <= available)
+}
+
 function phoneTooltip(state, phoneName) {
   if (state === "online") return (phoneName || "Phone") + " connected via Flux"
   if (state === "paused") return "Flux paused (incognito)"
@@ -535,6 +548,8 @@ if (typeof module !== "undefined") {
     agoLabel: agoLabel,
     phoneIconState: phoneIconState,
     phoneTooltip: phoneTooltip,
+    clearLabelText: clearLabelText,
+    clearLabel: clearLabel,
     setOrigin: setOrigin,
     kineticVelocity: kineticVelocity,
     kineticFlickVelocity: kineticFlickVelocity,

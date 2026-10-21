@@ -35,8 +35,18 @@ WheelHandler {
     if (v !== 0) handler.flickable.flick(0, v)
   }
 
+  // Mouse wheels (also hi-res ones that report pixel deltas or 1/8 notches)
+  // never send a scroll phase; touchpads always do. So phase decides, and a
+  // wheel always moves wheelStep per full 120-unit notch.
   onWheel: function(event) {
     var now = Date.now()
+    if (event.phase === Qt.NoScrollPhase || (event.device && event.device.type === PointerDevice.Mouse)) {
+      var notches = event.angleDelta.y !== 0 ? event.angleDelta.y / 120 : event.pixelDelta.y / 120
+      if (notches === 0) return
+      handler.flickable.cancelFlick()
+      handler.scrollBy(-notches * handler.wheelStep)
+      return
+    }
     if (event.phase === Qt.ScrollEnd) { handler.touchpadEnd(now); return }
     if (event.phase === Qt.ScrollBegin) { handler.velocity = 0; handler.lastTime = now }
     if (event.pixelDelta.y !== 0) { handler.touchpadDelta(event.pixelDelta.y, now); return }

@@ -917,7 +917,7 @@ Item {
 
               KineticScroll {
                 flickable: infoFlick
-                wheelStep: root.rowHeight * 2.5
+                wheelStep: root.rowHeight * 3
               }
 
               Column {
@@ -1206,7 +1206,7 @@ Item {
 
                 KineticScroll {
                   flickable: resultList
-                  wheelStep: root.rowHeight * 2.5
+                  wheelStep: root.rowHeight * 3
                 }
 
                 section.property: "sectionName"

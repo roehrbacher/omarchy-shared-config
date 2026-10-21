@@ -138,9 +138,7 @@ command -v systemctl >/dev/null && systemctl --user daemon-reload || true
 install_packages
 post_install
 
-if command -v omarchy-shell-json-build >/dev/null || [[ -x $HOME/.local/bin/omarchy-shell-json-build ]]; then
-  "$HOME/.local/bin/omarchy-shell-json-build" --no-reload || true
-fi
+# shell.json is never built here: the live file (and its bar) belongs to Timon.
 command -v hyprctl >/dev/null && hyprctl reload >/dev/null 2>&1 || true
 gate
 command -v omarchy-restart-shell >/dev/null && omarchy-restart-shell >/dev/null 2>&1 || true

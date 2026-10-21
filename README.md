@@ -69,25 +69,24 @@ Nothing in one repo overwrites a file of the other:
 | `hypr/shared-input.lua`, `hypr/shared-bindings.lua` | shared | settings for both machines |
 | `hypr/machine-*.lua` | machine repo | that machine only |
 | `hypr/monitors.lua` | machine (PC) / stock (XPS) | screen setup |
-| `omarchy/shell.d/00-shared.json` | shared | the one top bar, same on both |
-| `omarchy/shell.d/50-<machine>.json` | machine repo | small additions (e.g. XPS battery service) |
+| `omarchy/shell.d/00-shared.json` | shared | non-bar shell settings (plugins, disabled plugins, clone restores); the `bar` block is reference only and never applied |
+| `omarchy/shell.d/50-<machine>.json` | machine repo | that machine's non-bar additions (e.g. XPS battery service) |
 | `voxtype/config.toml` | shared | dictation: Whisper large-v3-turbo q5_0, en+de, vocabulary hint, VAD, word replacements |
 | `systemd/user/voxtype.service.d/*.conf` | machine repo | which Voxtype build/GPU runs it (PC: Radeon, XPS: Arc + flash attention) |
 | `brave-flags.d/00-shared.conf` | shared | Brave flags for both machines (Wayland, keyring, extensions) |
 | `brave-flags.d/50-<machine>.conf` | machine repo (optional) | that machine's Brave flags (PC: scale 1.1) |
 | `brave-flags.conf` | generated | built from `brave-flags.d/` by `omarchy-brave-flags-build`; own flags go in `brave-flags.d/90-local.conf` |
-| `omarchy/shell.json` | generated | built from `shell.d/` by `omarchy-shell-json-build` |
+| `omarchy/shell.json` | yours (live) | never shipped or rebuilt; the bar layout and order are kept by hand |
 | `omarchy/menu.d/00-shared.jsonc` | shared | menu tweaks for both machines |
 | `omarchy/menu.d/50-<machine>.jsonc` | machine repo (optional) | that machine's menu rows |
 | `omarchy/extensions/omarchy-menu.jsonc` | generated | built from `menu.d/` + your folders by `omarchy-menu-build` |
 
-After changing a `shell.d` file run `omarchy-shell-json-build`. A widget or plugin that
-is only in the live `shell.json` (added in the UI or by an app like Flux) is kept in
-place and listed as "not in repo yet"; add it to a fragment, or drop it with
-`--drop-live`. The old file is saved in `~/.local/state/omarchy-config/shell-json-backups/`. Changing the bar
-in the Omarchy UI edits `shell.json` directly; a new widget survives rebuilds,
-but copy it into a `shell.d` fragment so the other machine and a reinstall get it too.
-Reordering or setting changes made only in the UI are not kept by a rebuild.
+The repos do not manage the top bar. The live `shell.json` is the only source of
+truth for the bar layout and order; no install step builds or rewrites it.
+`omarchy-shell-json-build` (manual only, also used by the idle-restore hook) fills
+missing non-bar settings from `shell.d` into the live file and never touches the bar.
+A plugin install may at most append its widget at the end of a section when that is
+explicitly needed; nothing is reordered or removed.
 
 ## What is in here
 
@@ -176,12 +175,11 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
   touched). The phone link is down while private mode is on; banner, tooltip
   and notification say "Flux sync paused". Undo just this: `git revert` the
   1.2.0 commit here (turn private mode off first, or run
-  `systemctl --user start fluxd`). Bar icon alone off: remove the
-  `{ "id": "timon.clipboard" }` line from `bar.layout.right` in
-  `shell.d/00-shared.json` and run `./install.sh`.
+  `systemctl --user start fluxd`). Bar icon alone off: remove it
+  from the live bar by hand (the repo does not manage the bar).
   **Undo** (both machines): delete `overlay/.config/omarchy/plugins/timon.clipboard`,
   its four entries in `shell.d/00-shared.json` (plugins, disabledPlugins,
-  cloneSourceRestores, bar) and its block in
+  cloneSourceRestores; remove the bar icon by hand) and its block in
   `shared-bindings.lua`, add `.config/omarchy/plugins/timon.clipboard` to
   `REMOVE_PATHS`, run `./install.sh`; stock Super+Ctrl+V comes back. Before
   that, turn private mode off (or run `systemctl --user start fluxd`) so Flux

@@ -1,41 +1,23 @@
 #!/usr/bin/env python3
-"""Build ~/.config/omarchy/shell.json from ~/.config/omarchy/shell.d/*.json.
+"""Fill missing NON-bar settings into ~/.config/omarchy/shell.json from
+~/.config/omarchy/shell.d/*.json. The live shell.json is the source of truth:
 
-00-shared.json (omarchy-shared-config) is the base: the one bar layout that is
-identical on every machine. Machine repos add a fragment such as 50-xps.json
-that may only *add* to it:
+  - the bar is never touched (no layout, order, insert, replace or removal;
+    any "bar"/"barInsert"/"barReplace"/"barSettings"/"barOrder" keys in a
+    fragment are ignored with a note)
+  - plugins              entries appended when their id is missing
+  - disabledPlugins,
+    cloneSourceRestores  values added when missing
+  - other top-level keys set only when the live file does not have them
+  - retired clones (~/.local/state/omarchy-config/retired-plugins, "<clone>
+    <stock>" lines) are dropped from plugins/cloneSourceRestores and the stock
+    plugin is removed from disabledPlugins; a bar entry of the clone is left
+    alone and reported (swap it yourself)
 
-  plugins              entries appended when their id is not there yet
-  disabledPlugins      strings unioned
-  cloneSourceRestores  strings unioned
-  barReplace           {"old.id": {...new entry...}}  swap one bar widget
-  barInsert            [{"after": "some.id", "entry": {...}}]  or
-                       [{"section": "right", "entry": {...}}]  (appends)
-  barSettings          {"some.id": {"key": value}}  merge widget settings
-  barOrder             {"right": ["a.id", "b.id", ...]}  pin this machine's order:
-                       listed widgets go to that section in that order
-                       (unlisted ones of the section follow after them)
-  anything else        deep-merged
+It is not part of any install.sh. Writes only when something changes (backup
+first, waits until unlocked), never when shell.json is missing.
 
-Clone plugins retired by the restore-idle hook are listed in
-~/.local/state/omarchy-config/retired-plugins as "<clone> <stock>" lines; they
-are dropped from the result and the stock plugin is re-enabled.
-
-Live additions are kept (except a stock widget whose clone is in the
-layout, see cloned_sources): a bar widget or a "plugins" entry that is in the
-current shell.json but in no fragment (added with omarchy bar/plugin commands
-or by an app such as Flux) stays where it is, next to its live neighbours, and
-the build prints "not in repo yet: ...". Add it to a fragment to make it
-permanent, or pass --drop-live to let the build remove it.
-Live order wins: widgets that are both in the live shell.json and in the build
-keep the section and order you gave them (e.g. by dragging in the bar), with the
-build's entry content (barSettings/barReplace still apply). Only widgets that are
-new to the live bar are placed by the fragment rules, after their nearest
-built neighbour. --repo-order uses the fragment order instead.
-Each build that changes shell.json first saves the old file to
-~/.local/state/omarchy-config/shell-json-backups/ (the newest 20 are kept).
-
-Usage: omarchy-shell-json-build [--dry-run] [--no-reload] [--drop-live] [--repo-order]
+Usage: omarchy-shell-json-build [--dry-run] [--no-reload]
 """
 
 import copy
@@ -52,81 +34,32 @@ TARGET = HOME / ".config/omarchy/shell.json"
 RETIRED = HOME / ".local/state/omarchy-config/retired-plugins"
 BACKUPS = HOME / ".local/state/omarchy-config/shell-json-backups"
 KEEP_BACKUPS = 20
-SECTIONS = ("left", "center", "right")
+BAR_KEYS = {"bar", "barInsert", "barReplace", "barSettings", "barOrder"}
+LIST_KEYS = ("disabledPlugins", "cloneSourceRestores")
+KNOWN_ARGS = {"--dry-run", "--no-reload"}
 
 
-def deep_merge(base, extra):
-    for key, value in extra.items():
-        if isinstance(value, dict) and isinstance(base.get(key), dict):
-            deep_merge(base[key], value)
-        else:
-            base[key] = copy.deepcopy(value)
-
-
-def union(base, key, values):
-    current = list(base.get(key) or [])
-    for value in values or []:
-        if value not in current:
-            current.append(value)
-    if current:
-        base[key] = current
-
-
-def layout(cfg):
-    return cfg.setdefault("bar", {}).setdefault("layout", {})
-
-
-def find(cfg, widget_id):
-    for section in SECTIONS:
-        entries = layout(cfg).get(section) or []
-        for index, entry in enumerate(entries):
-            if entry.get("id") == widget_id:
-                return section, index
-    return None, -1
-
-
-def apply_fragment(cfg, frag):
-    frag = copy.deepcopy(frag)
-    for entry in frag.pop("plugins", []) or []:
-        plugins = cfg.setdefault("plugins", [])
-        if not any(p.get("id") == entry.get("id") for p in plugins):
-            plugins.append(entry)
-    union(cfg, "disabledPlugins", frag.pop("disabledPlugins", None))
-    union(cfg, "cloneSourceRestores", frag.pop("cloneSourceRestores", None))
-    for old_id, entry in (frag.pop("barReplace", {}) or {}).items():
-        section, index = find(cfg, old_id)
-        if section:
-            layout(cfg)[section][index] = entry
-    for item in frag.pop("barInsert", []) or []:
-        entry = item["entry"]
-        if find(cfg, entry.get("id"))[0]:
-            continue
-        section, index = find(cfg, item.get("after", ""))
-        if section:
-            layout(cfg)[section].insert(index + 1, entry)
-        else:
-            layout(cfg).setdefault(item.get("section", "right"), []).append(entry)
-    for section, ids in (frag.pop("barOrder", {}) or {}).items():
-        entries = {}
-        for sec in SECTIONS:
-            for e in layout(cfg).get(sec) or []:
-                entries.setdefault(e.get("id"), e)
-        moved = [entries[i] for i in ids if i in entries]
-        moved_ids = {e.get("id") for e in moved}
-        for sec in SECTIONS:
-            if sec in layout(cfg):
-                layout(cfg)[sec] = [e for e in layout(cfg)[sec] if e.get("id") not in moved_ids]
-        layout(cfg)[section] = moved + (layout(cfg).get(section) or [])
-    for widget_id, settings in (frag.pop("barSettings", {}) or {}).items():
-        section, index = find(cfg, widget_id)
-        if section:
-            layout(cfg)[section][index].update(settings)
-    deep_merge(cfg, frag)
+def fill(cfg, frag, ignored):
+    for key, value in frag.items():
+        if key in BAR_KEYS:
+            ignored.add(key)
+        elif key == "plugins":
+            have = {p.get("id") for p in cfg.get("plugins", []) if isinstance(p, dict)}
+            for entry in value or []:
+                if entry.get("id") not in have:
+                    cfg.setdefault("plugins", []).append(copy.deepcopy(entry))
+                    have.add(entry.get("id"))
+        elif key in LIST_KEYS:
+            cur = cfg.setdefault(key, [])
+            cur.extend(v for v in value or [] if v not in cur)
+        elif key not in cfg:
+            cfg[key] = copy.deepcopy(value)
 
 
 def apply_retired(cfg):
+    notes = []
     if not RETIRED.is_file():
-        return
+        return notes
     for line in RETIRED.read_text().splitlines():
         parts = line.split()
         if len(parts) != 2:
@@ -134,192 +67,70 @@ def apply_retired(cfg):
         clone, stock = parts
         cfg["plugins"] = [p for p in cfg.get("plugins", []) if p.get("id") != clone]
         for key, drop in (("cloneSourceRestores", clone), ("disabledPlugins", stock)):
-            values = [v for v in cfg.get(key, []) if v != drop]
-            if values:
-                cfg[key] = values
-            else:
-                cfg.pop(key, None)
-        for section in SECTIONS:
-            for entry in layout(cfg).get(section) or []:
-                if entry.get("id") == clone:
-                    entry["id"] = stock
-
-
-def all_ids(cfg):
-    ids = set()
-    for section in SECTIONS:
-        ids.update(e.get("id") for e in layout(cfg).get(section) or [])
-    return ids
-
-
-def cloned_sources(ids):
-    """Stock ids that a built widget is a clone of (manifest omarchy.clonedFrom)."""
-    out = set()
-    for wid in ids:
-        try:
-            data = json.loads((HOME / ".config/omarchy/plugins" / str(wid) / "manifest.json").read_text())
-            src = (data.get("omarchy") or {}).get("clonedFrom")
-        except (OSError, ValueError, AttributeError):
-            src = None
-        if src:
-            out.add(src)
-    return out
-
-
-def keep_live(cfg, live):
-    """Put live-only bar widgets and plugin entries into cfg. Returns their ids."""
-    kept = []
-    built_ids = all_ids(cfg)
-    # A live stock widget whose clone is now in the layout was replaced, not
-    # added (e.g. omarchy.monitor -> timon.monitor): do not keep both.
-    built_ids |= cloned_sources(built_ids)
-    for section in SECTIONS:
-        entries = (live.get("bar", {}).get("layout", {}) or {}).get(section) or []
-        for i, entry in enumerate(entries):
-            wid = entry.get("id") if isinstance(entry, dict) else None
-            if not wid or wid in built_ids:
-                continue
-            target = layout(cfg).setdefault(section, [])
-            pos = 0
-            # After the nearest live neighbour on the left that the build has.
-            for prev in reversed(entries[:i]):
-                ids = [e.get("id") for e in target]
-                if prev.get("id") in ids:
-                    pos = ids.index(prev.get("id")) + 1
-                    break
-            target.insert(pos, copy.deepcopy(entry))
-            built_ids.add(wid)
-            kept.append(wid)
-    have = {p.get("id") for p in cfg.get("plugins", [])}
-    for entry in live.get("plugins") or []:
-        pid = entry.get("id") if isinstance(entry, dict) else None
-        if pid and pid not in have and pid not in kept:
-            cfg.setdefault("plugins", []).append(copy.deepcopy(entry))
-            have.add(pid)
-            kept.append(pid)
-    return kept
-
-
-def keep_live_order(cfg, live):
-    """Re-order cfg's bar like the live bar. Widgets only in cfg (new) go after
-    their nearest left neighbour from the build. Returns the moved/new ids."""
-    live_lay = (live.get("bar", {}) or {}).get("layout", {}) or {}
-    built = {}
-    for section in SECTIONS:
-        for i, e in enumerate(layout(cfg).get(section) or []):
-            built[e.get("id")] = (section, i, e)
-    out = {s: [] for s in SECTIONS}
-    placed = set()
-    for section in SECTIONS:
-        for e in live_lay.get(section) or []:
-            wid = e.get("id") if isinstance(e, dict) else None
-            if wid in built and wid not in placed:
-                out[section].append(built[wid][2])
-                placed.add(wid)
-    new = []
-    for section in SECTIONS:
-        entries = layout(cfg).get(section) or []
-        for i, e in enumerate(entries):
-            wid = e.get("id")
-            if wid in placed:
-                continue
-            dest, pos = section, 0
-            for prev in reversed(entries[:i]):
-                pid = prev.get("id")
-                hit = [(s, k) for s in SECTIONS for k, x in enumerate(out[s]) if x.get("id") == pid]
-                if hit:
-                    dest, pos = hit[0][0], hit[0][1] + 1
-                    break
-            out[dest].insert(pos, e)
-            placed.add(wid)
-            new.append(wid)
-    for section in SECTIONS:
-        if out[section] or section in layout(cfg):
-            layout(cfg)[section] = out[section]
-    return new
+            if key in cfg:
+                cfg[key] = [v for v in cfg[key] if v != drop]
+                if not cfg[key]:
+                    cfg.pop(key)
+        for entries in (cfg.get("bar", {}).get("layout", {}) or {}).values():
+            if any(isinstance(e, dict) and e.get("id") == clone for e in entries or []):
+                notes.append(f"bar still shows retired {clone}: swap it for {stock} yourself")
+    return notes
 
 
 def backup(text):
     BACKUPS.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y-%m-%d-%H%M%S")
-    (BACKUPS / f"shell-{stamp}.json").write_text(text)
+    (BACKUPS / f"shell-{time.strftime('%Y-%m-%d-%H%M%S')}.json").write_text(text)
     for old in sorted(BACKUPS.glob("shell-*.json"))[:-KEEP_BACKUPS]:
         old.unlink()
 
 
 def wait_unlocked():
-    """The shell reloads on every shell.json write; never do that while locked."""
-    gate = Path(__file__).resolve().parent / "omarchy-safe-gate"
-    if not gate.is_file():
-        gate = HOME / ".local/bin/omarchy-safe-gate"
+    gate = HOME / ".local/bin/omarchy-safe-gate"
     if not gate.is_file():
         return True
     return subprocess.run([str(gate), "--lock-only", "--max", "600"]).returncode == 0
 
 
-KNOWN_ARGS = {"--dry-run", "--no-reload", "--drop-live", "--repo-order"}
-
-
 def main(argv):
-    if any(a in ("-h", "--help", "help") for a in argv) or set(argv) - KNOWN_ARGS:
+    if set(argv) - KNOWN_ARGS:
         bad = sorted(set(argv) - KNOWN_ARGS - {"-h", "--help", "help"})
         if bad:
-            print("unknown argument(s): " + " ".join(bad) + " (nothing was built)", file=sys.stderr)
+            print("unknown argument(s): " + " ".join(bad) + " (nothing was changed)", file=sys.stderr)
         print(__doc__)
-        return 0 if not bad else 2
-    dry = "--dry-run" in argv
-    reload = "--no-reload" not in argv
-    drop_live = "--drop-live" in argv
-    repo_order = "--repo-order" in argv
-    base = FRAG_DIR / "00-shared.json"
-    if not base.is_file():
-        print(f"{base} is missing: install omarchy-shared-config first. shell.json left alone.",
-              file=sys.stderr)
+        return 2 if bad else 0
+    if not TARGET.is_file():
+        print(f"{TARGET} is missing: nothing to fill (the shell creates it).", file=sys.stderr)
         return 1
-    frags = [base] + sorted(p for p in FRAG_DIR.glob("*.json") if p.name != base.name)
-    cfg = json.loads(frags[0].read_text())
-    for path in frags[1:]:
-        apply_fragment(cfg, json.loads(path.read_text()))
-    live_text = TARGET.read_text() if TARGET.is_file() else ""
-    if live_text and not repo_order:
-        try:
-            new = keep_live_order(cfg, json.loads(live_text))
-            if new:
-                print("new in the bar (placed by the repo rules): " + ", ".join(new), file=sys.stderr)
-        except (ValueError, AttributeError):
-            print(f"{TARGET} is not valid JSON; repo order used", file=sys.stderr)
-    if live_text and not drop_live:
-        try:
-            kept = keep_live(cfg, json.loads(live_text))
-        except (ValueError, AttributeError):
-            kept = []
-            print(f"{TARGET} is not valid JSON; live widgets not kept", file=sys.stderr)
-        if kept:
-            print("not in repo yet (kept from the live shell.json): " + ", ".join(kept),
-                  file=sys.stderr)
-    apply_retired(cfg)
-    cfg["version"] = 1
+    live_text = TARGET.read_text()
+    cfg = json.loads(live_text)
+    bar_before = json.dumps(cfg.get("bar"), sort_keys=True)
+    ignored = set()
+    for path in sorted(FRAG_DIR.glob("*.json")):
+        fill(cfg, json.loads(path.read_text()), ignored)
+    notes = apply_retired(cfg)
+    assert json.dumps(cfg.get("bar"), sort_keys=True) == bar_before, "bar changed: refusing"
+    for n in notes:
+        print(n, file=sys.stderr)
+    if ignored:
+        print("ignored bar keys in shell.d (the live bar is yours): " + ", ".join(sorted(ignored)), file=sys.stderr)
     text = json.dumps(cfg, indent=2, ensure_ascii=False) + "\n"
-    if dry:
+    if "--dry-run" in argv:
         sys.stdout.write(text)
         return 0
-    if TARGET.is_file() and TARGET.read_text() == text:
-        print(f"{TARGET} already up to date")
+    if json.loads(live_text) == cfg:
+        print(f"{TARGET} already has everything")
         return 0
     if not wait_unlocked():
-        print(f"screen is locked: {TARGET} left alone (a reload now kills the lock screen)",
-              file=sys.stderr)
+        print(f"screen is locked: {TARGET} left alone", file=sys.stderr)
         return 75
-    if live_text:
-        backup(live_text)
+    backup(live_text)
     tmp = TARGET.with_suffix(".json.tmp")
     tmp.write_text(text)
     os.chmod(tmp, 0o600)
     tmp.replace(TARGET)
-    print(f"Wrote {TARGET} from {', '.join(p.name for p in frags)}")
-    if reload:
-        subprocess.run(["omarchy-shell", "shell", "reloadConfig"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"Filled missing settings into {TARGET}")
+    if "--no-reload" not in argv:
+        subprocess.run(["omarchy-shell", "shell", "reloadConfig"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return 0
 
 

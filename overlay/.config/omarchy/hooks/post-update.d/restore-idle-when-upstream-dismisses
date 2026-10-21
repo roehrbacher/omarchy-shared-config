@@ -11,7 +11,7 @@
 #   unsure - only one of those signs shows up -> notify once, change nothing.
 #
 # Retired clones are recorded in ~/.local/state/omarchy-config/retired-plugins
-# so install.sh / omarchy-shell-json-build do not bring them back.
+# so omarchy-shell-json-build (non-bar settings only) does not bring them back.
 
 set -uo pipefail
 
@@ -50,7 +50,7 @@ if (( signs == 2 )); then
   omarchy plugin enable "$STOCK_ID" >/dev/null 2>&1 || true
   command -v omarchy-shell-json-build >/dev/null && omarchy-shell-json-build >/dev/null 2>&1 || true
   notify "Idle clone removed" \
-    "Stock Omarchy idle now closes the screensaver on mouse input, so $CLONE_ID was retired. Remove it from omarchy-shared-config too."
+    "Stock Omarchy idle now closes the screensaver on mouse input, so $CLONE_ID was retired. If it is in your bar, swap it for $STOCK_ID yourself. Remove it from omarchy-shared-config too."
   exit 0
 fi
 

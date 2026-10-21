@@ -3,56 +3,32 @@
   "bar": {
     "position": "top",
     "transparent": false,
-    "centerAnchor": "timon.clock",
-    "layout": {
-      "left": [
-        { "id": "omarchy.menu" },
-        { "id": "omarchy.workspaces" },
-        { "id": "timon.hover-reveal" }
-      ],
-      "center": [
-        { "id": "timon.indicators" },
-        {
-          "id": "timon.clock",
-          "lifeExpectancy": 100,
-          "weekStartDay": "monday",
-          "format": "ddd d MMM HH:mm",
-          "formatAlt": "d MMMM 'W'ww yyyy",
-          "verticalFormat": "HH\n—\nmm"
-        },
-        { "id": "omarchy.keyboard-layout" },
-        { "id": "timon.media" },
-        { "id": "omarchy.system-update" }
-      ],
-      "right": [
-        { "id": "omarchy.tray" },
-        { "id": "omarchy.tailscale" },
-        { "id": "flux" },
-        { "id": "omarchy.agents" },
-        {
-          "id": "timon.grok-usage",
-          "showClaudeUsage": false,
-          "showCursorUsage": false,
-          "showGrokBotUsage": false,
-          "iconOnly": true
-        },
-        { "id": "timon.local-ai" },
-        { "id": "timon.clipboard" },
-        { "id": "timon.audio" },
-        { "id": "omarchy.bluetooth" },
-        { "id": "timon.network" },
-        { "id": "timon.monitor" },
-        { "id": "omarchy.power", "showPercentage": true },
-        { "id": "jankeesvw.notification-center" }
-      ]
-    }
+    "centerAnchor": "timon.clock"
   },
   "plugins": [
-    { "id": "timon.lock" },
-    { "id": "timon.media" },
-    { "id": "timon.idle" },
-    { "id": "timon.clipboard" }
+    {
+      "id": "timon.lock"
+    },
+    {
+      "id": "timon.media"
+    },
+    {
+      "id": "timon.idle"
+    },
+    {
+      "id": "timon.clipboard"
+    }
   ],
-  "disabledPlugins": ["omarchy.lock", "omarchy.media", "omarchy.idle", "omarchy.clipboard"],
-  "cloneSourceRestores": ["timon.lock", "timon.media", "timon.idle", "timon.clipboard"]
+  "disabledPlugins": [
+    "omarchy.lock",
+    "omarchy.media",
+    "omarchy.idle",
+    "omarchy.clipboard"
+  ],
+  "cloneSourceRestores": [
+    "timon.lock",
+    "timon.media",
+    "timon.idle",
+    "timon.clipboard"
+  ]
 }

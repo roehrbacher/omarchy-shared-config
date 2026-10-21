@@ -189,6 +189,16 @@ def backup(text):
         old.unlink()
 
 
+def wait_unlocked():
+    """The shell reloads on every shell.json write; never do that while locked."""
+    gate = Path(__file__).resolve().parent / "omarchy-safe-gate"
+    if not gate.is_file():
+        gate = HOME / ".local/bin/omarchy-safe-gate"
+    if not gate.is_file():
+        return True
+    return subprocess.run([str(gate), "--lock-only", "--max", "600"]).returncode == 0
+
+
 def main(argv):
     dry = "--dry-run" in argv
     reload = "--no-reload" not in argv
@@ -221,6 +231,10 @@ def main(argv):
     if TARGET.is_file() and TARGET.read_text() == text:
         print(f"{TARGET} already up to date")
         return 0
+    if not wait_unlocked():
+        print(f"screen is locked: {TARGET} left alone (a reload now kills the lock screen)",
+              file=sys.stderr)
+        return 75
     if live_text:
         backup(live_text)
     tmp = TARGET.with_suffix(".json.tmp")

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Wait until it is safe to write shell config or restart the shell/audio:
+#   - the screen is not locked (omarchy-shell `lock isLocked`)
+#   - no game is running (Steam game / Proton / Overwatch)
+#   - no input for --idle seconds (default 15)
+# Exit 0 when safe, 75 when --max seconds (default 1800) pass first.
+#   omarchy-safe-gate [--idle N] [--max N] [--lock-only] [--no-media]
+# --lock-only skips the game and idle checks; --no-media also waits until no
+# player is Playing (use before audio restarts). OMARCHY_SAFE_GATE=0 skips all.
+set -uo pipefail
+IDLE=15 MAX=1800 LOCK_ONLY=0 MEDIA=0
+while (($#)); do
+  case $1 in
+    --idle) IDLE=$2; shift ;;
+    --max) MAX=$2; shift ;;
+    --lock-only) LOCK_ONLY=1 ;;
+    --no-media) MEDIA=1 ;;
+    *) sed -n '2,10p' "$0"; exit 2 ;;
+  esac
+  shift
+done
+[[ ${OMARCHY_SAFE_GATE:-1} == 0 ]] && exit 0
+
+SHELL_PATH=/usr/share/omarchy/shell
+PROBE="$(dirname "$(readlink -f "$0")")/../share/omarchy-config/idle-gate"
+[[ -f $PROBE/shell.qml ]] || PROBE="$HOME/.local/share/omarchy-config/idle-gate"
+deadline=$((SECONDS + MAX))
+say() { echo "omarchy-safe-gate: $*" >&2; }
+
+locked() { # unlocked only when the shell answers "false"
+  [[ $(timeout 5 qs ipc -p "$SHELL_PATH" call lock isLocked 2>/dev/null) != false ]]
+}
+gaming() {
+  pgrep -f 'SteamLaunch|steam-launch-wrapper|proton |Overwatch' >/dev/null
+}
+playing() {
+  command -v playerctl >/dev/null && playerctl -a status 2>/dev/null | grep -qx Playing
+}
+wait_idle() { # 0 once idle for $IDLE s, 1 if the time runs out
+  local left=$((deadline - SECONDS))
+  ((left > 0)) || return 1
+  IDLE_SECS=$IDLE timeout "$left" qs -n -p "$PROBE" >/dev/null 2>&1
+}
+
+while ((SECONDS < deadline)); do
+  if locked; then say "screen locked, waiting"; sleep 20; continue; fi
+  if ((LOCK_ONLY)); then exit 0; fi
+  if gaming; then say "game running, waiting"; sleep 60; continue; fi
+  if ((MEDIA)) && playing; then say "media playing, waiting"; sleep 30; continue; fi
+  wait_idle || break
+  # re-check after the idle wait: the lock or a game may have started meanwhile
+  locked || gaming || { ((MEDIA)) && playing; } || exit 0
+done
+say "gave up after ${MAX}s"
+exit 75

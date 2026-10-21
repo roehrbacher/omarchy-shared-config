@@ -66,7 +66,7 @@ In the popup:
   wheel notches scroll a fixed step.
 - **Count:** top right shows e.g. `119 items` (`4 of 119 items` while
   searching).
-- **Header:** search field ("Search clipboard…") and the count.
+- **Header:** search field ("Search clipboard…"); the item count is on the Clear history button.
 - **Footer (one row):** Clear history on the left; the Incognito switch, a
   phone button (only when Flux is installed) and a gear icon on the right.
   The phone button's icon and tooltip show the Flux state ("<phone> connected

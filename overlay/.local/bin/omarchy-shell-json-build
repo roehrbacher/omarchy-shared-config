@@ -24,10 +24,15 @@ current shell.json but in no fragment (added with omarchy bar/plugin commands
 or by an app such as Flux) stays where it is, next to its live neighbours, and
 the build prints "not in repo yet: ...". Add it to a fragment to make it
 permanent, or pass --drop-live to let the build remove it.
+Live order wins: widgets that are both in the live shell.json and in the build
+keep the section and order you gave them (e.g. by dragging in the bar), with the
+build's entry content (barSettings/barReplace still apply). Only widgets that are
+new to the live bar are placed by the fragment rules, after their nearest
+built neighbour. --repo-order uses the fragment order instead.
 Each build that changes shell.json first saves the old file to
 ~/.local/state/omarchy-config/shell-json-backups/ (the newest 20 are kept).
 
-Usage: omarchy-shell-json-build [--dry-run] [--no-reload] [--drop-live]
+Usage: omarchy-shell-json-build [--dry-run] [--no-reload] [--drop-live] [--repo-order]
 """
 
 import copy
@@ -181,6 +186,45 @@ def keep_live(cfg, live):
     return kept
 
 
+def keep_live_order(cfg, live):
+    """Re-order cfg's bar like the live bar. Widgets only in cfg (new) go after
+    their nearest left neighbour from the build. Returns the moved/new ids."""
+    live_lay = (live.get("bar", {}) or {}).get("layout", {}) or {}
+    built = {}
+    for section in SECTIONS:
+        for i, e in enumerate(layout(cfg).get(section) or []):
+            built[e.get("id")] = (section, i, e)
+    out = {s: [] for s in SECTIONS}
+    placed = set()
+    for section in SECTIONS:
+        for e in live_lay.get(section) or []:
+            wid = e.get("id") if isinstance(e, dict) else None
+            if wid in built and wid not in placed:
+                out[section].append(built[wid][2])
+                placed.add(wid)
+    new = []
+    for section in SECTIONS:
+        entries = layout(cfg).get(section) or []
+        for i, e in enumerate(entries):
+            wid = e.get("id")
+            if wid in placed:
+                continue
+            dest, pos = section, 0
+            for prev in reversed(entries[:i]):
+                pid = prev.get("id")
+                hit = [(s, k) for s in SECTIONS for k, x in enumerate(out[s]) if x.get("id") == pid]
+                if hit:
+                    dest, pos = hit[0][0], hit[0][1] + 1
+                    break
+            out[dest].insert(pos, e)
+            placed.add(wid)
+            new.append(wid)
+    for section in SECTIONS:
+        if out[section] or section in layout(cfg):
+            layout(cfg)[section] = out[section]
+    return new
+
+
 def backup(text):
     BACKUPS.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y-%m-%d-%H%M%S")
@@ -203,6 +247,7 @@ def main(argv):
     dry = "--dry-run" in argv
     reload = "--no-reload" not in argv
     drop_live = "--drop-live" in argv
+    repo_order = "--repo-order" in argv
     base = FRAG_DIR / "00-shared.json"
     if not base.is_file():
         print(f"{base} is missing: install omarchy-shared-config first. shell.json left alone.",
@@ -213,6 +258,13 @@ def main(argv):
     for path in frags[1:]:
         apply_fragment(cfg, json.loads(path.read_text()))
     live_text = TARGET.read_text() if TARGET.is_file() else ""
+    if live_text and not repo_order:
+        try:
+            new = keep_live_order(cfg, json.loads(live_text))
+            if new:
+                print("new in the bar (placed by the repo rules): " + ", ".join(new), file=sys.stderr)
+        except (ValueError, AttributeError):
+            print(f"{TARGET} is not valid JSON; repo order used", file=sys.stderr)
     if live_text and not drop_live:
         try:
             kept = keep_live(cfg, json.loads(live_text))

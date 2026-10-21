@@ -808,7 +808,7 @@ Item {
           TextInput {
             id: searchInput
             anchors.left: parent.left
-            anchors.right: incognitoBadge.visible ? incognitoBadge.left : countLabel.left
+            anchors.right: incognitoBadge.visible ? incognitoBadge.left : parent.right
             anchors.rightMargin: Style.space(12)
             anchors.top: parent.top
             anchors.bottom: parent.bottom
@@ -844,8 +844,7 @@ Item {
           Rectangle {
             id: incognitoBadge
             visible: root.privateMode
-            anchors.right: countLabel.left
-            anchors.rightMargin: Style.space(10)
+            anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             width: badgeText.implicitWidth + Style.space(12)
             height: badgeText.implicitHeight + Style.space(4)
@@ -874,17 +873,6 @@ Item {
               visible: badgeMouse.containsMouse
               text: root.fluxPaused ? "Incognito: copies not saved, Flux sync paused" : "Incognito: copies not saved"
             }
-          }
-
-          Text {
-            id: countLabel
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            textFormat: Text.PlainText
-            text: ClipboardHistory.countLabel(root.history.length, ClipboardHistory.pinnedCount(root.history), displayModel.count, root.filterText !== "")
-            color: root.dimText
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
           }
         }
 

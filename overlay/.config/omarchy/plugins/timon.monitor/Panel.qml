@@ -31,6 +31,42 @@ Panel {
   // Carry sub-notch touchpad deltas between wheel events.
   property real wheelAccumulator: 0
 
+  // ---- Auto brightness (timon): state from `omarchy-auto-brightness status` ----
+  readonly property string autoTool: Quickshell.env("HOME") + "/.local/bin/omarchy-auto-brightness"
+  property bool autoAvailable: false
+  property bool autoDragging: false
+  property var autoSt: ({ enabled: false, min: 8, max: 100, keyboard: true, mode: "not running" })
+  function autoApply(text) {
+    try { root.autoSt = JSON.parse(text); root.autoAvailable = true } catch (e) {}
+  }
+  function autoRun(args) {
+    if (autoActionProc.running) return
+    autoActionProc.command = [root.autoTool].concat(args)
+    autoActionProc.running = true
+  }
+  function autoStatusLine() {
+    var st = root.autoSt, m = st.mode || ""
+    var lux = st.lux === null || st.lux === undefined ? "" : " · " + Math.round(st.lux) + " lx"
+    if (m === "auto" && !st.offset) return "Following the light sensor" + lux
+    if (m === "auto" && st.offset) return "Following the light sensor" + lux + " · your offset " + (st.offset > 0 ? "+" : "") + st.offset + "%"
+    if (m === "walk-away dim") return "Held by the walk-away lock" + lux
+    if (m === "off") return "Off" + lux
+    if (m === "not running") return "Service not running"
+    return "Waiting (" + m + ")" + lux
+  }
+  Process { id: autoStatusProc; command: [root.autoTool, "status"]; stdout: StdioCollector { onStreamFinished: root.autoApply(text) } }
+  Process { id: autoActionProc; stdout: StdioCollector { onStreamFinished: root.autoApply(text) } }
+  Timer {
+    // Once at start (to learn whether the service exists), then only while open.
+    interval: 1500; repeat: true; triggeredOnStart: true
+    running: root.opened || !autoProbe.done
+    onTriggered: {
+      autoProbe.done = true
+      if (!autoStatusProc.running && !autoActionProc.running && !root.autoDragging) autoStatusProc.running = true
+    }
+  }
+  QtObject { id: autoProbe; property bool done: false }
+
   // Cursor model shared by keyboard and mouse. Sections:
   //   "brightness" - single slider row, selectedIndex = -1 sentinel
   //                  (mirrors Audio's slider rows). Only present if a
@@ -76,9 +112,9 @@ Panel {
   readonly property var visibleSections: {
     var list = []
     if (brightnessAvailable) list.push("brightness")
+    if (displays.length > 1) list.push("monitors")
     list.push("textsize")
     list.push("scale")
-    if (displays.length > 1) list.push("monitors")
     return list
   }
 
@@ -663,6 +699,114 @@ Panel {
             }
           }
 
+          // ---------- Auto brightness (timon) ----------
+          // Shown only where the omarchy-auto-brightness service is installed
+          // (the laptop). Talks to it through its CLI, like the old bar icon.
+          PanelSeparator {
+            visible: root.autoAvailable
+            foreground: root.bar.foreground
+          }
+
+          Column {
+            visible: root.autoAvailable
+            width: parent.width
+            spacing: Style.space(6)
+
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(autoHeader.implicitHeight, autoSwitch.implicitHeight)
+              PanelSectionHeader {
+                id: autoHeader
+                text: "AUTO BRIGHTNESS"
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              ToggleSwitch {
+                id: autoSwitch
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(6)
+                anchors.verticalCenter: parent.verticalCenter
+                checked: root.autoSt.enabled
+                busy: autoActionProc.running
+                foreground: root.bar.foreground
+                onToggled: root.autoRun([root.autoSt.enabled ? "off" : "on"])
+              }
+            }
+
+            Text {
+              width: parent.width
+              leftPadding: Style.space(6)
+              wrapMode: Text.WordWrap
+              textFormat: Text.PlainText
+              text: root.autoStatusLine()
+              color: Qt.darker(root.bar.foreground, 1.4)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            AutoSlider { width: parent.width; label: "Minimum"; key: "min"; current: root.autoSt.min }
+            AutoSlider { width: parent.width; label: "Maximum"; key: "max"; current: root.autoSt.max }
+
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(kbdLabel.implicitHeight, kbdSwitch.implicitHeight) + Style.space(4)
+              Text {
+                id: kbdLabel
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(6)
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: "Keyboard light in the dark"
+                color: root.bar.foreground
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.body
+              }
+              ToggleSwitch {
+                id: kbdSwitch
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(6)
+                anchors.verticalCenter: parent.verticalCenter
+                checked: root.autoSt.keyboard
+                busy: autoActionProc.running
+                foreground: root.bar.foreground
+                onToggled: root.autoRun(["set", "keyboard", root.autoSt.keyboard ? "off" : "on"])
+              }
+            }
+          }
+
+          // ---------- Monitors ----------
+          PanelSeparator {
+            visible: root.displays.length > 1
+            foreground: root.bar.foreground
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(10)
+            visible: root.displays.length > 1
+
+            PanelSectionHeader {
+              text: "DISPLAYS"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+            }
+
+            Repeater {
+              model: root.displays
+
+              MonitorRow {
+                required property var modelData
+                required property int index
+
+                width: panelColumn.width
+                display: modelData
+                rowIndex: index
+              }
+            }
+          }
+
           // ---------- Text size ----------
           PanelSeparator {
             foreground: root.bar.foreground
@@ -800,37 +944,6 @@ Panel {
             }
           }
 
-          // ---------- Monitors ----------
-          PanelSeparator {
-            visible: root.displays.length > 1
-            foreground: root.bar.foreground
-          }
-
-          Column {
-            width: parent.width
-            spacing: Style.space(10)
-            visible: root.displays.length > 1
-
-            PanelSectionHeader {
-              text: "DISPLAYS"
-              foreground: root.bar.foreground
-              fontFamily: root.bar.fontFamily
-            }
-
-            Repeater {
-              model: root.displays
-
-              MonitorRow {
-                required property var modelData
-                required property int index
-
-                width: panelColumn.width
-                display: modelData
-                rowIndex: index
-              }
-            }
-          }
-
           Item {
             width: parent.width
             height: Style.space(4)
@@ -934,6 +1047,34 @@ Panel {
         root.selectedIndex = monitorRow.rowIndex
       }
       onClicked: if (monitorRow.canToggle) root.toggleDisplay(monitorRow.display.name, monitorRow.display.enabled)
+    }
+  }
+  component AutoSlider: Column {
+    id: autoSlider
+    required property string label
+    required property string key
+    required property int current
+    spacing: Style.space(4)
+    Text {
+      leftPadding: Style.space(6)
+      textFormat: Text.PlainText
+      text: autoSlider.label + " " + Math.round(slider.dragging ? slider.liveValue : autoSlider.current) + "%"
+      color: root.bar.foreground
+      font.family: root.bar.fontFamily
+      font.pixelSize: Style.font.body
+    }
+    PanelSlider {
+      id: slider
+      bar: root.bar
+      x: Style.space(6)
+      width: parent.width - Style.space(12)
+      minimum: 1; maximum: 100; step: 1; integer: true
+      value: autoSlider.current
+      onDraggingChanged: root.autoDragging = dragging
+      onReleased: function(v) {
+        var n = autoSlider.key === "min" ? Math.min(v, root.autoSt.max) : Math.max(v, root.autoSt.min)
+        root.autoRun(["set", autoSlider.key, String(Math.round(n))])
+      }
     }
   }
 }

@@ -16,12 +16,20 @@ import Quickshell.Io
 //
 // Place it last inside a BarIconButton (calls the button's wheelMoved(delta)),
 // or set handle: false and call physicalDy(event) from your own handler.
+// It is a MouseArea, not a WheelHandler: the button's own MouseArea took the
+// wheel before a WheelHandler ever saw it (verified with debug logging), so
+// the flip never ran. A MouseArea stacked on top gets the wheel first; it
+// takes no buttons and no hover, so clicks and tooltips still reach the button.
 Item {
   id: pw
   anchors.fill: parent
   z: 100
 
   property bool handle: true
+  // Set true and handle fingerScroll(px) to get touchpad travel in px
+  // (positive = fingers up) instead of notch-style wheelMoved deltas.
+  property bool fingerHandled: false
+  signal fingerScroll(real px)
   property bool naturalTouchpad: false
   property bool naturalMouse: false
 
@@ -52,11 +60,19 @@ Item {
   }
   Component.onCompleted: optProc.running = true
 
-  WheelHandler {
+  MouseArea {
+    anchors.fill: parent
     enabled: pw.handle
+    acceptedButtons: Qt.NoButton
+    hoverEnabled: false
     onWheel: function(event) {
       var dy = pw.physicalDy(event)
-      if (dy !== 0) pw.parent.wheelMoved(dy)
+      if (dy === 0) { event.accepted = true; return }
+      // Touchpad: report finger travel in px (Qt's angleDelta is px * 12 for
+      // finger scrolling) so the owner can map it exactly like the swipe.
+      if (pw.fingerHandled && pw.isFinger(event)) pw.fingerScroll(dy / 12)
+      else pw.parent.wheelMoved(dy)
+      event.accepted = true
     }
   }
 }

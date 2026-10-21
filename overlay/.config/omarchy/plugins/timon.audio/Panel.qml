@@ -464,6 +464,20 @@ Panel {
     return volume
   }
 
+  // Live volume for the 4-finger swipe (hypr media-gestures.lua -> gesture-volume):
+  // same in-process PipeWire path and shell OSD as the bar wheel / popup slider.
+  IpcHandler {
+    target: "timon.audio"
+    function nudge(percent: real): void { root.nudgeVolume(percent) }
+  }
+
+  // Shared by the 4-finger swipe (IPC above) and touchpad scrolling on the icon.
+  function nudgeVolume(percent) {
+    if (!root.hasOutput || !volumeSink || !volumeSink.audio || percent === 0) return
+    if (percent > 0 && root.outputMuted) volumeSink.audio.muted = false
+    root.showVolumeOsd(root.setOutputVolume(root.outputVolume + percent / 100))
+  }
+
   function showVolumeOsd(volume) {
     if (!bar || !bar.shell) return
     bar.shell.summon("omarchy.osd", JSON.stringify({
@@ -691,12 +705,17 @@ Panel {
       var wheel = Util.wheelSteps(root.wheelAccumulator, delta)
       root.wheelAccumulator = wheel.remainder
       if (wheel.steps === 0) return
-      var volume = root.setOutputVolume(root.outputVolume + wheel.steps * 0.05)
+      // Mouse wheel: 3 % per notch.
+      var volume = root.setOutputVolume(root.outputVolume + wheel.steps * 0.03)
       root.showVolumeOsd(volume)
     }
 
-    // Natural-scroll aware wheel (see PhysicalWheel.qml).
-    PhysicalWheel {}
+    // Natural-scroll aware wheel (see PhysicalWheel.qml). Touchpad scrolling
+    // uses the 4-finger swipe's mapping: 9 px of finger travel = 1 %.
+    PhysicalWheel {
+      fingerHandled: true
+      onFingerScroll: function(px) { root.nudgeVolume(px / 9) }
+    }
   }
 
   KeyboardPanel {

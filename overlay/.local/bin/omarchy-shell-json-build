@@ -12,6 +12,9 @@ that may only *add* to it:
   barInsert            [{"after": "some.id", "entry": {...}}]  or
                        [{"section": "right", "entry": {...}}]  (appends)
   barSettings          {"some.id": {"key": value}}  merge widget settings
+  barOrder             {"right": ["a.id", "b.id", ...]}  pin this machine's order:
+                       listed widgets go to that section in that order
+                       (unlisted ones of the section follow after them)
   anything else        deep-merged
 
 Clone plugins retired by the restore-idle hook are listed in
@@ -103,6 +106,17 @@ def apply_fragment(cfg, frag):
             layout(cfg)[section].insert(index + 1, entry)
         else:
             layout(cfg).setdefault(item.get("section", "right"), []).append(entry)
+    for section, ids in (frag.pop("barOrder", {}) or {}).items():
+        entries = {}
+        for sec in SECTIONS:
+            for e in layout(cfg).get(sec) or []:
+                entries.setdefault(e.get("id"), e)
+        moved = [entries[i] for i in ids if i in entries]
+        moved_ids = {e.get("id") for e in moved}
+        for sec in SECTIONS:
+            if sec in layout(cfg):
+                layout(cfg)[sec] = [e for e in layout(cfg)[sec] if e.get("id") not in moved_ids]
+        layout(cfg)[section] = moved + (layout(cfg).get(section) or [])
     for widget_id, settings in (frag.pop("barSettings", {}) or {}).items():
         section, index = find(cfg, widget_id)
         if section:
@@ -243,7 +257,16 @@ def wait_unlocked():
     return subprocess.run([str(gate), "--lock-only", "--max", "600"]).returncode == 0
 
 
+KNOWN_ARGS = {"--dry-run", "--no-reload", "--drop-live", "--repo-order"}
+
+
 def main(argv):
+    if any(a in ("-h", "--help", "help") for a in argv) or set(argv) - KNOWN_ARGS:
+        bad = sorted(set(argv) - KNOWN_ARGS - {"-h", "--help", "help"})
+        if bad:
+            print("unknown argument(s): " + " ".join(bad) + " (nothing was built)", file=sys.stderr)
+        print(__doc__)
+        return 0 if not bad else 2
     dry = "--dry-run" in argv
     reload = "--no-reload" not in argv
     drop_live = "--drop-live" in argv

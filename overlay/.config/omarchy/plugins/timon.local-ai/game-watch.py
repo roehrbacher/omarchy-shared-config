@@ -282,7 +282,7 @@ class Competition:
                     self.ram_since = now
             elif avail > RAM_OFF:
                 self.ram_since = None
-            if self.ram_since and now - self.ram_since >= SUSTAIN:
+            if self.ram_since is not None and now - self.ram_since >= SUSTAIN:
                 app = biggest_rss(skip)
                 if app and app not in IGNORE:
                     hits.append(app)

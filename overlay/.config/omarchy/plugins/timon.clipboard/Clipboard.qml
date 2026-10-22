@@ -805,11 +805,27 @@ Item {
           width: parent.width
           height: root.headerHeight
 
-          TextInput {
-            id: searchInput
+          // Field box styled like the stock Wi-Fi password field
+          // (qs.Ui TextField: Style.controlFill + Border.controlSpec, focus state).
+          BorderSurface {
+            id: searchBox
             anchors.left: parent.left
             anchors.right: incognitoBadge.visible ? incognitoBadge.left : parent.right
-            anchors.rightMargin: Style.space(12)
+            anchors.rightMargin: incognitoBadge.visible ? Style.space(12) : 0
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            readonly property var spec: Border.controlSpec("focus", root.foreground, root.accent)
+            color: Style.controlFill(true, false, root.foreground, root.accent)
+            borderSpec: spec
+            radius: Style.cornerRadius
+          }
+
+          TextInput {
+            id: searchInput
+            anchors.left: searchBox.left
+            anchors.right: searchBox.right
+            anchors.leftMargin: Style.spacing.controlPaddingX + Border.left(searchBox.spec)
+            anchors.rightMargin: Style.spacing.controlPaddingX + Border.right(searchBox.spec)
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             verticalAlignment: TextInput.AlignVCenter

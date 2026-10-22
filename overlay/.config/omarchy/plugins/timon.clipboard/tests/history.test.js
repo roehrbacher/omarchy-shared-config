@@ -18,9 +18,15 @@ h = H.addEntry(h, { type: "text", text: "five" }, 3)
 assert.ok(h.some(e => e.text === "two" && e.pinned), "pinned survives the limit")
 assert.strictEqual(h.filter(e => !e.pinned).length, 3, "limit counts unpinned only")
 
-h = H.addEntry(h, { type: "text", text: "two" }, 3)
-assert.strictEqual(h[0].text, "two")
-assert.strictEqual(h[0].pinned, true, "re-copy keeps the pin")
+{
+  const before = h.findIndex(e => e.text === "two")
+  h = H.addEntry(h, { type: "text", text: "two" }, 3)
+  assert.strictEqual(h.filter(e => e.text === "two").length, 1, "no duplicate")
+  assert.strictEqual(h.findIndex(e => e.text === "two"), before, "re-copy of a pinned entry keeps its place (drag order)")
+  assert.strictEqual(h[before].pinned, true, "re-copy keeps the pin")
+  h = H.addEntry(h, { type: "text", text: "two" }, 3) // put it on top for the next checks
+  h = [h[before]].concat(h.filter((e, i) => i !== before))
+}
 
 let rows = H.displayRows(h, "", 50)
 assert.strictEqual(rows[0].pinned, true, "pinned rows first")
@@ -200,3 +206,22 @@ assert.strictEqual(H.clearLabel(162, 200, 220, 24), "󰩺  Clear history (162)",
 assert.strictEqual(H.clearLabel(162, 200, 224, 24), "󰩺  Clear history (162 items)", "exact fit")
 
 console.log("history tests: all passed")
+
+// ---- drag reorder of pinned entries ----------------------------------------
+{
+  let g = [
+    { type: "text", text: "a", pinned: true }, { type: "text", text: "x" },
+    { type: "text", text: "b", pinned: true }, { type: "text", text: "c", pinned: true }
+  ]
+  const r = H.reorderPinned(g, [3, 0, 2]) // drag "c" to the top
+  assert.deepStrictEqual(r.map(e => e.text), ["c", "x", "a", "b"], "pinned order follows the drag, unpinned stay")
+  const rows = H.displayRows(r, "", 9)
+  assert.deepStrictEqual(rows.map(x => x.slot + ":" + x.previewText), ["1:c", "2:a", "3:b", "4:x"], "Alt+N follows the new order")
+  assert.deepStrictEqual(H.reorderPinned(g, [1, 0, 2]).map(e => e.text), ["a", "x", "b", "c"], "refuses unpinned index")
+  assert.deepStrictEqual(H.reorderPinned(g, [0, 0, 2]).map(e => e.text), ["a", "x", "b", "c"], "refuses duplicates")
+  const saved = H.parseHistory(JSON.stringify(r))
+  assert.deepStrictEqual(saved.map(e => e.text), ["c", "x", "a", "b"], "order survives save/load")
+  const again = H.addEntry(r, { type: "text", text: "a" }, 50)
+  assert.deepStrictEqual(again.filter(e => e.pinned).map(e => e.text), ["c", "a", "b"], "re-copy keeps the dragged order")
+  console.log("drag reorder: ok")
+}

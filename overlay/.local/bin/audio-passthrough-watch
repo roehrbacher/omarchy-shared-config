@@ -71,9 +71,12 @@ start() {
 # watcher) stay silent. Replaces its previous notification (no stacking).
 PREV_HP=     # empty until the first check
 NOTIFY_ID=
-notify_switch() { # $1 = summary
+# Icon: the bar widget's own Nerd Font glyph (󰍬 mic / 󰍭 mic off), passed as
+# the shell's omarchy-glyph hint, so it is drawn as crisp text at the
+# notification's icon size in the theme colour (no bitmap to scale).
+notify_switch() { # $1 = summary, $2 = glyph
   [[ $NOTIFY == 1 ]] && command -v notify-send >/dev/null || return 0
-  local args=(-a "Audio passthrough" -i audio-headphones -t 3000 -p)
+  local args=(-a "Audio passthrough" -h "string:omarchy-glyph:$2" -t 3000 -p)
   [[ -n $NOTIFY_ID ]] && args+=(-r "$NOTIFY_ID")
   NOTIFY_ID=$(notify-send "${args[@]}" "$1" 2>/dev/null) || NOTIFY_ID=
   echo "audio-passthrough: notify: $1" >&2
@@ -85,8 +88,8 @@ update() {
   cur=$(pactl get-default-sink 2>/dev/null)
   [[ -n $SINK ]] && match_any "$cur" "$SINK" && hp=1
   if [[ -n $PREV_HP && $hp != "$PREV_HP" ]]; then
-    if [[ $hp == 1 && $ENABLED == 1 ]]; then notify_switch "Mic passthrough on · ${VOLUME%\%}%"
-    elif [[ $hp == 1 || $ENABLED == 1 ]]; then notify_switch "Mic passthrough off"
+    if [[ $hp == 1 && $ENABLED == 1 ]]; then notify_switch "Mic passthrough on · ${VOLUME%\%}%" "󰍬"
+    elif [[ $hp == 1 || $ENABLED == 1 ]]; then notify_switch "Mic passthrough off" "󰍭"
     fi
   fi
   PREV_HP=$hp

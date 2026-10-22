@@ -70,7 +70,13 @@ function addEntry(history, entry, limit) {
   var key = entryKey(normalized)
   for (var i = 0; i < values.length; i++) {
     var existing = normalizeEntry(values[i])
-    if (existing && entryKey(existing) === key && existing.pinned) normalized.pinned = true
+    // A pinned entry keeps its place, so the dragged pin order stays put.
+    if (existing && entryKey(existing) === key && existing.pinned) {
+      var kept = values.slice()
+      normalized.pinned = true
+      kept[i] = normalized
+      return pruneToLimit(kept, max)
+    }
   }
 
   var next = [normalized]
@@ -117,6 +123,22 @@ function togglePinAt(history, index) {
   if (entry.pinned) delete entry.pinned
   else entry.pinned = true
   next[target] = entry
+  return next
+}
+
+// New pinned order from a drag. `order` lists history indexes of pinned
+// entries in their new display order; those entries are put back into the
+// same history positions they used (in that order), so nothing else moves.
+function reorderPinned(history, order) {
+  var values = Array.isArray(history) ? history : []
+  var ids = Array.isArray(order) ? order.map(Number) : []
+  var slots = ids.slice().sort(function(a, b) { return a - b })
+  for (var k = 0; k < slots.length; k++) {
+    var e = values[slots[k]]
+    if (!e || e.pinned !== true || (k > 0 && slots[k] === slots[k - 1])) return values.slice()
+  }
+  var next = values.slice()
+  for (var i = 0; i < slots.length; i++) next[slots[i]] = values[ids[i]]
   return next
 }
 
@@ -525,6 +547,7 @@ if (typeof module !== "undefined") {
     pruneToLimit: pruneToLimit,
     removeEntryAt: removeEntryAt,
     togglePinAt: togglePinAt,
+    reorderPinned: reorderPinned,
     clearHistory: clearHistory,
     parseEntryJson: parseEntryJson,
     makeMatcher: makeMatcher,

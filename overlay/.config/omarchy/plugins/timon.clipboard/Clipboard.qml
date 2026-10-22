@@ -372,6 +372,53 @@ Item {
     }
   }
 
+  // ---- reorder pinned rows by dragging --------------------------------------
+  // Pressing a pinned row stops the list from scrolling under the mouse; once
+  // the pointer moves past the threshold the row follows it within the
+  // pinned section. Release saves the order (Alt+N follows it). A press
+  // without movement is still a normal click. Wheel/touchpad scroll as before.
+  property int dragRow: -1          // display index being dragged (-1 = none)
+  property bool dragMoved: false
+
+  function pinnedDisplayCount() {
+    var n = 0
+    for (var i = 0; i < displayModel.count; i++) if (displayModel.get(i).pinned) n++
+    return n
+  }
+
+  function dragMoveTo(target) {
+    if (root.dragRow < 0) return
+    var last = root.pinnedDisplayCount() - 1
+    target = Math.max(0, Math.min(last, target))
+    if (target === root.dragRow || target < 0) return
+    displayModel.move(root.dragRow, target, 1)
+    root.dragRow = target
+    root.selectedIndex = target
+    root.dragMoved = true
+  }
+
+  function dragFinish() {
+    if (root.dragRow < 0) return
+    var moved = root.dragMoved
+    var historyIndex = displayModel.get(root.dragRow).historyIndex
+    root.dragRow = -1
+    root.dragMoved = false
+    if (!moved) return
+    var order = []
+    for (var i = 0; i < displayModel.count; i++) {
+      var r = displayModel.get(i)
+      if (r.pinned) order.push(r.historyIndex)
+    }
+    root.history = ClipboardHistory.reorderPinned(root.history, order)
+    root.saveHistory()
+    root.rebuildDisplay()
+    // reorderPinned keeps each slot's history position, so the dragged
+    // entry now sits at the old index of whichever pinned row took its place.
+    for (var j = 0; j < order.length; j++) {
+      if (order[j] === historyIndex) { root.selectAbsolute(j); break }
+    }
+  }
+
   function rebuildDisplay() {
     var rows = ClipboardHistory.displayRows(root.history, root.filterText, root.displayLimit)
     var pinnedCount = 0
@@ -814,8 +861,12 @@ Item {
             anchors.rightMargin: incognitoBadge.visible ? Style.space(12) : 0
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            readonly property var spec: Border.controlSpec("focus", root.foreground, root.accent)
-            color: Style.controlFill(true, false, root.foreground, root.accent)
+            // The stock focus tokens (fill 0.08, border 0.25) barely show on the
+            // popup background, so: a clearly lighter fill and the stock
+            // normal control border (0.4), same radius and insets.
+            readonly property var spec: Border.controlSpec("normal", root.foreground, root.accent)
+            color: Util.alpha(root.foreground, 0.12)
+            Component.onCompleted: console.log("timon.clipboard 1.8.0 search box loaded, fill=" + color)
             borderSpec: spec
             radius: Style.cornerRadius
           }
@@ -1195,9 +1246,41 @@ Item {
                     id: rowMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onPositionChanged: function(mouse) { root.selectFromPointer(row.index, row, mouse) }
+                    cursorShape: root.dragRow === row.index && root.dragMoved ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+                    // Pinned rows: the press belongs to the row (drag = reorder),
+                    // so the ListView must not turn it into a scroll.
+                    preventStealing: row.pinned
+                    property real pressY: 0
+                    onPressed: function(mouse) {
+                      if (!row.pinned || root.filterText !== "") return
+                      pressY = mouse.y
+                      root.dragRow = row.index
+                      root.dragMoved = false
+                      resultList.interactive = false
+                    }
+                    onPositionChanged: function(mouse) {
+                      if (pressed && root.dragRow === row.index) {
+                        if (!root.dragMoved && Math.abs(mouse.y - pressY) < Qt.styleHints.startDragDistance) return
+                        var p = rowMouse.mapToItem(resultList.contentItem, mouse.x, mouse.y)
+                        var t = resultList.indexAt(Style.space(10), p.y)
+                        if (t < 0) t = p.y < resultList.contentItem.mapFromItem(row, 0, 0).y ? 0 : root.pinnedDisplayCount() - 1
+                        if (!root.dragMoved) root.dragMoved = true
+                        root.dragMoveTo(t)
+                        return
+                      }
+                      root.selectFromPointer(row.index, row, mouse)
+                    }
+                    onReleased: {
+                      resultList.interactive = true
+                      if (root.dragMoved) root.dragFinish()
+                      else root.dragRow = -1
+                    }
+                    onCanceled: {
+                      resultList.interactive = true
+                      root.dragFinish()
+                    }
                     onClicked: {
+                      if (root.dragMoved) return
                       root.cursorActive = true
                       root.selectedIndex = row.index
                       root.activateIndex(row.index)

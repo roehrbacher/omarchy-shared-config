@@ -321,6 +321,35 @@ function sectionName(pinned, pinnedCount, filtering, count) {
   return pinnedCount > 0 ? "History" : ""
 }
 
+// ---- links and e-mail addresses ------------------------------------------
+// Real TLDs that are not also common file extensions (so notes.txt,
+// script.sh, main.py, README.md, photo.png never count as a domain).
+var LINK_TLDS = ("com net org edu gov mil int info biz name pro io ai app dev me co tv cc xyz "
+  + "online site tech store shop blog news cloud page live link email world today space "
+  + "at de ch li eu uk fr it es nl be lu dk se no fi is pl cz sk hu si hr ro bg gr pt ie "
+  + "ee lv lt ua us ca mx br ar cl au nz jp cn kr in sg hk tw za tr il ae ru").split(" ")
+
+function hasLinkTld(host) {
+  var parts = String(host).toLowerCase().split(".")
+  return parts.length >= 2 && parts[0] !== "" && LINK_TLDS.indexOf(parts[parts.length - 1]) >= 0
+}
+
+// One trimmed single-line text that is a link or an e-mail address, else
+// null. { kind: "url" | "mail", target } where target is what xdg-open gets
+// (https:// added when there is no scheme; mailto: for addresses).
+function linkTarget(text) {
+  var s = String(text || "").trim()
+  if (s === "" || /\s/.test(s) || s.length > 2048) return null
+  var m = /^mailto:([^\s@]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+))$/i.exec(s) || /^([^\s@\/:]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+))$/.exec(s)
+  if (m) return hasLinkTld(m[2]) ? { kind: "mail", target: "mailto:" + m[1] } : null
+  if (/^https?:\/\/[^\/\s?#]+/i.test(s)) return { kind: "url", target: s }
+  var d = /^((?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,})(:\d{1,5})?([\/?#]\S*)?$/.exec(s)
+  if (!d) return null
+  if (!/^www\./i.test(d[1]) && !hasLinkTld(d[1])) return null
+  if (/^www\./i.test(d[1]) && d[1].split(".").length < 3) return null
+  return { kind: "url", target: "https://" + s }
+}
+
 // Esc in the popup: clear a search (the field stays open), else
 // collapse an open empty field, else close the popup.
 function escapeAction(filterText, expanded) {
@@ -377,9 +406,10 @@ function slotRowIndex(rows, slot) {
 // Left/Right keep moving the text cursor while you edit the search.
 // Row actions left to right: phone (send), trash, pin. Pin is last so it
 // stays in the slot where a pinned row shows it when not hovered.
-function rowActionNames(armed, phoneOnline, isText) {
+function rowActionNames(armed, phoneOnline, isText, linkKind) {
   if (armed) return ["delete"]
   var out = []
+  if (linkKind) out.push("link")
   if (phoneOnline && isText) out.push("send")
   out.push("delete")
   out.push("pin")
@@ -571,6 +601,7 @@ if (typeof module !== "undefined") {
     reorderPinned: reorderPinned,
     escapeAction: escapeAction,
     sectionName: sectionName,
+    linkTarget: linkTarget,
     searchShown: searchShown,
     clearHistory: clearHistory,
     parseEntryJson: parseEntryJson,

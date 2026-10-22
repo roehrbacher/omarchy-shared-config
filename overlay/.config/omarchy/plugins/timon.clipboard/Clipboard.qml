@@ -365,17 +365,20 @@ Item {
     if (index < 0 || index >= displayModel.count) return
     var row = displayModel.get(index)
     var historyIndex = row.historyIndex
+    // The entry jumps between sections; the cursor stays where the eye is:
+    // on the row that followed it (or preceded it, at the end).
+    var neighbour = index + 1 < displayModel.count ? index + 1 : index - 1
+    var neighbourKey = neighbour >= 0 ? root.rowKey(displayModel.get(neighbour)) : ""
     root.history = ClipboardHistory.togglePinAt(root.history, historyIndex)
     root.saveHistory()
-    root.rebuildDisplay(true)
-    // Keep the cursor on the entry that just moved between sections.
-    for (var i = 0; i < displayModel.count; i++) {
-      if (displayModel.get(i).historyIndex === historyIndex) {
-        root.selectAbsolute(i)
-        break
-      }
+    root.rebuildDisplay(true, historyIndex)
+    for (var i = 0; neighbourKey !== "" && i < displayModel.count; i++) {
+      if (root.rowKey(displayModel.get(i)) === neighbourKey) { root.selectedIndex = i; break }
     }
   }
+
+  // Stable identity of a display row (history indexes shift on delete).
+  function rowKey(r) { return r ? r.entryType + "\n" + r.path + "\n" + r.fullText : "" }
 
   // ---- reorder pinned rows by dragging --------------------------------------
   // Pressing a pinned row stops the list from scrolling under the mouse; once
@@ -426,8 +429,20 @@ Item {
 
   // keepScroll: after pin, delete, drag or a new entry, stay where the list
   // was scrolled (only nudging the cursor row into view), instead of jumping.
-  function rebuildDisplay(keepScroll) {
-    var keepY = resultList.contentY
+  function rebuildDisplay(keepScroll, movedHistoryIndex) {
+    // Anchor: the first rows on screen (not the moved one) and their offset
+    // from the top of the view; after the rebuild the same entry goes back
+    // to the same spot, so rows moving elsewhere don't shift the viewport.
+    var anchors = []
+    if (keepScroll === true) {
+      var top = resultList.indexAt(Style.space(10), resultList.contentY + 1)
+      for (var a = Math.max(0, top); a >= 0 && a < displayModel.count && anchors.length < 4; a++) {
+        var ar = displayModel.get(a)
+        if (ar.historyIndex === movedHistoryIndex) continue
+        var it = resultList.itemAtIndex(a)
+        if (it) anchors.push({ key: root.rowKey(ar), pinned: ar.pinned, offset: it.y - resultList.contentY })
+      }
+    }
     var rows = ClipboardHistory.displayRows(root.history, root.filterText, root.displayLimit)
     var pinnedCount = 0
     for (var p = 0; p < rows.length; p++) if (rows[p].pinned) pinnedCount++
@@ -436,6 +451,7 @@ Item {
     displayModel.clear()
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i]
+      var link = row.entryType === "text" ? ClipboardHistory.linkTarget(row.fullText) : null
       displayModel.append({
         entryType: row.entryType,
         fullText: row.fullText,
@@ -447,6 +463,8 @@ Item {
         slot: row.slot,
         sectionName: ClipboardHistory.sectionName(row.pinned, pinnedCount, root.filterText !== "", rows.length),
         fromPhone: row.fromPhone === true,
+        linkKind: link ? link.kind : "",
+        linkTarget: link ? link.target : "",
         historyIndex: row.index
       })
     }
@@ -457,12 +475,25 @@ Item {
 
     Qt.callLater(function() {
       if (displayModel.count === 0) return
-      if (keepScroll === true) {
-        var maxY = resultList.originY + Math.max(0, resultList.contentHeight - resultList.height)
-        resultList.contentY = Math.max(resultList.originY, Math.min(maxY, keepY))
-      }
+      if (keepScroll === true && root.restoreAnchor(anchors)) return
       resultList.positionViewAtIndex(root.selectedIndex, ListView.Contain)
     })
+  }
+
+  function restoreAnchor(anchors) {
+    for (var k = 0; k < anchors.length; k++) {
+      for (var j = 0; j < displayModel.count; j++) {
+        var r = displayModel.get(j)
+        if (r.pinned !== anchors[k].pinned || root.rowKey(r) !== anchors[k].key) continue
+        resultList.positionViewAtIndex(j, ListView.Beginning)
+        var it = resultList.itemAtIndex(j)
+        if (!it) return false
+        var maxY = resultList.originY + Math.max(0, resultList.contentHeight - resultList.height)
+        resultList.contentY = Math.max(resultList.originY, Math.min(maxY, it.y - anchors[k].offset))
+        return true
+      }
+    }
+    return false
   }
 
   // ---- cursor -----------------------------------------------------------
@@ -547,6 +578,15 @@ Item {
     if (index < 0 || index >= displayModel.count || displayModel.get(index).entryType !== "text" || !root.phoneOnline) return
     root.runOnIndex(index, "send")
   }
+  // Link / e-mail rows: open in the default browser (new tab) or mail app,
+  // detached so the shell never waits, then close the popup.
+  function openLinkIndex(index) {
+    if (index < 0 || index >= displayModel.count) return
+    var target = displayModel.get(index).linkTarget
+    if (!target) return
+    root.close()
+    Quickshell.execDetached(["xdg-open", target])
+  }
   function copyIndex(index) { root.runOnIndex(index, "copy") }
   function openIndex(index) { root.runOnIndex(index, "open") }
 
@@ -555,11 +595,12 @@ Item {
   function rowActions(index, armedIndex, phone, count) {
     if (index < 0 || index >= displayModel.count) return []
     var row = displayModel.get(index)
-    return ClipboardHistory.rowActionNames(row.historyIndex === root.armedDeleteIndex, root.phoneOnline, row.entryType === "text")
+    return ClipboardHistory.rowActionNames(row.historyIndex === root.armedDeleteIndex, root.phoneOnline, row.entryType === "text", row.linkKind)
   }
 
   function runRowAction(name, index) {
-    if (name === "send") root.sendIndex(index)
+    if (name === "link") root.openLinkIndex(index)
+    else if (name === "send") root.sendIndex(index)
     else if (name === "pin") root.togglePinDisplayIndex(index)
     else if (name === "delete") root.requestDelete(index)
   }
@@ -1392,6 +1433,8 @@ Item {
                   required property int slot
                   required property bool fromPhone
                   required property int historyIndex
+                  required property string linkKind
+                  required property string linkTarget
 
                   readonly property bool hasCursor: root.cursorActive && index === root.selectedIndex
                   readonly property bool armed: root.armedDeleteIndex !== -1 && historyIndex === root.armedDeleteIndex
@@ -1523,6 +1566,7 @@ Item {
 
                       Repeater {
                         model: [
+                          { glyph: row.linkKind === "mail" ? "󰇮" : "󰏌", tip: "link", show: row.showActions && !row.armed && row.linkKind !== "" },
                           { glyph: "󰄜", tip: "send", show: row.showActions && !row.armed && root.phoneOnline && row.entryType === "text" },
                           { glyph: "󰩺", tip: "delete", show: row.showActions || row.armed },
                           { glyph: row.pinned ? "󰐃" : "󰤱", tip: "pin", show: !row.armed && (row.showActions || row.pinned) }
@@ -1572,6 +1616,9 @@ Item {
 
           Column {
             anchors.centerIn: parent
+            // Explicit width: the texts use parent.width, so without it the
+            // column had width 0 and "No matches" never showed.
+            width: parent.width - Style.space(24)
             spacing: Style.space(8)
             visible: displayModel.count === 0 && !root.infoOpen
 

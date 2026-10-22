@@ -242,3 +242,23 @@ assert.strictEqual(H.sectionName(true, 2, false, 9), "Pinned")
 assert.strictEqual(H.sectionName(false, 2, false, 9), "History")
 assert.strictEqual(H.sectionName(false, 0, false, 9), "", "no pins: no heading")
 console.log("headings: ok")
+
+// ---- 1.12.0 link / e-mail detection ---------------------------------------
+{
+  const L = H.linkTarget
+  assert.deepStrictEqual(L("https://example.com/a?b=1"), { kind: "url", target: "https://example.com/a?b=1" })
+  assert.deepStrictEqual(L("  http://x.org  "), { kind: "url", target: "http://x.org" }, "trimmed")
+  assert.deepStrictEqual(L("www.example.com"), { kind: "url", target: "https://www.example.com" })
+  assert.deepStrictEqual(L("roehrbacher.com"), { kind: "url", target: "https://roehrbacher.com" }, "bare domain")
+  assert.deepStrictEqual(L("sub.example.at/path#x"), { kind: "url", target: "https://sub.example.at/path#x" })
+  assert.deepStrictEqual(L("timon@roehrbacher.com"), { kind: "mail", target: "mailto:timon@roehrbacher.com" })
+  assert.deepStrictEqual(L("mailto:a.b@x.de"), { kind: "mail", target: "mailto:a.b@x.de" })
+  for (const f of ["notes.txt", "script.sh", "main.py", "README.md", "photo.png", "archive.zip", "a.b", "1.5", "v1.2.3", "file.json", "x.pdf"])
+    assert.strictEqual(L(f), null, "not a link: " + f)
+  for (const f of ["", "hello world", "https://x.com\nmore", "look at example.com", "user@host", "www.com", "ftp://x.com", "@x.com"])
+    assert.strictEqual(L(f), null, "not a link: " + JSON.stringify(f))
+  assert.deepStrictEqual(H.rowActionNames(false, true, true, "url"), ["link", "send", "delete", "pin"], "link button first (left)")
+  assert.deepStrictEqual(H.rowActionNames(false, false, true, ""), ["delete", "pin"])
+  assert.deepStrictEqual(H.rowActionNames(true, true, true, "url"), ["delete"], "armed: only trash")
+  console.log("links: ok")
+}

@@ -33,3 +33,12 @@ omarchy restart shell
 
 Based on [grokbar-omarchy](https://github.com/pixbroker/grokbar-omarchy) by pixbroker
 (fork of commit fdc88ed), MIT licensed. The original `LICENSE` is kept unchanged.
+
+## Glance looks (local patch, trial)
+
+With "Icon only" on, the bar setting `"glanceVariants": "1,2,3,4"` adds Grok Bot
+weekly-usage looks right of the icon (`GlanceVariant.qml`): 1 ring + day dots,
+2 ring + "Nd", 3 two bars (usage, time left in the week), 4 ring that turns
+`bar.active` when usage runs ahead of the week. Drop numbers to remove looks;
+`""` turns it off. Offscreen render: `bash tests/glance/run.sh /tmp/glance`
+(software renderer; the icon's MultiEffect tint isn't drawn there).

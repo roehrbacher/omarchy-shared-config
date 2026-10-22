@@ -81,13 +81,19 @@ BarWidget {
   // Local patch (Timon): "iconOnly": true shows only the Grok Bot logo on the
   // bar, no usage numbers. Clicking it opens the same panel as before.
   readonly property bool iconOnly: setting("iconOnly", false) === true
+  // Local patch (Timon): "glanceVariants": "1,2,3,4" adds those Grok Bot
+  // weekly-usage looks (GlanceVariant.qml) right of the icon, side by side.
+  // Remove numbers to drop looks; "" turns it off.
+  readonly property var glanceList: String(setting("glanceVariants", "")).split(",")
+    .map(function(x) { return parseInt(x, 10) }).filter(function(n) { return n >= 1 && n <= 4 })
+  readonly property bool glanceOn: glanceList.length > 0
   // Writable so a settings click flips immediately. shell.json reloads can
   // briefly replay the previous entry; persistGuardUntilMs ignores that echo.
   property bool showCursorUsage: false
   property bool showGrokBotUsage: false
   property bool showGptUsage: false
   property double persistGuardUntilMs: 0
-  readonly property bool needsCursorSession: showCursorUsage || showGrokBotUsage
+  readonly property bool needsCursorSession: showCursorUsage || showGrokBotUsage || glanceOn
   readonly property int sessionMs: 5 * 3600 * 1000
   readonly property int weekMs: 7 * 24 * 3600 * 1000
 
@@ -347,7 +353,7 @@ BarWidget {
     var grokAuth = root.resolvePath(root.setting("authPath", ""))
     if (grokAuth !== "")
       command.push("--grok-auth", grokAuth)
-    if (!probe && root.showGrokBotUsage)
+    if (!probe && (root.showGrokBotUsage || root.glanceOn))
       command.push("--include-sand")
     return command
   }
@@ -570,7 +576,7 @@ BarWidget {
     root.showCursorUsage = next
     root.persistSettings({ showCursorUsage: next })
     if (next) root.probeCursor()
-    else if (!root.showGrokBotUsage) root.clearCursorUsage()
+    else if (!root.showGrokBotUsage && !root.glanceOn) root.clearCursorUsage()
   }
 
   function setShowGrokBotUsage(on) {
@@ -864,6 +870,7 @@ BarWidget {
     // Tooltip suppressed because the panel is the detail view.
     tooltipText: ""
     fixedWidth: {
+      if (!vertical && root.iconOnly && root.glanceOn) return Math.ceil(glanceRow.implicitWidth)
       if (vertical || root.iconOnly) return Style.bar.iconSlot
       return Math.ceil(contentRow.implicitWidth + Style.spaceReal(4) * 2)
     }
@@ -1020,8 +1027,40 @@ BarWidget {
     }
 
     ThemedGrokBotIcon {
-      visible: (button.vertical && root.verticalIcon === "bot") || (!button.vertical && root.iconOnly)
+      visible: (button.vertical && root.verticalIcon === "bot") || (!button.vertical && root.iconOnly && !root.glanceOn)
       anchors.centerIn: parent
+    }
+
+    // Plain icon first (as before), then the trial looks, no gaps: each is
+    // one stock icon slot (variant 2 adds its "Nd" text).
+    Row {
+      id: glanceRow
+      visible: !button.vertical && root.iconOnly && root.glanceOn
+      anchors.verticalCenter: parent.verticalCenter
+      x: 0
+      Item {
+        width: Style.bar.iconSlot
+        height: Style.bar.iconSlot
+        ThemedGrokBotIcon { anchors.centerIn: parent }
+      }
+      Repeater {
+        model: root.glanceList
+        GlanceVariant {
+          required property int modelData
+          variant: modelData
+          percent: root.grokBotHasData ? root.grokBotPercent : -1
+          elapsed: root.grokBotExpectedPace
+          daysLeft: {
+            var end = root.parseTimeMs(root.grokBotResetAt)
+            return end > 0 ? Math.max(0, (end - root.nowMs) / 86400000) : -1
+          }
+          resetText: root.grokBotResetText
+          foreground: root.foreground
+          alertColor: button.activeColor
+          iconSource: root.grokBotIconSource
+          fontFamily: button.fontFamily
+        }
+      }
     }
 
     ThemedCursorIcon {

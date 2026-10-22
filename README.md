@@ -397,6 +397,28 @@ the weather location and the night light. Uses Omarchy's stock sudo rule for
 **install.sh also removes** (after backup): `timon.power`, the old
 stand-alone `timon.insomnia`, `timon.bar`, and the old post-boot timezone/night-light hooks.
 
+## Installing changes: no automatic shell restarts
+
+Restarting the shell at the wrong moment has killed the lock screen once
+(a reload while locked) and crashed Quickshell once (right after a plugin copy).
+So installs follow these rules:
+
+- **Copy, then rely on hot reload.** Plugin files may be copied even while the
+  screen is locked; the shell reloads a changed plugin on its own.
+- **Never restart the shell from an install,** not while locked and not
+  automatically after unlock. Instead run
+  `omarchy-mark-reload-needed "<what changed>"`. It writes
+  `~/.local/state/omarchy-reload-needed` and the `timon.reload-needed` bar icon
+  (a single rotate arrow, next to the stock update icon) appears; its tooltip
+  says what changed. One left click deletes the flag and runs
+  `omarchy restart shell`. `omarchy-mark-reload-needed --clear` hides it.
+- **Hyprland binds/config:** `hyprctl reload` is fine, also while locked. It
+  only re-reads the Hyprland config; the lock screen is a shell surface and
+  is not touched (Hyprland also auto-reloads on save).
+- **Never write shell.json or reorder the bar.** The bar order is set by hand.
+  Adding `timon.reload-needed` to the bar is a one-time manual step in the bar
+  settings.
+
 ## Update ping (after-update check)
 
 After every `omarchy update`, Omarchy runs the hooks in

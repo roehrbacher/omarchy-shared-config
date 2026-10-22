@@ -38,5 +38,5 @@ fi
 
 command -v systemctl >/dev/null && systemctl --user daemon-reload || true
 command -v hyprctl >/dev/null && hyprctl reload >/dev/null 2>&1 || true
-command -v omarchy-restart-shell >/dev/null && omarchy-restart-shell >/dev/null 2>&1 || true
+if command -v omarchy-mark-reload-needed >/dev/null; then omarchy-mark-reload-needed "omarchy-shared-config uninstall"; else echo "Restart the shell when convenient: omarchy restart shell"; fi
 echo "Done. Restored from $BACKUP"

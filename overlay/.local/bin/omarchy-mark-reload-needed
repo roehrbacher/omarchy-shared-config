@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Mark that installed changes need a shell restart, instead of restarting.
+# The timon.reload-needed bar icon appears; clicking it restarts the shell.
+#   omarchy-mark-reload-needed [reason]     e.g. "timon.clipboard 1.10.2"
+#   omarchy-mark-reload-needed --clear
+set -uo pipefail
+flag="$HOME/.local/state/omarchy-reload-needed"
+case ${1:-} in
+  -h|--help) sed -n '2,5p' "$0"; exit 0 ;;
+  --clear) rm -f "$flag" ;;
+  *)
+    mkdir -p "${flag%/*}"
+    reason=${*:-}
+    old=$(head -n1 "$flag" 2>/dev/null || true)
+    # Keep earlier reasons: "a, b"
+    if [[ -n $old && -n $reason && $old != *"$reason"* ]]; then reason="$old, $reason"; fi
+    [[ -z $reason ]] && reason=$old
+    printf '%s\n' "${reason:0:200}" > "$flag" ;;
+esac
+# Tell the widget now (it also polls every 5 s). Never fails the caller.
+timeout 3 qs ipc -p /usr/share/omarchy/shell call timon.reload-needed refresh >/dev/null 2>&1 || true
+exit 0

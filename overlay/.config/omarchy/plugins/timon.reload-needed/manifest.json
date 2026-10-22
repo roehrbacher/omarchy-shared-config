@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "timon.reload-needed",
+  "name": "Reload needed",
+  "version": "1.0.0",
+  "author": "Timon Röhrbacher",
+  "description": "Shows a bar icon when installed changes need a shell restart; click to restart",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "ReloadNeeded.qml"
+  },
+  "barWidget": {
+    "displayName": "Shell reload needed",
+    "description": "Click to restart the shell after an install",
+    "category": "System",
+    "allowMultiple": false
+  }
+}

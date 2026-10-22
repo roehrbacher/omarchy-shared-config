@@ -225,3 +225,12 @@ console.log("history tests: all passed")
   assert.deepStrictEqual(again.filter(e => e.pinned).map(e => e.text), ["c", "a", "b"], "re-copy keeps the dragged order")
   console.log("drag reorder: ok")
 }
+
+// ---- collapsible search header (1.9.0) -------------------------------------
+assert.strictEqual(H.escapeAction("abc", true), "clear", "Esc clears a search first")
+assert.strictEqual(H.escapeAction("", true), "collapse", "then collapses the empty field")
+assert.strictEqual(H.escapeAction("", false), "close", "then closes the popup")
+assert.strictEqual(H.searchShown("", false), false, "collapsed: title + search button")
+assert.strictEqual(H.searchShown("", true), true, "button click expands")
+assert.strictEqual(H.searchShown("x", false), true, "typing expands")
+console.log("search header: ok")

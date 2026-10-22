@@ -312,6 +312,18 @@ var KEY = {
   Shift: 0x01000020, Control: 0x01000021, Meta: 0x01000022, Alt: 0x01000023, AltGr: 0x01001103
 }
 
+// Esc in the popup: clear a search (which also collapses the field), else
+// collapse an open empty field, else close the popup.
+function escapeAction(filterText, expanded) {
+  if (String(filterText || "") !== "") return "clear"
+  return expanded ? "collapse" : "close"
+}
+
+// Header shows the search field while expanded or while there is a search.
+function searchShown(filterText, expanded) {
+  return expanded === true || String(filterText || "") !== ""
+}
+
 // ev: { key, ctrl, alt, shift, hasSelection }
 function searchKeyAction(ev) {
   var key = ev.key
@@ -548,6 +560,8 @@ if (typeof module !== "undefined") {
     removeEntryAt: removeEntryAt,
     togglePinAt: togglePinAt,
     reorderPinned: reorderPinned,
+    escapeAction: escapeAction,
+    searchShown: searchShown,
     clearHistory: clearHistory,
     parseEntryJson: parseEntryJson,
     makeMatcher: makeMatcher,

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "timon.clipboard",
   "name": "Nice Clipboard History",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "author": "Timon Röhrbacher (based on Omarchy's clipboard manager)",
   "license": "MIT",
   "description": "Clipboard history with pinned items, incognito mode and regex search, modelled on GNOME Clipboard History",

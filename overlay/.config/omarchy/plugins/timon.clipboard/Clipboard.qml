@@ -26,6 +26,10 @@ Item {
   property bool opened: false
   property bool ready: false
   property string filterText: ""
+  // Header: "Clipboard Manager" + search button; the search field only shows
+  // while expanded (button click, or typing, which goes to the hidden field).
+  property bool searchExpanded: false
+  readonly property bool searchShown: ClipboardHistory.searchShown(filterText, searchExpanded)
   property int selectedIndex: 0
   property bool cursorActive: false
   property bool clearConfirmOpen: false
@@ -115,6 +119,7 @@ Item {
     root.opened = true
     root.infoOpen = false
     root.filterText = ""
+    root.searchExpanded = false
     root.selectedIndex = 0
     root.cursorActive = true
     root.disarmPointer()
@@ -503,6 +508,8 @@ Item {
   }
 
   function setFilter(nextFilter) {
+    // Typing expands the field; deleting the last character collapses it.
+    root.searchExpanded = nextFilter !== ""
     root.filterText = nextFilter
     root.selectedIndex = 0
     root.cursorActive = true
@@ -592,7 +599,10 @@ Item {
 
     switch (action) {
     case "escape":
-      if (root.filterText) root.setFilter("")
+      // Esc: clear the search, then collapse the field, then close.
+      var esc = ClipboardHistory.escapeAction(root.filterText, root.searchExpanded)
+      if (esc === "clear") root.setFilter("")
+      else if (esc === "collapse") root.searchExpanded = false
       else root.close()
       break
     case "slot": root.activateSlot(digit); break
@@ -854,8 +864,43 @@ Item {
 
           // Field box styled like the stock Wi-Fi password field
           // (qs.Ui TextField: Style.controlFill + Border.controlSpec, focus state).
+          // Collapsed header: title in the stock panel title style
+          // (PanelHero: Style.font.title, bold) and the stock icon button.
+          Text {
+            id: headerTitle
+            visible: !root.searchShown
+            anchors.left: parent.left
+            anchors.leftMargin: Style.spacing.controlPaddingX
+            anchors.right: incognitoBadge.visible ? incognitoBadge.left : searchButton.left
+            anchors.rightMargin: Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
+            text: "Clipboard Manager"
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.title
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          PanelActionButton {
+            id: searchButton
+            visible: !root.searchShown
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            iconText: "󰍉"
+            tooltipText: "Search (or just type)"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: {
+              root.searchExpanded = true
+              searchInput.forceActiveFocus()
+            }
+          }
+
           BorderSurface {
             id: searchBox
+            visible: root.searchShown
             anchors.left: parent.left
             anchors.right: incognitoBadge.visible ? incognitoBadge.left : parent.right
             anchors.rightMargin: incognitoBadge.visible ? Style.space(12) : 0
@@ -866,13 +911,17 @@ Item {
             // normal control border (0.4), same radius and insets.
             readonly property var spec: Border.controlSpec("normal", root.foreground, root.accent)
             color: Util.alpha(root.foreground, 0.12)
-            Component.onCompleted: console.log("timon.clipboard 1.8.0 search box loaded, fill=" + color)
+            Component.onCompleted: console.log("timon.clipboard 1.9.0 header loaded, search fill=" + color)
             borderSpec: spec
             radius: Style.cornerRadius
           }
 
+          // Always holds the keyboard focus, so typing while collapsed lands
+          // here and expands the field; invisible (no caret) while collapsed.
           TextInput {
             id: searchInput
+            opacity: root.searchShown ? 1 : 0
+            cursorVisible: root.searchShown && activeFocus
             anchors.left: searchBox.left
             anchors.right: searchBox.right
             anchors.leftMargin: Style.spacing.controlPaddingX + Border.left(searchBox.spec)
@@ -911,7 +960,8 @@ Item {
           Rectangle {
             id: incognitoBadge
             visible: root.privateMode
-            anchors.right: parent.right
+            anchors.right: root.searchShown ? parent.right : searchButton.left
+            anchors.rightMargin: root.searchShown ? 0 : Style.space(8)
             anchors.verticalCenter: parent.verticalCenter
             width: badgeText.implicitWidth + Style.space(12)
             height: badgeText.implicitHeight + Style.space(4)

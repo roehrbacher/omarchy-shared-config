@@ -17,8 +17,11 @@ Item {
   id: root
 
   // ---- settings (edit here) --------------------------------------------
-  // Unpinned entries kept; pinned entries never count against the limit.
-  property int historyLimit: 500
+  // Unpinned entries are deleted keepDays days after they were copied
+  // (1, 2, 5, 10 or 20, picked in settings, saved in state.json). Pinned
+  // entries are never deleted. historyLimit is only a safety cap.
+  property int keepDays: ClipboardHistory.DEFAULT_KEEP_DAYS
+  property int historyLimit: 2000
   // Rows rendered per search (the rest is a search away).
   property int displayLimit: 200
 
@@ -36,7 +39,7 @@ Item {
   // Settings view (gear icon in the footer).
   property bool infoOpen: false
   property int infoIndex: 0
-  readonly property var infoActions: ["incognito", "clear", "back", "send"]
+  readonly property var infoActions: ["incognito", "clear", "back", "send", "keep"]
   // Flux details for the settings view (from `flux-cli status --json`).
   property string phoneName: ""
   property int lastSync: 0
@@ -171,10 +174,20 @@ Item {
     Qt.callLater(function() { searchInput.forceActiveFocus() })
   }
 
+  // Left/Right walk the auto-delete presets (clamped); Enter cycles.
+  function stepKeepDays(dir, wrap) {
+    var list = ClipboardHistory.KEEP_DAYS
+    var i = list.indexOf(root.keepDays) + dir
+    if (wrap) i = (i + list.length) % list.length
+    else i = Math.max(0, Math.min(list.length - 1, i))
+    root.setKeepDays(list[i])
+  }
+
   function runInfoAction(name) {
     if (name === "incognito") root.setPrivate(!root.privateMode, false)
     else if (name === "clear") { root.infoOpen = false; root.requestClearHistory() }
     else if (name === "send") root.sendCurrentClipboard()
+    else if (name === "keep") root.stepKeepDays(1, true)
     else root.closeInfo()
   }
 
@@ -185,6 +198,7 @@ Item {
     var n = root.infoActions.length
     if ((event.modifiers & Qt.ControlModifier) && k === Qt.Key_S) root.sendCurrentClipboard()
     else if (k === Qt.Key_Escape) root.closeInfo()
+    else if ((k === Qt.Key_Left || k === Qt.Key_Right) && root.infoActions[root.infoIndex] === "keep") root.stepKeepDays(k === Qt.Key_Right ? 1 : -1, false)
     else if (k === Qt.Key_Down || k === Qt.Key_Tab) root.infoIndex = (root.infoIndex + 1) % n
     else if (k === Qt.Key_Up || k === Qt.Key_Backtab) root.infoIndex = (root.infoIndex + n - 1) % n
     else if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) root.runInfoAction(root.infoActions[root.infoIndex])
@@ -229,7 +243,7 @@ Item {
   function setPrivate(value, notify) {
     var fluxWasPaused = root.fluxPaused
     root.privateMode = value
-    stateFile.setText(JSON.stringify({ private: value }) + "\n")
+    root.writeState()
     root.syncFlux()
     if (notify) {
       Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "2500",
@@ -239,9 +253,16 @@ Item {
     }
   }
 
+  function writeState() {
+    stateFile.setText(JSON.stringify({ private: root.privateMode, keepDays: root.keepDays }) + "\n")
+  }
+
   function loadState(raw) {
-    try { root.privateMode = JSON.parse(String(raw || "{}")).private === true }
-    catch (e) { root.privateMode = false }
+    var st = {}
+    try { st = JSON.parse(String(raw || "{}")) || {} } catch (e) { st = {} }
+    root.privateMode = st.private === true
+    var days = ClipboardHistory.keepDaysOf(st.keepDays)
+    if (days !== root.keepDays) { root.keepDays = days; root.pruneOld() }
     // Also runs at shell start: resumes Flux if private mode ended while the
     // shell was down, pauses it again if private mode is still on.
     root.syncFlux()
@@ -255,8 +276,29 @@ Item {
 
   // ---- history ----------------------------------------------------------
   function loadHistory(raw) {
-    root.history = ClipboardHistory.pruneToLimit(ClipboardHistory.parseHistory(raw), root.historyLimit)
+    var stamped = ClipboardHistory.stampMissing(ClipboardHistory.parseHistory(raw), Date.now())
+    root.history = ClipboardHistory.pruneToLimit(stamped.history, root.historyLimit)
+    root.historyLoaded = true
+    if (!root.pruneOld() && stamped.changed) root.saveHistory()
     if (root.opened) root.rebuildDisplay(true)
+  }
+
+  // Deletes unpinned entries older than keepDays; true when it saved.
+  property bool historyLoaded: false
+  function pruneOld() {
+    if (!root.historyLoaded) return false
+    var kept = ClipboardHistory.pruneByAge(root.history, root.keepDays, Date.now())
+    if (kept.length === root.history.length) return false
+    root.history = kept
+    root.saveHistory()
+    if (root.opened) root.rebuildDisplay(true)
+    return true
+  }
+
+  function setKeepDays(days) {
+    root.keepDays = ClipboardHistory.keepDaysOf(days)
+    root.writeState()
+    root.pruneOld()
   }
 
   function saveHistory() {
@@ -268,8 +310,8 @@ Item {
     if (root.privateMode) return
     var entry = ClipboardHistory.parseEntryJson(line)
     if (!entry) return
-    entry.at = Date.now()  // copy time, for the day headings
-    root.history = ClipboardHistory.addEntry(root.history, entry, root.historyLimit)
+    entry.at = Date.now()  // copy time: day headings and auto-delete
+    root.history = ClipboardHistory.pruneByAge(ClipboardHistory.addEntry(root.history, entry, root.historyLimit), root.keepDays, Date.now())
     root.saveHistory()
     if (root.opened) root.rebuildDisplay(true)
     if (entry.type === "text" && root.fluxPresent && !root.fluxPaused) {
@@ -857,6 +899,14 @@ Item {
     onLoadFailed: root.loadHistory("[]")
   }
 
+  // Auto-delete also runs hourly while the shell is up.
+  Timer {
+    interval: 3600000
+    running: root.historyLoaded
+    repeat: true
+    onTriggered: root.pruneOld()
+  }
+
   FileView {
     id: stateFile
     path: root.ready ? root.statePath : ""
@@ -1372,9 +1422,41 @@ Item {
 
                 Repeater {
                   model: [
-                    { icon: "󰋚", label: "Keeps the last " + root.historyLimit, value: "pinned items kept" }
+                    { icon: "󰋚", label: "Delete items after", value: "pinned items kept" }
                   ]
                   delegate: infoValueRow
+                }
+
+                // Auto-delete presets: the stock display panel's SCALE pills
+                // (Button, caption size, bordered, same padding and spacing).
+                Grid {
+                  id: keepRow
+                  objectName: "clipKeepRow"
+                  x: Style.space(10)
+                  width: infoColumn.width - Style.space(20)
+                  columns: ClipboardHistory.KEEP_DAYS.length
+                  spacing: Style.spacing.xs
+                  readonly property real cellWidth: (width - spacing * (columns - 1)) / columns
+
+                  Repeater {
+                    model: ClipboardHistory.KEEP_DAYS
+
+                    Button {
+                      required property int modelData
+                      objectName: "clipKeepPill"
+                      width: keepRow.cellWidth
+                      text: ClipboardHistory.keepDaysLabel(modelData)
+                      fontSize: Style.font.caption
+                      foreground: root.foreground
+                      fontFamily: root.fontFamily
+                      horizontalPadding: Style.spacing.sm
+                      verticalPadding: Style.spacing.controlPaddingY
+                      bordered: true
+                      active: root.keepDays === modelData
+                      hasCursor: root.infoActions[root.infoIndex] === "keep" && root.keepDays === modelData
+                      onClicked: { root.infoIndex = root.infoActions.indexOf("keep"); root.setKeepDays(modelData) }
+                    }
+                  }
                 }
 
                 Text {

@@ -68,7 +68,7 @@ language = "en,de"
 translate = false
 # Vocabulary hint: Whisper leans toward these spellings. Keep it short,
 # a long prompt can leak into very short recordings.
-initial_prompt = "Omarchy, OmaCalc, Hyprland, Grok, Grok Bot, Grok Build, Voxtype, Timon Röhrbacher, Wardogs, Proton, Obsidian, Tailscale, Sunshine, Moonlight, GitHub."
+initial_prompt = "Omarchy, OmaCalc, Hyprland, Grok, Grok Bot, Grok Build, Voxtype, Timon Röhrbacher, Wardogs, Quickshell, Eichgraben, Proton, Obsidian, Tailscale, Sunshine, Moonlight, GitHub."
 
 # Number of CPU threads for inference (omit for auto-detection)
 # threads = 4
@@ -157,6 +157,13 @@ filter_filler_words = true
 "hyperland" = "Hyprland"
 "hyper land" = "Hyprland"
 "amarkey" = "Omarchy"
+"a marchy" = "Omarchy"
+"quick shell" = "Quickshell"
+"eichkrabben" = "Eichgraben"
+"eich krabben" = "Eichgraben"
+"eichgrabben" = "Eichgraben"
+"eich graben" = "Eichgraben"
+"aichgraben" = "Eichgraben"
 
 [osd]
 enabled = false

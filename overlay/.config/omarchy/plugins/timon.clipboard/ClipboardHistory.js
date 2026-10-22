@@ -33,6 +33,7 @@ function normalizeEntry(value) {
   if (entry.type === "text" && value.origin === "phone") entry.origin = "phone"
   var at = Number(value.at)
   if (isFinite(at) && at > 0) entry.at = Math.round(at)
+  if (value.legacy === true) entry.legacy = true
   return entry
 }
 
@@ -91,6 +92,42 @@ function addEntry(history, entry, limit) {
     next.push(e)
   }
   return pruneToLimit(next, max)
+}
+
+// ---- time-based auto-delete (1.15.0) --------------------------------------
+var KEEP_DAYS = [1, 2, 5, 10, 20]
+var DEFAULT_KEEP_DAYS = 5
+function keepDaysOf(value) {
+  var n = Number(value)
+  return KEEP_DAYS.indexOf(n) >= 0 ? n : DEFAULT_KEEP_DAYS
+}
+function keepDaysLabel(days) { return days + (days === 1 ? " day" : " days") }
+
+// Entries without a copy time (before 1.14.0) get `now` and a legacy flag,
+// so nothing vanishes at once: they age out `days` after the upgrade and
+// keep the "Earlier" heading. Returns { history, changed }.
+function stampMissing(history, now) {
+  var out = [], changed = false
+  for (var i = 0; i < history.length; i++) {
+    var e = history[i]
+    if (e && !e.at) { e = Object.assign({}, e, { at: now, legacy: true }); changed = true }
+    out.push(e)
+  }
+  return { history: out, changed: changed }
+}
+
+// Drops unpinned entries copied more than `days` days before `now`.
+// Pinned entries are never deleted.
+function pruneByAge(history, days, now) {
+  var cutoff = now - keepDaysOf(days) * 86400000
+  var out = []
+  for (var i = 0; i < history.length; i++) {
+    var e = history[i]
+    if (!e) continue
+    if (!e.pinned && e.at && e.at < cutoff) continue
+    out.push(e)
+  }
+  return out
 }
 
 function pruneToLimit(history, limit) {
@@ -266,6 +303,7 @@ function cappedEntry(entry) {
   if (entry.pinned) capped.pinned = true
   if (entry.origin) capped.origin = entry.origin
   if (entry.at) capped.at = entry.at
+  if (entry.legacy) capped.legacy = true
   return capped
 }
 
@@ -296,7 +334,7 @@ function displayRows(history, query, limit) {
       mime: isImage ? String(entry.mime || "image/png") : "text/plain",
       pinned: entry.pinned === true,
       fromPhone: entry.origin === "phone",
-      at: entry.at || 0,
+      at: entry.legacy ? 0 : (entry.at || 0),
       index: i
     }
     if (row.pinned) pinnedRows.push(row)
@@ -802,6 +840,12 @@ if (typeof module !== "undefined") {
     reorderPinned: reorderPinned,
     escapeAction: escapeAction,
     sectionName: sectionName,
+    KEEP_DAYS: KEEP_DAYS,
+    DEFAULT_KEEP_DAYS: DEFAULT_KEEP_DAYS,
+    keepDaysOf: keepDaysOf,
+    keepDaysLabel: keepDaysLabel,
+    stampMissing: stampMissing,
+    pruneByAge: pruneByAge,
     dayLabel: dayLabel,
     spansDays: spansDays,
     linkTarget: linkTarget,

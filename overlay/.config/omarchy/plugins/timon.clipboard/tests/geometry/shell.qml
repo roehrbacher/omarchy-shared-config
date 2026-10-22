@@ -22,6 +22,7 @@ ShellRoot {
     t.start()
   }
   Window { id: win; width: 700; height: 900; visible: true }
+  Timer { id: later2; property var cb; interval: 1500; onTriggered: cb() }
   Timer { id: later; property var cb; interval: 2500; onTriggered: cb() }
   Timer { id: t; interval: 4000; onTriggered: shell.measure() }
   function measure() {
@@ -88,6 +89,17 @@ ShellRoot {
         console.log("GEO headings " + hs.map(function(x){var p=x.mapToItem(ref,0,0);return x.text+"@x="+p.x+",y="+p.y+",h="+x.height+",px="+x.font.pixelSize}).join(" | "))
         var seps = []; find(list[0], "clipSep", seps)
         console.log("GEO separators visible=" + seps.filter(function(x){return x.visible}).length)
+        clip.infoOpen = true
+        later2.cb = function() {
+          var pills = []; for (var w2 = 0; w2 < clip.children.length; w2++) find(clip.children[w2], "clipKeepPill", pills)
+          pills = pills.filter(function(x){return x.visible})
+          var r0 = pills.length ? pills[0].parent : null
+          console.log("GEO keep pills " + pills.map(function(x){var p=x.mapToItem(r0,0,0);return x.text+(x.active?"*":"")+"@x="+p.x+",y="+p.y+",w="+x.width+",h="+x.height}).join(" | "))
+          clip.setKeepDays(10)
+          console.log("GEO keep after set10 active=" + pills.filter(function(x){return x.active}).map(function(x){return x.text}).join(","))
+          Qt.quit()
+        }
+        later2.start()
         console.log("GEO row1 actions " + acts.filter(function(x){return x.visible}).map(function(x){var p=x.mapToItem(ref,0,0);return x.tooltipText+"@x="+p.x+",w="+x.width+",right="+(p.x+x.width)}).join(" "))
       }
       later.start()

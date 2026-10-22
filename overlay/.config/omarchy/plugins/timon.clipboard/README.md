@@ -47,9 +47,10 @@ In the popup:
 
 ## Behaviour
 
-- **History:** newest first, a re-copied item moves to the top. Keeps the last
-  500 unpinned items (`historyLimit` at the top of `Clipboard.qml`); pinned
-  items never count against the limit. Text and images (PNG, JPEG, WebP, GIF,
+- **History:** newest first, a re-copied item moves to the top. Unpinned items
+  are deleted 1, 2, 5 (default), 10 or 20 days after they were copied (pick it
+  in settings); pinned items are never deleted. Day headings: History (today),
+  Yesterday, then the date. Text and images (PNG, JPEG, WebP, GIF,
   …); copied files show their file name and an image preview.
 - **Pinned:** shown in their own section at the top, survive "clear history"
   and the limit.

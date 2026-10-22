@@ -419,3 +419,38 @@ console.log("headings: ok")
   assert.strictEqual(big[0].at, 5, "capped rows keep their time")
   console.log("day headings: ok")
 }
+
+{
+  // 1.15.0: time-based auto-delete
+  const DAY = 86400000, now = new Date(2026, 9, 22, 21, 0).getTime()
+  assert.deepStrictEqual(H.KEEP_DAYS, [1, 2, 5, 10, 20])
+  assert.strictEqual(H.DEFAULT_KEEP_DAYS, 5)
+  assert.strictEqual(H.keepDaysOf(10), 10)
+  assert.strictEqual(H.keepDaysOf(3), 5, "unknown value -> default")
+  assert.strictEqual(H.keepDaysOf(undefined), 5)
+  assert.strictEqual(H.keepDaysLabel(1), "1 day")
+  assert.strictEqual(H.keepDaysLabel(20), "20 days")
+  const hist = [
+    { type: "text", text: "new", at: now - 1000 },
+    { type: "text", text: "4d", at: now - 4 * DAY },
+    { type: "text", text: "6d", at: now - 6 * DAY },
+    { type: "text", text: "old pin", pinned: true, at: now - 90 * DAY },
+    { type: "text", text: "untimed" }
+  ]
+  assert.deepStrictEqual(H.pruneByAge(hist, 5, now).map(e => e.text), ["new", "4d", "old pin", "untimed"], "5 days")
+  assert.deepStrictEqual(H.pruneByAge(hist, 1, now).map(e => e.text), ["new", "old pin", "untimed"], "1 day; pins never deleted")
+  assert.deepStrictEqual(H.pruneByAge(hist, 20, now).map(e => e.text), ["new", "4d", "6d", "old pin", "untimed"])
+  const st = H.stampMissing(hist, now)
+  assert.strictEqual(st.changed, true)
+  const u = st.history[4]
+  assert.strictEqual(u.at, now); assert.strictEqual(u.legacy, true)
+  assert.strictEqual(hist[4].at, undefined, "input not mutated")
+  assert.strictEqual(H.stampMissing(st.history, now).changed, false, "stamps once")
+  // legacy items keep the "Earlier" heading and age out `days` after the upgrade
+  const norm = H.normalizeEntry(u)
+  assert.strictEqual(norm.legacy, true)
+  const rows = H.displayRows([norm], "", 5)
+  assert.strictEqual(H.dayLabel(rows[0].at, now), "Earlier")
+  assert.strictEqual(H.pruneByAge([norm], 1, now + 2 * DAY).length, 0)
+  console.log("auto-delete: ok")
+}

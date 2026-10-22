@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -62,7 +63,30 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "\uf01e"
+    // Quickshell gear-Q logo (white SVG), tinted with the bar foreground.
+    iconComponent: Component {
+      Item {
+        Image {
+          id: logo
+          anchors.centerIn: parent
+          width: Style.font.caption + 1
+          height: width
+          source: Qt.resolvedUrl("quickshell-logo.svg")
+          sourceSize.width: Math.round(width * Screen.devicePixelRatio * 2)
+          sourceSize.height: Math.round(height * Screen.devicePixelRatio * 2)
+          smooth: true
+          mipmap: true
+          visible: false
+          layer.enabled: true
+        }
+        MultiEffect {
+          anchors.fill: logo
+          source: logo
+          colorization: 1.0
+          colorizationColor: button.foreground
+        }
+      }
+    }
     slotSize: Style.bar.statusSlot
     fontSize: Style.font.caption
     tooltipText: root.reason ? "Shell reload needed: " + root.reason : "Shell reload needed"

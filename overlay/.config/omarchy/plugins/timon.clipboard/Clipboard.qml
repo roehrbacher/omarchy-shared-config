@@ -80,6 +80,8 @@ Item {
 
   // Same [menu] surface tokens as the stock clipboard, so every theme styles it.
   // Popup surface tokens, same as the stock Wi-Fi popup (KeyboardPanel).
+  // Heading that gets the separator (first one after Pinned), set on rebuild.
+  property string firstHistorySection: ""
   property color background: Color.popups.background
   property color foreground: Color.popups.text
   property color border: Color.popups.border
@@ -266,6 +268,7 @@ Item {
     if (root.privateMode) return
     var entry = ClipboardHistory.parseEntryJson(line)
     if (!entry) return
+    entry.at = Date.now()  // copy time, for the day headings
     root.history = ClipboardHistory.addEntry(root.history, entry, root.historyLimit)
     root.saveHistory()
     if (root.opened) root.rebuildDisplay(true)
@@ -451,6 +454,8 @@ Item {
     var pinnedCount = 0
     for (var p = 0; p < rows.length; p++) if (rows[p].pinned) pinnedCount++
     root.hasPinned = pinnedCount > 0
+    var now = Date.now()
+    var multiDay = ClipboardHistory.spansDays(rows, now)
 
     var items = []
     for (var i = 0; i < rows.length; i++) {
@@ -471,7 +476,7 @@ Item {
         mime: row.mime,
         pinned: row.pinned,
         slot: row.slot,
-        sectionName: ClipboardHistory.sectionName(row.pinned, pinnedCount, root.filterText !== "", rows.length),
+        sectionName: ClipboardHistory.sectionName(row.pinned, pinnedCount, root.filterText !== "", rows.length, row.at, now, multiDay),
         fromPhone: row.fromPhone === true,
         linkKind: t ? t.kind : "",
         linkTarget: t ? t.target : "",
@@ -480,6 +485,10 @@ Item {
         historyIndex: row.index
       })
     }
+    // The separator goes above the first heading after Pinned.
+    var firstDay = ""
+    for (var f = 0; f < items.length; f++) if (!items[f].pinned) { firstDay = items[f].sectionName; break }
+    root.firstHistorySection = pinnedCount > 0 && root.filterText === "" ? firstDay : ""
     root.syncModel(items)
 
     if (displayModel.count === 0) selectedIndex = 0
@@ -1508,9 +1517,10 @@ Item {
                   required property string section
                   width: ListView.view.width
                   height: section ? Style.font.caption + Style.space(12) : 0
-                  // Thin stock separator above the History heading (after Pinned).
+                  // Thin stock separator above the first heading after Pinned.
                   PanelSeparator {
-                    visible: parent.section === "History"
+                    objectName: "clipSep"
+                    visible: parent.section !== "" && parent.section === root.firstHistorySection
                     anchors.top: parent.top
                     anchors.topMargin: Style.space(2)
                     anchors.left: parent.left
@@ -1525,6 +1535,7 @@ Item {
                     anchors.leftMargin: Style.space(12)
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: Style.space(3)
+                    objectName: "clipSectionHeading"
                     text: parent.section.toUpperCase()
                     color: root.dimText
                     font.family: root.fontFamily

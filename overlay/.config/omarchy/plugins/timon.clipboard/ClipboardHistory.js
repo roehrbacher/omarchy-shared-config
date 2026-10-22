@@ -31,6 +31,8 @@ function normalizeEntry(value) {
   }
   if (value.pinned === true) entry.pinned = true
   if (entry.type === "text" && value.origin === "phone") entry.origin = "phone"
+  var at = Number(value.at)
+  if (isFinite(at) && at > 0) entry.at = Math.round(at)
   return entry
 }
 
@@ -263,6 +265,7 @@ function cappedEntry(entry) {
   var capped = { type: "text", text: entry.text.slice(0, cut > 0 ? cut : displayTextLimit) }
   if (entry.pinned) capped.pinned = true
   if (entry.origin) capped.origin = entry.origin
+  if (entry.at) capped.at = entry.at
   return capped
 }
 
@@ -293,6 +296,7 @@ function displayRows(history, query, limit) {
       mime: isImage ? String(entry.mime || "image/png") : "text/plain",
       pinned: entry.pinned === true,
       fromPhone: entry.origin === "phone",
+      at: entry.at || 0,
       index: i
     }
     if (row.pinned) pinnedRows.push(row)
@@ -325,13 +329,45 @@ var KEY = {
   Shift: 0x01000020, Control: 0x01000021, Meta: 0x01000022, Alt: 0x01000023, AltGr: 0x01001103
 }
 
+// Day bucket of a copy time (ms) relative to `now` (ms), local time:
+// "today", "Yesterday", "Mon 20 Oct", or "Earlier" (no time recorded:
+// entries from before 1.14.0).
+var DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+var MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+function dayLabel(at, now) {
+  var t = Number(at)
+  if (!isFinite(t) || t <= 0) return "Earlier"
+  var d = new Date(t), n = new Date(now)
+  var day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  var today = new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime()
+  if (day >= today) return "today"
+  var yesterday = new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1).getTime()
+  if (day >= yesterday) return "Yesterday"
+  return DAY_NAMES[d.getDay()] + " " + d.getDate() + " " + MONTH_NAMES[d.getMonth()]
+}
+
 // Heading for a row: "Results · N" for every row while searching (so the
-// heading row stays and the list doesn't jump), else Pinned / History
-// (History only shown when there are pins).
-function sectionName(pinned, pinnedCount, filtering, count) {
+// heading row stays and the list doesn't jump, no day headings), Pinned for
+// pins, else the copy day: today stays "History" (shown only when there are
+// pins or older days below), then "Yesterday", "Mon 20 Oct", ..., "Earlier".
+function sectionName(pinned, pinnedCount, filtering, count, at, now, multiDay) {
   if (filtering) return "Results · " + count
   if (pinned) return "Pinned"
-  return pinnedCount > 0 ? "History" : ""
+  var day = dayLabel(at, now === undefined ? Date.now() : now)
+  if (day !== "today") return day
+  return pinnedCount > 0 || multiDay === true ? "History" : ""
+}
+
+// True when the unpinned rows span more than one day bucket.
+function spansDays(rows, now) {
+  var first = null
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].pinned) continue
+    var d = dayLabel(rows[i].at, now)
+    if (first === null) first = d
+    else if (d !== first) return true
+  }
+  return false
 }
 
 // ---- links and e-mail addresses ------------------------------------------
@@ -766,6 +802,8 @@ if (typeof module !== "undefined") {
     reorderPinned: reorderPinned,
     escapeAction: escapeAction,
     sectionName: sectionName,
+    dayLabel: dayLabel,
+    spansDays: spansDays,
     linkTarget: linkTarget,
     phoneTarget: phoneTarget,
     pathCandidate: pathCandidate,

@@ -81,3 +81,12 @@ o.bind("SUPER + SHIFT + CTRL + V", "Clipboard incognito", "omarchy-shell shell c
 -- other windows get the normal full screen. Undo: delete these two lines.
 hl.unbind("SUPER + F")
 o.bind("SUPER + F", "Full screen", "omarchy-fullscreen-smart")
+
+-- Super+wheel: workspaces from lowest occupied - 1 to highest occupied + 1
+-- (1..10), empty ones in between included; wraps at the ends like stock.
+-- Runs detached (setsid -f), so Hyprland never waits on it.
+-- Undo: delete this block (stock e+1/e-1 binds come back).
+hl.unbind("SUPER + mouse_down")
+hl.unbind("SUPER + mouse_up")
+o.bind("SUPER + mouse_down", "Scroll active workspace forward", "setsid -f omarchy-workspace-scroll next")
+o.bind("SUPER + mouse_up", "Scroll active workspace backward", "setsid -f omarchy-workspace-scroll prev")

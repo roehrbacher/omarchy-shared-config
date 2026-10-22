@@ -27,6 +27,10 @@ ShellRoot {
   function measure() {
     clip.history = [
       { type: "text", text: "pinned one", pinned: true },
+      // 1.14.0 day headings: today, yesterday, 3 days ago, no time
+      { type: "text", text: "today item", at: Date.now() },
+      { type: "text", text: "yesterday item", at: Date.now() - 86400000 },
+      { type: "text", text: "older item", at: Date.now() - 3 * 86400000 },
       { type: "text", text: "https://example.com" },
       { type: "text", text: "#ff8800" },
       { type: "text", text: "+43 664 1234567" },
@@ -79,6 +83,11 @@ ShellRoot {
         }
         if (after[c].entryType === "image") console.log("GEO image text=" + after[c].previewText)
       }
+        var hs = []; find(list[0], "clipSectionHeading", hs)
+        hs = hs.filter(function(x){return x.visible}).sort(function(a,b){return a.mapToItem(ref,0,0).y - b.mapToItem(ref,0,0).y})
+        console.log("GEO headings " + hs.map(function(x){var p=x.mapToItem(ref,0,0);return x.text+"@x="+p.x+",y="+p.y+",h="+x.height+",px="+x.font.pixelSize}).join(" | "))
+        var seps = []; find(list[0], "clipSep", seps)
+        console.log("GEO separators visible=" + seps.filter(function(x){return x.visible}).length)
         console.log("GEO row1 actions " + acts.filter(function(x){return x.visible}).map(function(x){var p=x.mapToItem(ref,0,0);return x.tooltipText+"@x="+p.x+",w="+x.width+",right="+(p.x+x.width)}).join(" "))
       }
       later.start()

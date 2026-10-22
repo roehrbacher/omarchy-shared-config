@@ -239,8 +239,8 @@ console.log("search header: ok")
 assert.strictEqual(H.sectionName(true, 2, true, 5), "Results · 5", "searching: one Results heading")
 assert.strictEqual(H.sectionName(false, 2, true, 5), "Results · 5")
 assert.strictEqual(H.sectionName(true, 2, false, 9), "Pinned")
-assert.strictEqual(H.sectionName(false, 2, false, 9), "History")
-assert.strictEqual(H.sectionName(false, 0, false, 9), "", "no pins: no heading")
+assert.strictEqual(H.sectionName(false, 2, false, 9, Date.now()), "History")
+assert.strictEqual(H.sectionName(false, 0, false, 9, Date.now()), "", "no pins: no heading")
 console.log("headings: ok")
 
 // ---- 1.12.0 link / e-mail detection ---------------------------------------
@@ -384,4 +384,38 @@ console.log("headings: ok")
   assert.deepStrictEqual(q("245 kb"), ["Image · 245 KB"], "by size")
   assert.deepStrictEqual(q("thursday"), ["Screenshot · 75 KB", "Image · 245 KB"], "copy day still searchable")
   console.log("image search: ok")
+}
+
+{
+  // 1.14.0: day headings
+  const now = new Date(2026, 9, 22, 21, 0).getTime()
+  const D = (y, m, d, h) => new Date(y, m, d, h || 12).getTime()
+  assert.strictEqual(H.dayLabel(D(2026, 9, 22, 0), now), "today")
+  assert.strictEqual(H.dayLabel(D(2026, 9, 21, 23), now), "Yesterday")
+  assert.strictEqual(H.dayLabel(D(2026, 9, 20), now), "Tue 20 Oct")
+  assert.strictEqual(H.dayLabel(D(2026, 8, 30), now), "Wed 30 Sep")
+  assert.strictEqual(H.dayLabel(0, now), "Earlier")
+  assert.strictEqual(H.dayLabel(undefined, now), "Earlier")
+  const S = H.sectionName
+  assert.strictEqual(S(false, 1, false, 5, D(2026, 9, 22), now, false), "History", "today under History with pins")
+  assert.strictEqual(S(false, 0, false, 5, D(2026, 9, 22), now, false), "", "no pins, one day: no heading (as before)")
+  assert.strictEqual(S(false, 0, false, 5, D(2026, 9, 22), now, true), "History", "no pins but older days: History")
+  assert.strictEqual(S(false, 0, false, 5, D(2026, 9, 21), now, true), "Yesterday")
+  assert.strictEqual(S(true, 1, false, 5, D(2026, 9, 20), now, true), "Pinned", "no day headings in Pinned")
+  assert.strictEqual(S(false, 1, true, 3, D(2026, 9, 20), now, true), "Results · 3", "no day headings while searching")
+  const hist = [
+    { type: "text", text: "p", pinned: true, at: D(2026, 9, 10) },
+    { type: "text", text: "a", at: D(2026, 9, 22) },
+    { type: "text", text: "b", at: D(2026, 9, 21) },
+    { type: "text", text: "c" }
+  ]
+  const rows = H.displayRows(hist, "", 50)
+  assert.deepStrictEqual(rows.map(r => r.at > 0), [true, true, true, false], "copy time reaches the rows")
+  assert.strictEqual(H.spansDays(rows, now), true)
+  assert.strictEqual(H.spansDays(rows.slice(0, 2), now), false, "pins don't count")
+  assert.strictEqual(H.normalizeEntry({ type: "text", text: "x", at: 123 }).at, 123, "at persists")
+  assert.strictEqual(H.normalizeEntry({ type: "text", text: "x", at: "junk" }).at, undefined)
+  const big = H.displayRows([{ type: "text", text: "y".repeat(20000), at: 5 }], "", 5)
+  assert.strictEqual(big[0].at, 5, "capped rows keep their time")
+  console.log("day headings: ok")
 }

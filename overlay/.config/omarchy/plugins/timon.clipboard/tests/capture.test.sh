@@ -36,6 +36,7 @@ out=$(printf '\x89PNG\r\n\x1a\nfake' | "$here/capture.sh" image/png | jq -r .typ
 check "image captured" "$out" image
 img=$(ls "$tmp/data/timon.clipboard/images")
 check "image file is 0600" "$(stat -c %a "$tmp/data/timon.clipboard/images/$img")" 600
+check "image size recorded" "$(printf '\x89PNG\r\n\x1a\nfake' | "$here/capture.sh" image/png | jq -r .bytes)" 12
 
 out=$(head -c $((5 * 1024 * 1024)) /dev/zero | tr '\0' a | "$here/capture.sh" text)
 check "huge text (>4 MiB) skipped" "$out" ""

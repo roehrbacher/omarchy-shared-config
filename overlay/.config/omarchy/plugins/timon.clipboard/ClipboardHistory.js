@@ -23,6 +23,8 @@ function normalizeEntry(value) {
     entry = { type: "image", path: path, mime: String(value.mime || "image/png") }
     if (value.capturedAt !== undefined && value.capturedAt !== null)
       entry.capturedAt = String(value.capturedAt)
+    var bytes = Number(value.bytes)
+    if (isFinite(bytes) && bytes > 0) entry.bytes = Math.round(bytes)
   } else {
     return null
   }
@@ -218,11 +220,23 @@ function fileEntryText(entry) {
   return paths.length + " files"
 }
 
+// Human-readable size: 812 B, 245 KB, 1.4 MB (1 KB = 1024 B).
+function formatBytes(bytes) {
+  var n = Number(bytes)
+  if (!isFinite(n) || n <= 0) return ""
+  if (n < 1024) return Math.round(n) + " B"
+  var units = ["KB", "MB", "GB"]
+  var i = -1
+  do { n /= 1024; i++ } while (n >= 1024 && i < units.length - 1)
+  return (n < 10 && i > 0 ? n.toFixed(1) : String(Math.round(n))) + " " + units[i]
+}
+
 function imagePreviewText(entry) {
   var timestamp = String(entry && entry.capturedAt || "")
-  if (!timestamp) return "Image"
-  var label = String(entry && entry.mime || "") === "image/png" ? "Screenshot" : "Image"
-  return label + " from " + timestamp
+  var label = !timestamp ? "Image"
+    : (String(entry && entry.mime || "") === "image/png" ? "Screenshot" : "Image") + " from " + timestamp
+  var size = formatBytes(entry && entry.bytes)
+  return size ? label + " · " + size : label
 }
 
 function previewText(entry) {
@@ -742,6 +756,7 @@ function kineticFlickVelocity(velocity, msSinceLastDelta) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+    formatBytes: formatBytes,
     normalizeEntry: normalizeEntry,
     entryKey: entryKey,
     parseHistory: parseHistory,

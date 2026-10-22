@@ -343,3 +343,18 @@ console.log("headings: ok")
   assert.strictEqual(H.targetTooltip("github"), "Open on GitHub")
   console.log("maps/github: ok")
 }
+
+{
+  // 1.13.1: image file size
+  assert.strictEqual(H.formatBytes(0), "")
+  assert.strictEqual(H.formatBytes(812), "812 B")
+  assert.strictEqual(H.formatBytes(250880), "245 KB")
+  assert.strictEqual(H.formatBytes(1468006), "1.4 MB")
+  assert.strictEqual(H.formatBytes(25 * 1024 * 1024), "25 MB")
+  const img = H.normalizeEntry({ type: "image", path: "/x/a.png", mime: "image/png", capturedAt: "Thursday 20:40", bytes: 250880 })
+  assert.strictEqual(img.bytes, 250880)
+  assert.strictEqual(H.previewText(img), "Screenshot from Thursday 20:40 · 245 KB")
+  assert.strictEqual(H.previewText(H.normalizeEntry({ type: "image", path: "/x/b.png", mime: "image/png", capturedAt: "Thursday 20:40" })), "Screenshot from Thursday 20:40", "old entries without size")
+  assert.strictEqual(H.normalizeEntry({ type: "image", path: "/x/c.png", bytes: "junk" }).bytes, undefined)
+  console.log("image size: ok")
+}

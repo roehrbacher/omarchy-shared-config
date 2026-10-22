@@ -1666,6 +1666,18 @@ Item {
                         }
                       }
 
+                      // Detected-type buttons (link/colour) sit left of the
+                      // Alt+N hint; send/delete/pin stay right of it.
+                      Repeater {
+                        model: [
+                          { glyph: row.linkKind === "mail" ? "󰇮" : row.linkKind === "phone" ? "󰏲" : row.linkKind === "path" ? "󰉋" : row.linkKind === "maps" ? "󰍎" : row.linkKind === "github" ? "󰊤" : "󰏌",
+                            tip: "link", show: row.showActions && !row.armed && row.linkKind !== "" && row.linkKind !== "color",
+                            text: ClipboardHistory.targetTooltip(row.linkKind, row.linkLabel) },
+                          { glyph: "", tip: "link", swatch: true, show: !row.armed && row.linkKind === "color", text: ClipboardHistory.targetTooltip("color", row.linkLabel) }
+                        ]
+                        delegate: actionDelegate
+                      }
+
                       Item {
                         visible: !row.showActions && !row.armed && row.slot <= 9 && root.filterText === ""
                         width: visible ? slotHint.implicitWidth + Style.space(6) : 0
@@ -1673,6 +1685,7 @@ Item {
 
                         Text {
                           id: slotHint
+                          objectName: "clipSlotHint"
                           anchors.left: parent.left
                           anchors.verticalCenter: parent.verticalCenter
                           text: "Alt+" + row.slot
@@ -1684,15 +1697,17 @@ Item {
 
                       Repeater {
                         model: [
-                          { glyph: row.linkKind === "mail" ? "󰇮" : row.linkKind === "phone" ? "󰏲" : row.linkKind === "path" ? "󰉋" : row.linkKind === "maps" ? "󰍎" : row.linkKind === "github" ? "󰊤" : "󰏌",
-                            tip: "link", show: row.showActions && !row.armed && row.linkKind !== "" && row.linkKind !== "color",
-                            text: ClipboardHistory.targetTooltip(row.linkKind, row.linkLabel) },
-                          { glyph: "", tip: "link", swatch: true, show: !row.armed && row.linkKind === "color", text: ClipboardHistory.targetTooltip("color", row.linkLabel) },
                           { glyph: "󰄜", tip: "send", show: row.showActions && !row.armed && root.phoneOnline && row.entryType === "text", text: "Send via Flux" },
                           { glyph: "󰩺", tip: "delete", show: row.showActions || row.armed, text: row.armed ? "Press again to delete" : "Delete" },
                           { glyph: row.pinned ? "󰐃" : "󰤱", tip: "pin", show: !row.armed && (row.showActions || row.pinned), text: row.pinned ? "Unpin" : "Pin" }
                         ]
-                        delegate: Item {
+                        delegate: actionDelegate
+                      }
+
+                      Component {
+                        id: actionDelegate
+
+                        Item {
                           id: actionSlot
                           required property var modelData
                           visible: modelData.show
@@ -1720,6 +1735,7 @@ Item {
                           // Colour code: the button is the colour (stock-sized
                           // rounded square, contrast border); click copies it.
                           BorderSurface {
+                            objectName: "clipSwatch"
                             visible: actionSlot.modelData.swatch === true
                             anchors.centerIn: parent
                             width: actionButton.size - Style.space(6)

@@ -59,7 +59,8 @@ emit_image() {
   fi
 
   jq -cn --arg mime "$mime" --arg path "$file" --arg captured_at "$(date +'%A %H:%M')" \
-    '{type:"image", mime:$mime, path:$path, capturedAt:$captured_at}'
+    --argjson bytes "$(stat -c %s "$file")" \
+    '{type:"image", mime:$mime, path:$path, capturedAt:$captured_at, bytes:$bytes}'
 }
 
 emit_text() {

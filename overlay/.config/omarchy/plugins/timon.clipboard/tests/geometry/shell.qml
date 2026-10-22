@@ -34,7 +34,8 @@ ShellRoot {
       { type: "text", text: "/nonexistent/x" },
       { type: "text", text: "Neubaugasse 12, 1070 Wien" },
       { type: "text", text: "roehrbacher/omarchy-clipboard#3" },
-      { type: "text", text: "plain" }
+      { type: "text", text: "plain" },
+      { type: "image", path: "/nonexistent/a.png", mime: "image/png", capturedAt: "Thursday 20:40", bytes: 250880 }
     ]
     clip.rebuildDisplay(false)
     clip.cursorActive = true; clip.selectedIndex = 1
@@ -68,6 +69,16 @@ ShellRoot {
         var d = []; for (var q = 0; q < after.length; q++) d.push(after[q].previewText + "=" + after[q].linkKind)
         console.log("GEO after " + d.join(" | "))
         var acts = []; find(after[1], "clipAction", acts)
+      // 1.13.1: on a non-highlighted colour row the swatch sits left of Alt+N.
+      for (var c = 0; c < after.length; c++) {
+        var sw = [], hint = []; find(after[c], "clipSwatch", sw); find(after[c], "clipSlotHint", hint)
+        sw = sw.filter(function(x){return x.visible}); hint = hint.filter(function(x){return x.visible && x.parent.visible})
+        if (sw.length && hint.length) {
+          var sx = sw[0].mapToItem(ref,0,0).x, hx = hint[0].mapToItem(ref,0,0).x
+          console.log("GEO swatch row=" + c + " swatch x=" + sx + "+" + sw[0].width + " altN x=" + hx + " " + (sx + sw[0].width <= hx ? "LEFT-OK" : "WRONG"))
+        }
+        if (after[c].entryType === "image") console.log("GEO image text=" + after[c].previewText)
+      }
         console.log("GEO row1 actions " + acts.filter(function(x){return x.visible}).map(function(x){var p=x.mapToItem(ref,0,0);return x.tooltipText+"@x="+p.x+",w="+x.width+",right="+(p.x+x.width)}).join(" "))
       }
       later.start()

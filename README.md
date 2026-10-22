@@ -195,7 +195,7 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
 - `timon.hover-reveal` – now its own repo (github.com/roehrbacher/omarchy-hover-reveal),
   installed with `omarchy plugin add` and no longer copied from this overlay.
   Choices live in `~/.config/omarchy/hover-reveal.json`.
-- `timon.local-ai` 0.4.0 – skull-and-crossbones icon (filled = a local model is
+- `timon.local-ai` 0.5.0 – skull-and-crossbones icon (filled = a local model is
   running, outline = none, pulsing = loading). Click opens a popup with one
   switch per model that starts/stops its systemd user unit (never enables it);
   with `"exclusive": true` turning one on stops the others. Models come from
@@ -210,18 +210,13 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
   `~/.cache/huggingface/hub`, `~/.lmstudio/models`; `mmproj*` and split parts
   after the first are skipped). Turn off with `"listFiles": false`. The list
   refreshes on popup open, every few seconds, and on middle click.
-  Game notice: `game-watch.py` (user service `local-ai-game-watch`) listens to
-  Hyprland window events (no polling). When a game starts (same process match
-  as `omarchy-safe-gate`, or a `steam_app_*` window) while a model is loaded or
-  loading, one notification "Local AI loaded · <model>"; clicking it stops the
-  model unit like the popup switch. Once per game session, nothing while no
-  model runs. Body "Click to unload".
-  Competition notice (only while a model is loaded; /proc fdinfo + sysfs every
-  5 s): another app holding > 2 GiB VRAM or > 30 % of a GPU engine, or
+  Competition notice (`game-watch.py`, user service `local-ai-game-watch`;
+  games are covered too, Wine/Proton named by their .exe; only while a model is
+  loaded; /proc fdinfo + sysfs every 5 s): another app holding > 2 GiB VRAM or > 30 % of a GPU engine, or
   MemAvailable < 3 GiB (blamed on the biggest non-model app), for 20 s ->
-  "Local AI competing with <app>". Hysteresis: resets below 1.5 GiB / 20 % /
+  "Local AI competing with <app>" / "Click to unload". Hysteresis: resets below 1.5 GiB / 20 % /
   4 GiB. Once per app per model session; the model's processes (unit cgroup
-  + children), Hyprland/Xwayland/the shell and running games are skipped.
+  + children), Hyprland/Xwayland/the shell are skipped.
   `game-watch.py --sample` prints the current readings.
   Off: `systemctl --user disable --now local-ai-game-watch`.
 - `timon.idle` – stock idle plugin, but moving or clicking the mouse also closes

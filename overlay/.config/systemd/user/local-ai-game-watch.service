@@ -1,5 +1,5 @@
 [Unit]
-Description=Local AI: notify when a game starts while a model is loaded
+Description=Local AI: notify when another app competes with a loaded model
 PartOf=graphical-session.target
 After=graphical-session.target
 

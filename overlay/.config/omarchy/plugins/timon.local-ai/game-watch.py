@@ -1,34 +1,28 @@
 #!/usr/bin/env python3
-"""timon.local-ai watcher: notices while a local model is loaded; click one to
+"""timon.local-ai watcher: while a local model is loaded, one notification
+when another app (a game, Blender, ...) competes for its GPU/RAM; click it to
 unload the model.
 
-1. Game start (event-based, Hyprland window events): a process matches
-   GAME_PATTERN (same as omarchy-safe-gate) or a steam_app_* window appears
-   -> "Local AI loaded · <model>". Once per game session.
-2. Competition (only while a model is loaded, cheap /proc + sysfs reads every
-   TICK s): another app holding > VRAM_ON of VRAM or > BUSY_ON of a GPU engine,
-   or available RAM below RAM_ON (blamed on the biggest non-model app), for
-   SUSTAIN s -> "Local AI competing with <app>". Hysteresis: the timer resets
-   only once the app drops below the *_OFF values. Once per app per model
-   session (reset when the model unloads). Skipped while a game runs (1.
-   already covered it). The model's own processes never count.
+Every TICK s, only while a model unit runs (cheap /proc + sysfs reads): another
+app holding > VRAM_ON of VRAM or > BUSY_ON of a GPU engine, or available RAM
+below RAM_ON (blamed on the biggest non-model app), for SUSTAIN s ->
+"Local AI competing with <app>" / "Click to unload". Hysteresis: the timer
+resets only once the app drops below the *_OFF values. Once per app per model
+session (reset when the model unloads). The model's own processes never count.
+Wine/Proton games are named by their .exe ("Overwatch", not "wine64-preloader").
 
   game-watch.py            run (systemd user service local-ai-game-watch)
-  game-watch.py --check    one game check now
   game-watch.py --sample   print one reading of the current GPU/RAM values
-Env for tests: LOCAL_AI_HELPER, LOCAL_AI_GAME_PATTERN, LOCAL_AI_HYPR_SOCKET,
-LOCAL_AI_PROC, LOCAL_AI_SYS_DRM, LOCAL_AI_MODEL_PIDS (space list, "" = none),
-LOCAL_AI_TICK, LOCAL_AI_DRY=1 (print notify-send instead of sending).
+Env for tests: LOCAL_AI_HELPER, LOCAL_AI_PROC, LOCAL_AI_SYS_DRM,
+LOCAL_AI_MODEL_PIDS (space list, "" = none), LOCAL_AI_TICK, LOCAL_AI_DRY=1.
 """
-import glob, json, os, re, socket, subprocess, sys, time
+import glob, json, os, re, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 HELPER = os.environ.get("LOCAL_AI_HELPER", os.path.join(HERE, "local-ai.py"))
-GAME_PATTERN = os.environ.get("LOCAL_AI_GAME_PATTERN", "SteamLaunch|steam-launch-wrapper|proton |Overwatch")
 DRY = os.environ.get("LOCAL_AI_DRY") == "1"
 PROC = os.environ.get("LOCAL_AI_PROC", "/proc")
 SYS_DRM = os.environ.get("LOCAL_AI_SYS_DRM", "/sys/class/drm")
-SETTLE = 3                                  # s after a window event
 TICK = float(os.environ.get("LOCAL_AI_TICK", "5"))
 GIB = 1 << 30
 VRAM_ON, VRAM_OFF = 2 * GIB, int(1.5 * GIB)  # another app's VRAM
@@ -57,30 +51,6 @@ def read(path):
     except OSError:
         return ""
 
-
-def gaming():
-    if run("pgrep", "-f", GAME_PATTERN).returncode == 0:
-        return True
-    out = run("hyprctl", "clients", "-j").stdout
-    try:
-        return any(str(c.get("class", "")).startswith("steam_app_") for c in json.loads(out or "[]"))
-    except ValueError:
-        return False
-
-
-def loaded_models():
-    out = run(sys.executable, HELPER, "state").stdout
-    try:
-        models = json.loads(out).get("models", [])
-    except ValueError:
-        return []
-    return [m for m in models if m.get("state") in ("on", "loading")]
-
-
-def short(name):
-    # "Qwen3.6 35B-A3B" -> "Qwen3.6 35B"
-    parts = str(name).split()
-    return " ".join(p.split("-")[0] if i else p for i, p in enumerate(parts)) or name
 
 
 def notify(summary, units):
@@ -173,8 +143,17 @@ def drm_clients():
     return clients
 
 
+WINE = re.compile(r"^(wine.*|.*preloader|proton|pressure-vessel.*|steam-runtime.*)$", re.I)
+
+
 def comm(pid):
-    return read(f"{PROC}/{pid}/comm").strip()
+    """App name: comm, or for Wine/Proton the .exe from the command line."""
+    name = read(f"{PROC}/{pid}/comm").strip()
+    if WINE.match(name) or name.lower().endswith(".exe"):
+        for arg in read(f"{PROC}/{pid}/cmdline").split("\0"):
+            if arg.lower().endswith(".exe"):
+                return re.split(r"[\\/]", arg)[-1][:-4]
+    return name[:-4] if name.lower().endswith(".exe") else name
 
 
 def nice(name):
@@ -295,48 +274,15 @@ class Competition:
 # ------------------------------------------------------------ main loop
 class Watcher:
     def __init__(self):
-        self.notified = False  # for the current game session
         self.models = Models()
         self.comp = Competition()
-        self.was_loaded = False
-
-    def check(self):
-        if not gaming():
-            if self.notified:
-                log("game closed")
-            self.notified = False
-            return
-        if self.notified:
-            return
-        models = loaded_models()
-        self.notified = True  # once per game, also when no model runs now
-        if models:
-            notify("Local AI loaded · " + " + ".join(short(m["name"]) for m in models),
-                   [m["unit"] for m in models])
 
     def tick(self):
         active = self.models.active()
-        if not active:
-            if self.was_loaded:
-                self.comp.reset()
-            self.was_loaded = False
-            return
-        self.was_loaded = True
-        if self.notified:  # a game runs: the game notice covers it
-            return
-        self.comp.tick(active, time.monotonic())
-
-
-def socket_path():
-    if os.environ.get("LOCAL_AI_HYPR_SOCKET"):
-        return os.environ["LOCAL_AI_HYPR_SOCKET"]
-    rt = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
-    path = f"{rt}/hypr/{sig}/.socket2.sock"
-    if sig and os.path.exists(path):
-        return path
-    found = sorted(glob.glob(f"{rt}/hypr/*/.socket2.sock"), key=os.path.getmtime)
-    return found[-1] if found else ""
+        if active:
+            self.comp.tick(active, time.monotonic())
+        elif self.comp.notified or self.comp.since:
+            self.comp.reset()  # model unloaded: next load is a new session
 
 
 def main():
@@ -352,43 +298,9 @@ def main():
                                    sorted(per_app.items(), key=lambda x: -x[1][0])}}, indent=1))
         return
     w = Watcher()
-    if "--check" in sys.argv:
-        w.check()
-        return
-    w.check()
-    next_tick = time.monotonic()
     while True:
-        path = socket_path()
-        if not path:
-            time.sleep(10)
-            continue
-        try:
-            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            s.connect(path)
-            buf, due = b"", None
-            while True:
-                now = time.monotonic()
-                if now >= next_tick:
-                    w.tick()
-                    next_tick = now + TICK
-                if due and now >= due:
-                    due = None
-                    w.check()
-                wake = min(next_tick, due) if due else next_tick
-                s.settimeout(max(0.1, wake - time.monotonic()))
-                try:
-                    chunk = s.recv(4096)
-                except socket.timeout:
-                    continue
-                if not chunk:
-                    break
-                buf += chunk
-                *lines, buf = buf.split(b"\n")
-                if any(l.startswith((b"openwindow>>", b"closewindow>>")) for l in lines):
-                    due = due or time.monotonic() + SETTLE
-        except OSError as exc:
-            log(f"socket: {exc}")
-        time.sleep(5)
+        w.tick()
+        time.sleep(TICK)
 
 
 if __name__ == "__main__":

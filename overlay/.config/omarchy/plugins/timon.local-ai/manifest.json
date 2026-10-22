@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "timon.local-ai",
   "name": "Local AI",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "author": "Timon Röhrbacher",
   "license": "MIT",
-  "description": "Pirate flag for your own models: shows whether a local model (llama.cpp systemd user service) is running and turns them on and off; also lists downloaded .gguf files not set up yet. While a model is loaded, one notification when a game starts or another app competes for GPU/RAM (click it to unload the model; game-watch.py, user service local-ai-game-watch).",
+  "description": "Pirate flag for your own models: shows whether a local model (llama.cpp systemd user service) is running and turns them on and off; also lists downloaded .gguf files not set up yet. While a model is loaded, one notification when another app (games included) competes for its GPU/RAM (click it to unload the model; game-watch.py, user service local-ai-game-watch).",
   "kinds": [
     "bar-widget"
   ],

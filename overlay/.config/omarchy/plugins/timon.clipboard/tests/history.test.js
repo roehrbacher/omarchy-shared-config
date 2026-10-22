@@ -262,3 +262,84 @@ console.log("headings: ok")
   assert.deepStrictEqual(H.rowActionNames(true, true, true, "url"), ["delete"], "armed: only trash")
   console.log("links: ok")
 }
+
+// ---- 1.13.0 phone / path / colour detection -------------------------------
+{
+  const P = H.phoneTarget
+  assert.deepStrictEqual(P("+43 664 1234567"), { kind: "phone", target: "tel:+436641234567" })
+  assert.deepStrictEqual(P("0043 (664) 123-45-67"), { kind: "phone", target: "tel:+436641234567" })
+  assert.deepStrictEqual(P("0664/1234567"), { kind: "phone", target: "tel:06641234567" })
+  assert.deepStrictEqual(P("01 5131234"), { kind: "phone", target: "tel:015131234" })
+  assert.deepStrictEqual(P("tel:+4915112345678"), { kind: "phone", target: "tel:+4915112345678" })
+  for (const f of ["123456", "0664 12", "01.02.2026", "2026-10-22", "12345678", "0.5", "+43 abc 123", "0664 1234567 and more", "+1234567890123456"])
+    assert.strictEqual(P(f), null, "not a phone: " + f)
+  const C = H.pathCandidate
+  assert.strictEqual(C("/etc/hosts", "/home/t"), "/etc/hosts")
+  assert.strictEqual(C("~/Work/", "/home/t"), "/home/t/Work")
+  assert.strictEqual(C("~", "/home/t"), "/home/t")
+  assert.strictEqual(C("file:///home/t/My%20File.txt", "/home/t"), "/home/t/My File.txt")
+  assert.strictEqual(C("/home/t/with space", "/home/t"), "/home/t/with space")
+  for (const f of ["relative/path", "/", "//share", "/a\n/b", "~user/x", "http://x.com/a", ""])
+    assert.strictEqual(C(f, "/home/t"), "", "not a path: " + JSON.stringify(f))
+  assert.strictEqual(H.pathOpenTarget("/home/t/a.txt", "f"), "/home/t", "file: parent folder")
+  assert.strictEqual(H.pathOpenTarget("/home/t/Work", "d"), "/home/t/Work", "folder: itself")
+  assert.strictEqual(H.pathOpenTarget("/x", "f"), "/")
+  const K = H.colorTarget
+  assert.deepStrictEqual(K("#ff8800"), { kind: "color", target: "#ff8800", label: "#ff8800" })
+  assert.deepStrictEqual(K("#F80"), { kind: "color", target: "#ff8800", label: "#F80" })
+  assert.deepStrictEqual(K("#ff880080"), { kind: "color", target: "#80ff8800", label: "#ff880080" }, "Qt #aarrggbb")
+  assert.deepStrictEqual(K("rgb(255, 136, 0)"), { kind: "color", target: "#ff8800", label: "rgb(255, 136, 0)" })
+  assert.deepStrictEqual(K("rgba(255,136,0,0.5)"), { kind: "color", target: "#80ff8800", label: "rgba(255,136,0,0.5)" })
+  for (const f of ["#ff88", "#ggg", "rgb(256,0,0)", "ff8800", "#ff8800 text"])
+    assert.strictEqual(K(f), null, "not a colour: " + f)
+  const R = H.rowTarget
+  assert.strictEqual(R("https://x.org", "/h").kind, "url")
+  assert.strictEqual(R("#abc", "/h").kind, "color")
+  assert.strictEqual(R("+43 1 5131234", "/h").kind, "phone")
+  assert.deepStrictEqual(R("~/x", "/h"), { kind: "path?", target: "/h/x" })
+  assert.strictEqual(R("hello", "/h"), null)
+  assert.strictEqual(H.targetTooltip("url"), "Open link")
+  assert.strictEqual(H.targetTooltip("mail"), "Send email")
+  assert.strictEqual(H.targetTooltip("phone"), "Call number")
+  assert.strictEqual(H.targetTooltip("path"), "Open in file manager")
+  assert.strictEqual(H.targetTooltip("color", "#ff8800"), "Colour #ff8800")
+  console.log("phone/path/colour: ok")
+}
+
+// ---- 1.13.0 maps / GitHub detection ----------------------------------------
+{
+  const G = H.coordTarget
+  assert.deepStrictEqual(G("48.21, 16.37"), { kind: "maps", target: "48.21,16.37" })
+  assert.deepStrictEqual(G("-33.8688 151.2093"), { kind: "maps", target: "-33.8688,151.2093" })
+  assert.strictEqual(G(`48°12'30"N 16°22'19"E`).kind, "maps")
+  assert.strictEqual(G("48° 12′ 30.5″ N, 16° 22′ 19″ E").kind, "maps")
+  for (const f of ["1, 2", "48, 16", "95.1, 16.3", "48.2, 190.5", "1.5", "v1.2 3.4", `48°72'N 16°22'E`, "48.21, 16.37 x"])
+    assert.strictEqual(G(f), null, "not coords: " + f)
+  const A = H.addressTarget
+  const yes = {
+    "Neubaugasse 12, 1070 Wien": "Neubaugasse 12, 1070 Wien",
+    "Hauptstraße 5/2/7\nA-3032 Eichgraben": "Hauptstraße 5/2/7, A-3032 Eichgraben",
+    "Musterweg 3a, D-80331 München, Deutschland": "Musterweg 3a, D-80331 München, Deutschland",
+    "Bahnhofstrasse 1, 8001 Zürich": "Bahnhofstrasse 1, 8001 Zürich",
+    "1600 Amphitheatre Pkwy, Mountain View, CA 94043": "1600 Amphitheatre Pkwy, Mountain View, CA 94043",
+    "350 Fifth Avenue\nNew York NY 10118": "350 Fifth Avenue, New York NY 10118",
+    "10 Downing Street, London SW1A 2AA": "10 Downing Street, London SW1A 2AA",
+    "221B Baker Street\nLondon\nNW1 6XE": "221B Baker Street, London, NW1 6XE",
+  }
+  for (const [k, v] of Object.entries(yes)) assert.deepStrictEqual(A(k), { kind: "maps", target: v }, "address: " + k)
+  for (const f of ["Neubaugasse 12", "1070 Wien", "Room 12, 1070 items", "version 2, 2026 release notes are long", "call me at 5, 1234 times",
+                   "Hello there 12, see you", "a,b,c,d,e,f,g", "Neubaugasse 12, 1070 Wien\nhttps://x.com", "Order 12345 Item 4, 1000 Stück=3"])
+    assert.strictEqual(A(f), null, "not an address: " + JSON.stringify(f))
+  assert.strictEqual(H.mapsUrl("Neubaugasse 12, 1070 Wien"), "https://www.google.com/maps/search/?api=1&query=Neubaugasse%2012%2C%201070%20Wien")
+  const GH = H.githubTarget
+  assert.deepStrictEqual(GH("roehrbacher/omarchy-clipboard#12"), { kind: "github", target: "https://github.com/roehrbacher/omarchy-clipboard/issues/12" })
+  assert.strictEqual(GH("a-b/c.d_e#1").target, "https://github.com/a-b/c.d_e/issues/1")
+  for (const f of ["-ab/repo#1", "ab-/repo#1", "a--b/repo#1", "owner/repo#0", "owner/repo #1", "owner/repo#", "owner/re po#1", "o/r/x#1", "owner/..#1", "a".repeat(40) + "/r#1", "#12", "owner#12"])
+    assert.strictEqual(GH(f), null, "not GitHub: " + f)
+  assert.strictEqual(H.rowTarget("owner/repo#5", "/h").kind, "github")
+  assert.strictEqual(H.rowTarget("48.21, 16.37", "/h").kind, "maps")
+  assert.strictEqual(H.rowTarget("Neubaugasse 12, 1070 Wien", "/h").kind, "maps")
+  assert.strictEqual(H.targetTooltip("maps"), "Open in Maps")
+  assert.strictEqual(H.targetTooltip("github"), "Open on GitHub")
+  console.log("maps/github: ok")
+}

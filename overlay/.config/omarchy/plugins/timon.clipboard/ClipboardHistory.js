@@ -350,6 +350,157 @@ function linkTarget(text) {
   return { kind: "url", target: "https://" + s }
 }
 
+// Phone number: international (+43 / 0043) or national (0664 ...) format,
+// digits with spaces, dashes, dots, slashes or brackets; 7-15 digits.
+function phoneTarget(text) {
+  var s = String(text || "").trim()
+  if (s === "" || s.length > 32 || /\n/.test(s)) return null
+  if (/^tel:/i.test(s)) s = s.substring(4)
+  if (!/^(\+|0)[0-9 ()\/.\-]+$/.test(s)) return null
+  if (/^\d{1,4}[.\/\-]\d{1,2}[.\/\-]\d{1,4}$/.test(s)) return null   // dates
+  if (/^0[.,]\d+$/.test(s)) return null                              // 0.5
+  var digits = s.replace(/[^0-9]/g, "")
+  if (digits.length < 7 || digits.length > 15) return null
+  var intl = s.charAt(0) === "+" ? "+" + digits : (/^00/.test(digits) ? "+" + digits.substring(2) : digits)
+  return { kind: "phone", target: "tel:" + intl }
+}
+
+// Absolute, ~ or file:// path (single line). Whether it exists is checked
+// by the caller; returns the expanded path.
+function pathCandidate(text, home) {
+  var s = String(text || "").trim()
+  if (s === "" || s.length > 4096 || /[\n\r\0]/.test(s)) return ""
+  if (/^file:\/\//i.test(s)) {
+    s = s.replace(/^file:\/\/(localhost)?/i, "")
+    try { s = decodeURIComponent(s) } catch (e) { return "" }
+  } else if (s === "~" || s.indexOf("~/") === 0) {
+    if (!home) return ""
+    s = home + s.substring(1)
+  }
+  if (s.charAt(0) !== "/" || s === "/" || s.indexOf("//") === 0) return ""
+  return s.length > 1 && s.charAt(s.length - 1) === "/" ? s.substring(0, s.length - 1) : s
+}
+
+// What the file manager opens: a folder itself, a file's parent folder.
+function pathOpenTarget(path, type) {
+  if (type === "d") return path
+  var i = path.lastIndexOf("/")
+  return i <= 0 ? "/" : path.substring(0, i)
+}
+
+// Colour code: #rgb, #rrggbb, #rrggbbaa, rgb()/rgba(). target is a Qt colour
+// string (#aarrggbb for alpha).
+function colorTarget(text) {
+  var s = String(text || "").trim()
+  var m = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(s)
+  var hex2 = function(n) { return ("0" + Math.round(n).toString(16)).slice(-2) }
+  if (m) {
+    var h = m[1].toLowerCase()
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]
+    return { kind: "color", target: h.length === 8 ? "#" + h.substring(6) + h.substring(0, 6) : "#" + h, label: s }
+  }
+  m = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*(0|1|0?\.\d+|1\.0+)\s*)?\)$/i.exec(s)
+  if (!m) return null
+  var r = +m[1], g = +m[2], b = +m[3]
+  if (r > 255 || g > 255 || b > 255) return null
+  var a = m[4] === undefined ? "" : hex2(parseFloat(m[4]) * 255)
+  return { kind: "color", target: "#" + a + hex2(r) + hex2(g) + hex2(b), label: s }
+}
+
+// GPS coordinates: decimal "48.21, 16.37" (both with a decimal point, in
+// range) or DMS 48°12'30"N 16°22'19"E.
+function coordTarget(text) {
+  var s = String(text || "").trim()
+  if (s.length > 64 || /\n/.test(s)) return null
+  var m = /^(-?\d{1,2}\.\d+)\s*[,;]?\s+(-?\d{1,3}\.\d+)$/.exec(s) || /^(-?\d{1,2}\.\d+)\s*[,;]\s*(-?\d{1,3}\.\d+)$/.exec(s)
+  if (m) {
+    var lat = parseFloat(m[1]), lon = parseFloat(m[2])
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null
+    return { kind: "maps", target: m[1] + "," + m[2] }
+  }
+  var part = "(\\d{1,3})\\s*°\\s*(\\d{1,2})\\s*['′]\\s*(?:(\\d{1,2}(?:\\.\\d+)?)\\s*(?:\"|″|''))?\\s*"
+  m = new RegExp("^" + part + "([NS])[\\s,]+" + part + "([EWO])$", "i").exec(s)
+  if (!m) return null
+  if (+m[1] > 90 || +m[5] > 180 || +m[2] >= 60 || +m[6] >= 60 || (m[3] && +m[3] >= 60) || (m[7] && +m[7] >= 60)) return null
+  return { kind: "maps", target: s }
+}
+
+// Street address, conservative: 2-4 parts (lines or commas) with a street
+// + house number and a postcode + city (AT/DE/CH 4-5 digits, optional
+// A-/D-/CH- prefix; US "City, ST 12345"; UK postcode).
+var ADDR_L = "A-Za-z\\u00C0-\\u024F"
+var ADDR_U = "A-Z\\u00C0-\\u00DE"
+var ADDR_STREET_NUM_AFTER = new RegExp("^[" + ADDR_U + "][" + ADDR_L + ".'\\- ]{2,60}\\s\\d{1,4}[a-zA-Z]?(?:\\s?[/\\-]\\s?\\d{1,4}[a-zA-Z]?){0,3}$")
+var ADDR_STREET_NUM_BEFORE = new RegExp("^\\d{1,5}[a-zA-Z]?\\s+[" + ADDR_U + "][" + ADDR_L + ".'\\- ]{2,60}$")
+var ADDR_DACH_CITY = new RegExp("^(?:(?:A|D|CH)\\s?-\\s?)?\\d{4,5}\\s+[" + ADDR_U + "][" + ADDR_L + ".\\- ]{1,40}$")
+var ADDR_US_STATE = /^[A-Z]{2}\s+\d{5}(?:-\d{4})?$/
+var ADDR_US_CITYSTATE = new RegExp("^[" + ADDR_U + "][" + ADDR_L + ".\\- ]{1,40}\\s+[A-Z]{2}\\s+\\d{5}(?:-\\d{4})?$")
+var ADDR_UK = new RegExp("^(?:[" + ADDR_U + "][" + ADDR_L + ".\\- ]{1,40}\\s+)?[A-Z]{1,2}\\d[A-Z\\d]?\\s?\\d[A-Z]{2}$")
+var ADDR_CITY = new RegExp("^[" + ADDR_U + "][" + ADDR_L + ".\\- ]{1,40}$")
+function addressTarget(text) {
+  var s = String(text || "").trim()
+  if (s === "" || s.length > 200 || /[@:#<>{}\[\]=;|$]|https?|www\./i.test(s)) return null
+  var parts = s.split(/\s*(?:\n|,)\s*/).filter(function(x) { return x !== "" })
+  if (parts.length < 2 || parts.length > 5 || s.split("\n").length > 4) return null
+  var street = -1
+  for (var i = 0; i < parts.length && street < 0; i++)
+    if (ADDR_STREET_NUM_AFTER.test(parts[i]) || ADDR_STREET_NUM_BEFORE.test(parts[i])) street = i
+  if (street < 0) return null
+  var ok = false
+  for (var j = street + 1; j < parts.length && !ok; j++) {
+    var q = parts[j]
+    if (ADDR_DACH_CITY.test(q) || ADDR_US_CITYSTATE.test(q) || ADDR_UK.test(q)) ok = true
+    else if (ADDR_US_STATE.test(q) && j > street + 1 && ADDR_CITY.test(parts[j - 1])) ok = true
+  }
+  if (!ok) return null
+  return { kind: "maps", target: parts.join(", ") }
+}
+
+function mapsUrl(query) {
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(query)
+}
+
+// GitHub shorthand owner/repo#123 (GitHub name rules; issues URL, GitHub
+// redirects pull requests).
+function githubTarget(text) {
+  var s = String(text || "").trim()
+  var m = /^([A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})\/([A-Za-z0-9._-]{1,100})#([1-9]\d{0,9})$/.exec(s)
+  if (!m || m[2] === "." || m[2] === "..") return null
+  return { kind: "github", target: "https://github.com/" + m[1] + "/" + m[2] + "/issues/" + m[3] }
+}
+
+// The 4th button for a text row: link/mail, phone, colour, or a path
+// candidate (kind "path?" until the caller confirmed it exists).
+function rowTarget(text, home) {
+  var l = linkTarget(text)
+  if (l) return l
+  var gh = githubTarget(text)
+  if (gh) return gh
+  var g = coordTarget(text)
+  if (g) return g
+  var c = colorTarget(text)
+  if (c) return c
+  var t = phoneTarget(text)
+  if (t) return t
+  var p = pathCandidate(text, home)
+  if (p) return { kind: "path?", target: p }
+  var a = addressTarget(text)
+  if (a) return a
+  return null
+}
+
+// Tooltip for the 4th button.
+function targetTooltip(kind, label) {
+  if (kind === "mail") return "Send email"
+  if (kind === "url") return "Open link"
+  if (kind === "phone") return "Call number"
+  if (kind === "path") return "Open in file manager"
+  if (kind === "maps") return "Open in Maps"
+  if (kind === "github") return "Open on GitHub"
+  if (kind === "color") return "Colour " + label
+  return ""
+}
+
 // Esc in the popup: clear a search (the field stays open), else
 // collapse an open empty field, else close the popup.
 function escapeAction(filterText, expanded) {
@@ -602,6 +753,16 @@ if (typeof module !== "undefined") {
     escapeAction: escapeAction,
     sectionName: sectionName,
     linkTarget: linkTarget,
+    phoneTarget: phoneTarget,
+    pathCandidate: pathCandidate,
+    pathOpenTarget: pathOpenTarget,
+    colorTarget: colorTarget,
+    rowTarget: rowTarget,
+    coordTarget: coordTarget,
+    addressTarget: addressTarget,
+    mapsUrl: mapsUrl,
+    githubTarget: githubTarget,
+    targetTooltip: targetTooltip,
     searchShown: searchShown,
     clearHistory: clearHistory,
     parseEntryJson: parseEntryJson,

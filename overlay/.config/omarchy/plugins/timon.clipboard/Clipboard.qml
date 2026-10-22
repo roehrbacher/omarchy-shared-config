@@ -116,6 +116,10 @@ Item {
 
   // ---- open / close (shell host API) ------------------------------------
   function open(payloadJson) {
+    // Paths may have appeared/vanished since last time.
+    root.pathInfo = ({})
+    root.pathSingle = false
+    mapsCheckProc.running = true
     root.opened = true
     root.infoOpen = false
     root.filterText = ""
@@ -448,11 +452,17 @@ Item {
     for (var p = 0; p < rows.length; p++) if (rows[p].pinned) pinnedCount++
     root.hasPinned = pinnedCount > 0
 
-    displayModel.clear()
+    var items = []
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i]
-      var link = row.entryType === "text" ? ClipboardHistory.linkTarget(row.fullText) : null
-      displayModel.append({
+      var t = row.entryType === "text" ? ClipboardHistory.rowTarget(row.fullText, root.homeDir) : null
+      var pathCand = t && t.kind === "path?" ? t.target : ""
+      if (pathCand) {
+        var known = root.pathInfo[pathCand]
+        t = known === "d" || known === "f" ? { kind: "path", target: ClipboardHistory.pathOpenTarget(pathCand, known) } : null
+        if (known === undefined) root.queuePathCheck(pathCand)
+      }
+      items.push({
         entryType: row.entryType,
         fullText: row.fullText,
         previewText: row.previewText,
@@ -463,11 +473,14 @@ Item {
         slot: row.slot,
         sectionName: ClipboardHistory.sectionName(row.pinned, pinnedCount, root.filterText !== "", rows.length),
         fromPhone: row.fromPhone === true,
-        linkKind: link ? link.kind : "",
-        linkTarget: link ? link.target : "",
+        linkKind: t ? t.kind : "",
+        linkTarget: t ? t.target : "",
+        linkLabel: t && t.label ? t.label : "",
+        pathCandidate: pathCand,
         historyIndex: row.index
       })
     }
+    root.syncModel(items)
 
     if (displayModel.count === 0) selectedIndex = 0
     else if (selectedIndex >= displayModel.count) selectedIndex = displayModel.count - 1
@@ -478,6 +491,94 @@ Item {
       if (keepScroll === true && root.restoreAnchor(anchors)) return
       resultList.positionViewAtIndex(root.selectedIndex, ListView.Contain)
     })
+  }
+
+  // Incremental update instead of clear()+append(): rows that stay keep
+  // their delegate (no flicker, no re-layout); only removed/new/moved rows
+  // change. Rows are matched by pinned state + content.
+  function syncKey(r) { return (r.pinned ? "P" : "H") + root.rowKey(r) }
+  function syncModel(items) {
+    var want = {}
+    for (var w = 0; w < items.length; w++) want[root.syncKey(items[w])] = (want[root.syncKey(items[w])] || 0) + 1
+    for (var d = displayModel.count - 1; d >= 0; d--) {
+      var k = root.syncKey(displayModel.get(d))
+      if (want[k] > 0) want[k]--
+      else displayModel.remove(d, 1)
+    }
+    for (var i = 0; i < items.length; i++) {
+      var key = root.syncKey(items[i])
+      var found = -1
+      for (var j = i; j < displayModel.count; j++) if (root.syncKey(displayModel.get(j)) === key) { found = j; break }
+      if (found < 0) { displayModel.insert(i, items[i]); continue }
+      if (found !== i) displayModel.move(found, i, 1)
+      var cur = displayModel.get(i)
+      for (var prop in items[i]) if (cur[prop] !== items[i][prop]) displayModel.setProperty(i, prop, items[i][prop])
+    }
+    while (displayModel.count > items.length) displayModel.remove(displayModel.count - 1, 1)
+  }
+
+  // ---- path existence (4th button only for paths that exist) ------------
+  readonly property string homeDir: Quickshell.env("HOME") || ""
+  property var pathInfo: ({})
+  property var pathQueue: []
+  property bool mapsWebApp: false
+  function queuePathCheck(p) {
+    if (root.pathQueue.indexOf(p) < 0) root.pathQueue.push(p)
+    pathCheckTimer.restart()
+  }
+  Timer {
+    id: pathCheckTimer
+    interval: 1
+    onTriggered: {
+      if (pathCheckProc.running || root.pathQueue.length === 0) { if (root.pathQueue.length) restart(); return }
+      var n = root.pathSingle ? 1 : 200
+      pathCheckProc.batch = root.pathQueue.slice(0, n)
+      root.pathQueue = root.pathQueue.slice(n)
+      pathCheckProc.command = ["stat", "-L", "--printf", "%F\n"].concat(["--"]).concat(pathCheckProc.batch)
+      pathCheckProc.out = ""
+      pathCheckProc.running = true
+    }
+  }
+  Process {
+    id: pathCheckProc
+    property var batch: []
+    property string out: ""
+    // stat prints one line per existing path; missing ones only go to
+    // stderr, so each path is checked on its own when the batch has gaps.
+    stdout: SplitParser { onRead: function(line) { pathCheckProc.out += line + "\n" } }
+    onExited: function(code) {
+      var lines = pathCheckProc.out.split("\n").filter(function(x) { return x !== "" })
+      var info = root.pathInfo
+      if (code === 0 && lines.length === batch.length) {
+        for (var i = 0; i < batch.length; i++) info[batch[i]] = lines[i] === "directory" ? "d" : "f"
+      } else if (batch.length === 1) {
+        info[batch[0]] = code === 0 ? (lines[0] === "directory" ? "d" : "f") : "-"
+      } else {
+        for (var j = 0; j < batch.length; j++) root.pathQueue.push(batch[j])
+        root.pathSingle = true
+      }
+      root.pathInfo = info
+      root.applyPathInfo()
+      if (root.pathQueue.length) pathCheckTimer.restart()
+    }
+  }
+  property bool pathSingle: false
+  onPathSingleChanged: if (pathSingle) pathCheckTimer.interval = 1
+  function applyPathInfo() {
+    for (var i = 0; i < displayModel.count; i++) {
+      var r = displayModel.get(i)
+      if (!r.pathCandidate) continue
+      var known = root.pathInfo[r.pathCandidate]
+      var kind = known === "d" || known === "f" ? "path" : ""
+      var target = kind ? ClipboardHistory.pathOpenTarget(r.pathCandidate, known) : ""
+      if (r.linkKind !== kind) displayModel.setProperty(i, "linkKind", kind)
+      if (r.linkTarget !== target) displayModel.setProperty(i, "linkTarget", target)
+    }
+  }
+  Process {
+    id: mapsCheckProc
+    command: ["stat", "-L", "--printf", "x", "--", root.homeDir + "/.local/share/applications/Google Maps.desktop"]
+    onExited: function(code) { root.mapsWebApp = code === 0 }
   }
 
   function restoreAnchor(anchors) {
@@ -582,10 +683,17 @@ Item {
   // detached so the shell never waits, then close the popup.
   function openLinkIndex(index) {
     if (index < 0 || index >= displayModel.count) return
-    var target = displayModel.get(index).linkTarget
-    if (!target) return
+    var r = displayModel.get(index)
+    if (!r.linkTarget) return
+    // Colour swatch: copy the code again (nothing to open).
+    if (r.linkKind === "color") { root.copyIndex(index); return }
     root.close()
-    Quickshell.execDetached(["xdg-open", target])
+    if (r.linkKind === "maps") {
+      var url = ClipboardHistory.mapsUrl(r.linkTarget)
+      Quickshell.execDetached(root.mapsWebApp ? ["omarchy-launch-webapp", url] : ["xdg-open", url])
+    } else {
+      Quickshell.execDetached(["xdg-open", r.linkTarget])
+    }
   }
   function copyIndex(index) { root.runOnIndex(index, "copy") }
   function openIndex(index) { root.runOnIndex(index, "open") }
@@ -917,9 +1025,11 @@ Item {
           // (PanelHero: Style.font.title, bold) and the stock icon button.
           Text {
             id: headerTitle
+            objectName: "headerTitle"
             visible: !root.searchShown
             anchors.left: parent.left
-            anchors.leftMargin: Style.spacing.controlPaddingX
+            // Same inset as the row text (row leftMargin, stock Style.space(10)).
+            anchors.leftMargin: Style.space(10)
             anchors.right: incognitoBadge.visible ? incognitoBadge.left : (searchButton.visible ? searchButton.left : parent.right)
             anchors.rightMargin: Style.space(12)
             anchors.verticalCenter: parent.verticalCenter
@@ -937,6 +1047,7 @@ Item {
           // settings page, where searching does nothing.
           BorderSurface {
             id: searchButton
+            objectName: "searchButton"
             visible: !root.searchShown && !root.infoOpen
             // Above searchInput: the (invisible while collapsed) text field
             // spans the whole row and is declared later, so without this it
@@ -1007,7 +1118,7 @@ Item {
             selectionColor: root.selectedBackground
             selectedTextColor: root.selectedText
             font.family: root.fontFamily
-            font.pixelSize: Style.font.title
+            font.pixelSize: Style.font.body
             Keys.priority: Keys.BeforeItem
             Keys.onPressed: function(event) { root.handleSearchKey(event) }
             Keys.onReleased: function(event) { root.handleSearchKeyRelease(event) }
@@ -1119,7 +1230,7 @@ Item {
                     height: root.rowHeight
                     radius: root.cornerRadius
                     readonly property bool current: root.infoIndex === root.infoActions.indexOf(modelData.key)
-                    color: current ? root.selectedBackground : (infoRowMouse.containsMouse ? Util.alpha(root.foreground, 0.08) : "transparent")
+                    color: current ? Style.hoverFillFor(root.foreground, root.accent) : (infoRowMouse.containsMouse ? Util.alpha(root.foreground, 0.08) : "transparent")
 
                     Text {
                       anchors.left: parent.left
@@ -1129,7 +1240,7 @@ Item {
                       text: parent.modelData.label
                       color: parent.modelData.key === "incognito" && root.privateMode ? root.accent : root.foreground
                       font.family: root.fontFamily
-                      font.pixelSize: Style.font.title
+                      font.pixelSize: Style.font.body
                     }
 
                     Row {
@@ -1205,7 +1316,7 @@ Item {
                   width: infoColumn.width
                   height: root.rowHeight
                   radius: root.cornerRadius
-                  color: current ? root.selectedBackground : (sendMouse.containsMouse && enabled ? Util.alpha(root.foreground, 0.08) : "transparent")
+                  color: current ? Style.hoverFillFor(root.foreground, root.accent) : (sendMouse.containsMouse && enabled ? Util.alpha(root.foreground, 0.08) : "transparent")
                   opacity: enabled ? 1 : 0.5
 
                   Text {
@@ -1216,7 +1327,7 @@ Item {
                     text: "󰒊  Send current clipboard"
                     color: root.foreground
                     font.family: root.fontFamily
-                    font.pixelSize: Style.font.title
+                    font.pixelSize: Style.font.body
                   }
 
                   Text {
@@ -1299,7 +1410,7 @@ Item {
                 color: root.foreground
                 elide: Text.ElideRight
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.title
+                font.pixelSize: Style.font.body
               }
 
               Text {
@@ -1377,10 +1488,11 @@ Item {
 
               ListView {
                 id: resultList
+                objectName: "resultList"
                 anchors.fill: parent
                 model: displayModel
                 clip: true
-                spacing: Style.space(2)
+                spacing: Style.space(4)
                 boundsBehavior: Flickable.StopAtBounds
                 flickDeceleration: 2500
                 maximumFlickVelocity: 6000
@@ -1422,7 +1534,9 @@ Item {
                   }
                 }
 
-                delegate: Rectangle {
+                // Stock row surface (network panel): CursorSurface, hover fill
+                  // + hover-cursor border on the cursor row, 60 ms colour fade.
+                delegate: CursorSurface {
                   id: row
                   required property int index
                   required property string entryType
@@ -1435,6 +1549,7 @@ Item {
                   required property int historyIndex
                   required property string linkKind
                   required property string linkTarget
+                  required property string linkLabel
 
                   readonly property bool hasCursor: root.cursorActive && index === root.selectedIndex
                   readonly property bool armed: root.armedDeleteIndex !== -1 && historyIndex === root.armedDeleteIndex
@@ -1442,8 +1557,10 @@ Item {
 
                   width: ListView.view.width
                   height: root.rowHeight
-                  radius: root.cornerRadius
-                  color: armed ? Util.alpha(root.urgent, 0.85) : (hasCursor ? root.selectedBackground : "transparent")
+                  objectName: "clipRow"
+                  foreground: root.foreground
+                  accent: root.accent
+                  color: armed ? Util.alpha(root.urgent, 0.85) : (hasCursor ? fill : "transparent")
 
                   MouseArea {
                     id: rowMouse
@@ -1494,7 +1611,7 @@ Item {
                     id: rowContent
                     anchors.fill: parent
                     anchors.leftMargin: Style.space(10)
-                    anchors.rightMargin: Style.space(4)
+                    anchors.rightMargin: Style.space(10)
                     anchors.topMargin: Style.space(2)
                     anchors.bottomMargin: Style.space(2)
                     spacing: Style.space(10)
@@ -1512,12 +1629,13 @@ Item {
                     // Cut-off text scrolls right to left on hover and on the
                     // keyboard-highlighted row (timon.media's marquee).
                     MarqueeLabel {
+                      objectName: "clipRowText"
                       width: parent.width - actions.width - parent.spacing - (row.previewImage.length > 0 ? parent.height + parent.spacing : 0)
                       height: parent.height
                       text: row.armed ? "Press Del again to delete" : row.previewText
-                      color: row.armed ? "#ffffff" : (row.hasCursor ? root.selectedText : root.foreground)
+                      color: row.armed ? "#ffffff" : root.foreground
                       fontFamily: root.fontFamily
-                      pixelSize: Style.font.title
+                      pixelSize: Style.font.body
                       bold: row.armed
                       running: !row.armed && root.dragRow < 0 && (rowMouse.containsMouse || row.hasCursor)
                       opacity: !row.armed && (row.entryType === "image" || row.entryType === "file") ? 0.72 : 1.0
@@ -1541,9 +1659,9 @@ Item {
                           anchors.verticalCenter: parent.verticalCenter
                           textFormat: Text.PlainText
                           text: "From phone"
-                          color: row.hasCursor ? root.selectedText : root.dimText
+                          color: root.dimText
                           font.family: root.fontFamily
-                          font.pixelSize: Style.font.body
+                          font.pixelSize: Style.font.caption
                           font.bold: true
                         }
                       }
@@ -1566,43 +1684,63 @@ Item {
 
                       Repeater {
                         model: [
-                          { glyph: row.linkKind === "mail" ? "󰇮" : "󰏌", tip: "link", show: row.showActions && !row.armed && row.linkKind !== "" },
-                          { glyph: "󰄜", tip: "send", show: row.showActions && !row.armed && root.phoneOnline && row.entryType === "text" },
-                          { glyph: "󰩺", tip: "delete", show: row.showActions || row.armed },
-                          { glyph: row.pinned ? "󰐃" : "󰤱", tip: "pin", show: !row.armed && (row.showActions || row.pinned) }
+                          { glyph: row.linkKind === "mail" ? "󰇮" : row.linkKind === "phone" ? "󰏲" : row.linkKind === "path" ? "󰉋" : row.linkKind === "maps" ? "󰍎" : row.linkKind === "github" ? "󰊤" : "󰏌",
+                            tip: "link", show: row.showActions && !row.armed && row.linkKind !== "" && row.linkKind !== "color",
+                            text: ClipboardHistory.targetTooltip(row.linkKind, row.linkLabel) },
+                          { glyph: "", tip: "link", swatch: true, show: !row.armed && row.linkKind === "color", text: ClipboardHistory.targetTooltip("color", row.linkLabel) },
+                          { glyph: "󰄜", tip: "send", show: row.showActions && !row.armed && root.phoneOnline && row.entryType === "text", text: "Send via Flux" },
+                          { glyph: "󰩺", tip: "delete", show: row.showActions || row.armed, text: row.armed ? "Press again to delete" : "Delete" },
+                          { glyph: row.pinned ? "󰐃" : "󰤱", tip: "pin", show: !row.armed && (row.showActions || row.pinned), text: row.pinned ? "Unpin" : "Pin" }
                         ]
-                        delegate: Rectangle {
+                        delegate: Item {
+                          id: actionSlot
                           required property var modelData
                           visible: modelData.show
-                          width: visible ? actions.height : 0
+                          width: visible ? actionButton.size : 0
                           height: actions.height
-                          radius: root.cornerRadius
                           readonly property bool keyFocused: row.hasCursor && root.focusedAction === modelData.tip
-                          color: keyFocused ? Util.alpha(row.armed ? "#ffffff" : root.accent, 0.28)
-                            : (btnMouse.containsMouse ? Util.alpha(root.foreground, 0.10) : "transparent")
-                          border.width: keyFocused ? Math.max(1, Style.space(2)) : 0
-                          border.color: row.armed ? "#ffffff" : root.accent
 
-                          Text {
+                          // Stock icon button: hover fill/border and stock tooltip.
+                          PanelActionButton {
+                            id: actionButton
+                            objectName: "clipAction"
+                            visible: !actionSlot.modelData.swatch
+                            anchors.verticalCenter: parent.verticalCenter
+                            iconText: actionSlot.modelData.glyph
+                            tooltipText: actionSlot.modelData.text
+                            fontFamily: root.fontFamily
+                            fontSize: Style.font.subtitle
+                            foreground: row.armed ? "#ffffff" : (actionSlot.modelData.tip === "pin" && row.pinned ? root.accent : root.foreground)
+                            hoverColor: row.armed ? "#ffffff" : root.foreground
+                            hasCursor: actionSlot.keyFocused
+                            bordered: actionSlot.keyFocused
+                            onClicked: root.runRowAction(actionSlot.modelData.tip, row.index)
+                          }
+
+                          // Colour code: the button is the colour (stock-sized
+                          // rounded square, contrast border); click copies it.
+                          BorderSurface {
+                            visible: actionSlot.modelData.swatch === true
                             anchors.centerIn: parent
-                            text: parent.modelData.glyph
-                            color: row.armed ? "#ffffff" : (parent.modelData.tip === "pin" && row.pinned ? root.accent : (row.hasCursor ? root.selectedText : root.foreground))
-                            opacity: parent.keyFocused || (parent.modelData.tip === "pin" && row.pinned) ? 1 : 0.75
-                            font.family: root.fontFamily
-                            font.pixelSize: Style.font.title
-                          }
+                            width: actionButton.size - Style.space(6)
+                            height: width
+                            radius: Style.cornerRadius
+                            color: row.linkKind === "color" ? row.linkTarget : "transparent"
+                            borderSpec: Border.controlSpec(actionSlot.keyFocused || swatchMouse.containsMouse ? "hover-cursor" : "normal", root.foreground, root.accent)
 
-                          MouseArea {
-                            id: btnMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.runRowAction(parent.modelData.tip, row.index)
-                          }
+                            MouseArea {
+                              id: swatchMouse
+                              anchors.fill: parent
+                              hoverEnabled: true
+                              cursorShape: Qt.PointingHandCursor
+                              onClicked: root.runRowAction("link", row.index)
+                            }
 
-                          PanelToolTip {
-                            visible: btnMouse.containsMouse && parent.modelData.tip === "send"
-                            text: "Send via Flux"
+                            PanelToolTip {
+                              visible: swatchMouse.containsMouse
+                              text: actionSlot.modelData.text
+                              fontFamily: root.fontFamily
+                            }
                           }
                         }
                       }
@@ -1767,7 +1905,7 @@ Item {
                 color: root.phoneIcon === "paused" ? root.accent
                   : (root.phoneIcon === "online" ? root.foreground : root.dimText)
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.title
+                font.pixelSize: Style.font.icon
               }
 
               MouseArea {
@@ -1801,7 +1939,7 @@ Item {
                 text: "󰒓"
                 color: root.infoOpen ? root.accent : root.foreground
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.title
+                font.pixelSize: Style.font.icon
               }
 
               MouseArea {

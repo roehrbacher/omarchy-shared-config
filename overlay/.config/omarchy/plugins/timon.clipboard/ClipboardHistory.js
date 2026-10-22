@@ -312,6 +312,15 @@ var KEY = {
   Shift: 0x01000020, Control: 0x01000021, Meta: 0x01000022, Alt: 0x01000023, AltGr: 0x01001103
 }
 
+// Heading for a row: "Results · N" for every row while searching (so the
+// heading row stays and the list doesn't jump), else Pinned / History
+// (History only shown when there are pins).
+function sectionName(pinned, pinnedCount, filtering, count) {
+  if (filtering) return "Results · " + count
+  if (pinned) return "Pinned"
+  return pinnedCount > 0 ? "History" : ""
+}
+
 // Esc in the popup: clear a search (the field stays open), else
 // collapse an open empty field, else close the popup.
 function escapeAction(filterText, expanded) {
@@ -561,6 +570,7 @@ if (typeof module !== "undefined") {
     togglePinAt: togglePinAt,
     reorderPinned: reorderPinned,
     escapeAction: escapeAction,
+    sectionName: sectionName,
     searchShown: searchShown,
     clearHistory: clearHistory,
     parseEntryJson: parseEntryJson,

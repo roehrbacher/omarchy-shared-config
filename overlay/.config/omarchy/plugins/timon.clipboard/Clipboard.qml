@@ -250,7 +250,7 @@ Item {
   // ---- history ----------------------------------------------------------
   function loadHistory(raw) {
     root.history = ClipboardHistory.pruneToLimit(ClipboardHistory.parseHistory(raw), root.historyLimit)
-    if (root.opened) root.rebuildDisplay()
+    if (root.opened) root.rebuildDisplay(true)
   }
 
   function saveHistory() {
@@ -264,7 +264,7 @@ Item {
     if (!entry) return
     root.history = ClipboardHistory.addEntry(root.history, entry, root.historyLimit)
     root.saveHistory()
-    if (root.opened) root.rebuildDisplay()
+    if (root.opened) root.rebuildDisplay(true)
     if (entry.type === "text" && root.fluxPresent && !root.fluxPaused) {
       root.originQueue = root.originQueue.concat([entry.text]).slice(-5)
       originTimer.restart()
@@ -293,7 +293,7 @@ Item {
     }
     if (changed) {
       root.saveHistory()
-      if (root.opened) root.rebuildDisplay()
+      if (root.opened) root.rebuildDisplay(true)
     }
   }
 
@@ -358,7 +358,7 @@ Item {
       root.selectedIndex = displayModel.count - 2
     }
     root.disarmPointer()
-    root.rebuildDisplay()
+    root.rebuildDisplay(true)
   }
 
   function togglePinDisplayIndex(index) {
@@ -367,7 +367,7 @@ Item {
     var historyIndex = row.historyIndex
     root.history = ClipboardHistory.togglePinAt(root.history, historyIndex)
     root.saveHistory()
-    root.rebuildDisplay()
+    root.rebuildDisplay(true)
     // Keep the cursor on the entry that just moved between sections.
     for (var i = 0; i < displayModel.count; i++) {
       if (displayModel.get(i).historyIndex === historyIndex) {
@@ -416,7 +416,7 @@ Item {
     }
     root.history = ClipboardHistory.reorderPinned(root.history, order)
     root.saveHistory()
-    root.rebuildDisplay()
+    root.rebuildDisplay(true)
     // reorderPinned keeps each slot's history position, so the dragged
     // entry now sits at the old index of whichever pinned row took its place.
     for (var j = 0; j < order.length; j++) {
@@ -424,7 +424,10 @@ Item {
     }
   }
 
-  function rebuildDisplay() {
+  // keepScroll: after pin, delete, drag or a new entry, stay where the list
+  // was scrolled (only nudging the cursor row into view), instead of jumping.
+  function rebuildDisplay(keepScroll) {
+    var keepY = resultList.contentY
     var rows = ClipboardHistory.displayRows(root.history, root.filterText, root.displayLimit)
     var pinnedCount = 0
     for (var p = 0; p < rows.length; p++) if (rows[p].pinned) pinnedCount++
@@ -442,7 +445,7 @@ Item {
         mime: row.mime,
         pinned: row.pinned,
         slot: row.slot,
-        sectionName: row.pinned ? "Pinned" : (pinnedCount > 0 ? "History" : ""),
+        sectionName: ClipboardHistory.sectionName(row.pinned, pinnedCount, root.filterText !== "", rows.length),
         fromPhone: row.fromPhone === true,
         historyIndex: row.index
       })
@@ -453,7 +456,12 @@ Item {
     else if (selectedIndex < 0) selectedIndex = 0
 
     Qt.callLater(function() {
-      if (displayModel.count > 0) resultList.positionViewAtIndex(root.selectedIndex, ListView.Contain)
+      if (displayModel.count === 0) return
+      if (keepScroll === true) {
+        var maxY = resultList.originY + Math.max(0, resultList.contentHeight - resultList.height)
+        resultList.contentY = Math.max(resultList.originY, Math.min(maxY, keepY))
+      }
+      resultList.positionViewAtIndex(root.selectedIndex, ListView.Contain)
     })
   }
 
@@ -933,7 +941,6 @@ Item {
             // normal control border (0.4), same radius and insets.
             readonly property var spec: Border.controlSpec("normal", root.foreground, root.accent)
             color: Util.alpha(root.foreground, 0.12)
-            Component.onCompleted: console.log("timon.clipboard 1.10.2 header loaded, search fill=" + color)
             borderSpec: spec
             radius: Style.cornerRadius
           }
@@ -1277,6 +1284,56 @@ Item {
               height: parent.height
               clip: true
 
+              // "Top" button (like Telegram): shows once scrolled down a bit,
+              // stock control fill/border, scrolls smoothly back to the top.
+              BorderSurface {
+                id: topButton
+                z: 3
+                readonly property bool hot: topMouse.containsMouse
+                visible: opacity > 0
+                opacity: resultList.contentY - resultList.originY > root.rowHeight * 4 ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 150 } }
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: Style.space(8)
+                width: topLabel.implicitWidth + Style.spacing.controlPaddingX * 2
+                height: topLabel.implicitHeight + Style.spacing.controlPaddingY * 2
+                radius: Style.cornerRadius
+                color: Qt.tint(Color.popups.background, Style.controlFill(false, hot, root.foreground, root.accent))
+                borderSpec: Border.controlSpec(hot ? "hover" : "normal", root.foreground, root.accent)
+
+                Text {
+                  id: topLabel
+                  anchors.centerIn: parent
+                  textFormat: Text.PlainText
+                  text: "󰁝  Top"
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                }
+
+                MouseArea {
+                  id: topMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: {
+                    resultList.cancelFlick()
+                    toTopAnim.from = resultList.contentY
+                    toTopAnim.to = resultList.originY
+                    toTopAnim.restart()
+                  }
+                }
+              }
+
+              NumberAnimation {
+                id: toTopAnim
+                target: resultList
+                property: "contentY"
+                duration: 300
+                easing.type: Easing.OutCubic
+              }
+
               ListView {
                 id: resultList
                 anchors.fill: parent
@@ -1298,6 +1355,17 @@ Item {
                   required property string section
                   width: ListView.view.width
                   height: section ? Style.font.caption + Style.space(12) : 0
+                  // Thin stock separator above the History heading (after Pinned).
+                  PanelSeparator {
+                    visible: parent.section === "History"
+                    anchors.top: parent.top
+                    anchors.topMargin: Style.space(2)
+                    anchors.left: parent.left
+                    anchors.leftMargin: Style.space(10)
+                    anchors.right: parent.right
+                    anchors.rightMargin: Style.space(10)
+                    foreground: root.foreground
+                  }
                   Text {
                     visible: parent.section !== ""
                     anchors.left: parent.left
@@ -1398,19 +1466,18 @@ Item {
                       smooth: true
                     }
 
-                    Text {
-                      textFormat: Text.PlainText
+                    // Cut-off text scrolls right to left on hover and on the
+                    // keyboard-highlighted row (timon.media's marquee).
+                    MarqueeLabel {
                       width: parent.width - actions.width - parent.spacing - (row.previewImage.length > 0 ? parent.height + parent.spacing : 0)
                       height: parent.height
                       text: row.armed ? "Press Del again to delete" : row.previewText
                       color: row.armed ? "#ffffff" : (row.hasCursor ? root.selectedText : root.foreground)
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.title
-                      font.bold: row.armed
+                      fontFamily: root.fontFamily
+                      pixelSize: Style.font.title
+                      bold: row.armed
+                      running: !row.armed && root.dragRow < 0 && (rowMouse.containsMouse || row.hasCursor)
                       opacity: !row.armed && (row.entryType === "image" || row.entryType === "file") ? 0.72 : 1.0
-                      elide: Text.ElideRight
-                      wrapMode: Text.NoWrap
-                      verticalAlignment: Text.AlignVCenter
                     }
 
                     // Pin + delete buttons (on hover/cursor), shortcut hint otherwise.
@@ -1439,7 +1506,7 @@ Item {
                       }
 
                       Item {
-                        visible: !row.showActions && !row.armed && row.slot <= 9
+                        visible: !row.showActions && !row.armed && row.slot <= 9 && root.filterText === ""
                         width: visible ? slotHint.implicitWidth + Style.space(6) : 0
                         height: actions.height
 
@@ -1520,7 +1587,7 @@ Item {
 
             Text {
               textFormat: Text.PlainText
-              text: root.history.length === 0 ? "Clipboard is empty" : "No matches for “" + root.filterText + "”"
+              text: root.history.length === 0 ? "Copy something to start" : "No matches"
               color: root.foreground
               opacity: 0.7
               font.family: root.fontFamily
@@ -1569,8 +1636,6 @@ Item {
                   font: clearLabel.font
                   text: ClipboardHistory.clearLabelText(root.history.length, true)
                 }
-                onWidthChanged: console.debug("timon.clipboard clear label: " + clearLabel.text + " width=" + Math.round(width)
-                  + " long=" + Math.round(clearLongMetrics.advanceWidth))
 
                 MouseArea {
                   id: clearMouse

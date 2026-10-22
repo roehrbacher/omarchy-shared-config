@@ -234,3 +234,11 @@ assert.strictEqual(H.searchShown("", false), false, "collapsed: title + search b
 assert.strictEqual(H.searchShown("", true), true, "button click expands")
 assert.strictEqual(H.searchShown("x", false), true, "typing expands")
 console.log("search header: ok")
+
+// ---- 1.11.0 headings --------------------------------------------------------
+assert.strictEqual(H.sectionName(true, 2, true, 5), "Results · 5", "searching: one Results heading")
+assert.strictEqual(H.sectionName(false, 2, true, 5), "Results · 5")
+assert.strictEqual(H.sectionName(true, 2, false, 9), "Pinned")
+assert.strictEqual(H.sectionName(false, 2, false, 9), "History")
+assert.strictEqual(H.sectionName(false, 0, false, 9), "", "no pins: no heading")
+console.log("headings: ok")

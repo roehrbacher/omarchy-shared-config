@@ -6,8 +6,7 @@
 #   clipboard.sh paste <index>            copy entry <index> and paste it (Shift+Insert)
 #   clipboard.sh copy <index>             copy entry <index> only
 #   clipboard.sh copy-pinned <n>          copy the n-th pinned entry (1-based, popup order);
-#                                         used by the global Alt+Shift+N bind, which then
-#                                         sends Shift+Insert itself with explicit modifiers
+#                                         used by paste-pinned.sh (global Alt+Shift+N)
 #   clipboard.sh send <index>             copy text entry <index> and send it to the phone (flux-cli clip)
 #   clipboard.sh open <index>             open a URL in the browser, text in the editor, an image in the editor
 #   clipboard.sh clear                    empty the live clipboard

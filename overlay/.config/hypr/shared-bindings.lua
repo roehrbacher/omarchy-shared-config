@@ -66,24 +66,14 @@ o.bind("SUPER + SHIFT + S", "Signal", { omarchy = "signal" })
 o.bind("ALT + V", "Clipboard history", "omarchy-shell shell toggle timon.clipboard")
 
 -- Alt+Shift+1..9: paste the Nth pinned item anywhere, popup closed.
--- The helper copies it (fails if there is no Nth pin, then nothing is sent);
--- Shift+Insert is sent like the stock universal paste, with explicit mods,
--- so the held Alt+Shift don't merge into it. Number keys by keycode, so the
--- German layout's Shift symbols don't matter. Undo: delete this block.
-local clipboard_helper = (os.getenv("HOME") or "") .. "/.config/omarchy/plugins/timon.clipboard/clipboard.sh"
-local function paste_pinned(n)
-  return function()
-    if not o.shell_succeeds(clipboard_helper .. " copy-pinned " .. n) then return end
-    hl.timer(function()
-      hl.dispatch(hl.dsp.send_key_state({ mods = "SHIFT", key = "Insert", state = "down" }))
-      hl.timer(function()
-        hl.dispatch(hl.dsp.send_key_state({ mods = "SHIFT", key = "Insert", state = "up" }))
-      end, { timeout = 50, type = "oneshot" })
-    end, { timeout = 150, type = "oneshot" })
-  end
-end
+-- Runs paste-pinned.sh detached (exec), so Hyprland never waits on it:
+-- waiting on wl-copy deadlocks the compositor (it froze the PC once).
+-- The script copies the pin (nothing if there is no Nth pin), then sends
+-- Shift+Insert with explicit mods. Keys by keycode (German layout safe).
+-- Undo: delete this block.
+local paste_pinned = (os.getenv("HOME") or "") .. "/.config/omarchy/plugins/timon.clipboard/paste-pinned.sh"
 for n = 1, 9 do
-  o.bind("ALT + SHIFT + code:" .. tostring(n + 9), "Paste pinned clipboard item " .. n, paste_pinned(n))
+  o.bind("ALT + SHIFT + code:" .. tostring(n + 9), "Paste pinned clipboard item " .. n, "setsid -f " .. paste_pinned .. " " .. n)
 end
 o.bind("SUPER + SHIFT + CTRL + V", "Clipboard incognito", "omarchy-shell shell call timon.clipboard toggleIncognito x")
 

@@ -929,7 +929,7 @@ Item {
             // normal control border (0.4), same radius and insets.
             readonly property var spec: Border.controlSpec("normal", root.foreground, root.accent)
             color: Util.alpha(root.foreground, 0.12)
-            Component.onCompleted: console.log("timon.clipboard 1.10.0 header loaded, search fill=" + color)
+            Component.onCompleted: console.log("timon.clipboard 1.10.1 header loaded, search fill=" + color)
             borderSpec: spec
             radius: Style.cornerRadius
           }

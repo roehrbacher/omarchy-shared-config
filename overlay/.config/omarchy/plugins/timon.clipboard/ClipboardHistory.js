@@ -164,7 +164,7 @@ function parseEntryJson(line) {
 
 function searchableText(entry) {
   if (!entry) return ""
-  if (entry.type === "image") return "image screenshot " + String(entry.mime || "") + " " + String(entry.capturedAt || "")
+  if (entry.type === "image") return imagePreviewText(entry).toLowerCase() + " image " + String(entry.mime || "") + " " + String(entry.capturedAt || "")
   return String(entry.text || "") + " " + fileEntryText(entry)
 }
 
@@ -233,9 +233,7 @@ function formatBytes(bytes) {
 }
 
 function imagePreviewText(entry) {
-  var timestamp = String(entry && entry.capturedAt || "")
-  var label = !timestamp ? "Image"
-    : (entry && entry.screenshot === true ? "Screenshot" : "Image") + " from " + timestamp
+  var label = entry && entry.screenshot === true ? "Screenshot" : "Image"
   var size = formatBytes(entry && entry.bytes)
   return size ? label + " · " + size : label
 }

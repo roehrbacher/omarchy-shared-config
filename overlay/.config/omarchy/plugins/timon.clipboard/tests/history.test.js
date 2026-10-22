@@ -63,7 +63,7 @@ let br = H.displayRows([{ type: "text", text: big }], "", 5)
 assert.ok(br[0].fullText.length <= 8192, "display capped")
 
 let img = H.addEntry([], { type: "image", path: "/tmp/a.png", mime: "image/png", capturedAt: "Saturday 07:00" }, 5)
-assert.strictEqual(H.displayRows(img, "screenshot", 5).length, 1, "images searchable")
+assert.strictEqual(H.displayRows(img, "image", 5).length, 1, "images searchable")
 
 // Search field keys: text-field shortcuts must reach the field ("").
 const K = H.KEY
@@ -353,8 +353,8 @@ console.log("headings: ok")
   assert.strictEqual(H.formatBytes(25 * 1024 * 1024), "25 MB")
   const img = H.normalizeEntry({ type: "image", path: "/x/a.png", mime: "image/png", capturedAt: "Thursday 20:40", bytes: 250880, screenshot: true })
   assert.strictEqual(img.bytes, 250880)
-  assert.strictEqual(H.previewText(img), "Screenshot from Thursday 20:40 · 245 KB")
-  assert.strictEqual(H.previewText(H.normalizeEntry({ type: "image", path: "/x/b.png", mime: "image/png", capturedAt: "Thursday 20:40" })), "Image from Thursday 20:40", "old entries: no size, generic Image")
+  assert.strictEqual(H.previewText(img), "Screenshot · 245 KB")
+  assert.strictEqual(H.previewText(H.normalizeEntry({ type: "image", path: "/x/b.png", mime: "image/png", capturedAt: "Thursday 20:40" })), "Image", "old entries: no size, generic Image")
   assert.strictEqual(H.normalizeEntry({ type: "image", path: "/x/c.png", bytes: "junk" }).bytes, undefined)
   console.log("image size: ok")
 }
@@ -363,10 +363,25 @@ console.log("headings: ok")
   // 1.13.2: only real screenshots are labelled "Screenshot"
   const web = H.normalizeEntry({ type: "image", path: "/x/w.png", mime: "image/png", capturedAt: "Thursday 20:51", bytes: 76593, screenshot: false })
   assert.strictEqual(web.screenshot, undefined)
-  assert.strictEqual(H.previewText(web), "Image from Thursday 20:51 · 75 KB")
+  assert.strictEqual(H.previewText(web), "Image · 75 KB")
   const shot = H.normalizeEntry({ type: "image", path: "/x/s.png", mime: "image/png", capturedAt: "Thursday 20:52", screenshot: true })
-  assert.strictEqual(H.previewText(shot), "Screenshot from Thursday 20:52")
+  assert.strictEqual(H.previewText(shot), "Screenshot")
   let hh = H.addEntry([], shot, 10)
   assert.strictEqual(hh[0].screenshot, true, "flag survives addEntry")
   console.log("screenshot label: ok")
+}
+
+{
+  // 1.13.3: search over image rows
+  const hist = [
+    { type: "image", path: "/x/s.png", mime: "image/png", capturedAt: "Thursday 20:52", bytes: 76593, screenshot: true },
+    { type: "image", path: "/x/w.png", mime: "image/png", capturedAt: "Thursday 20:51", bytes: 250880 },
+    { type: "text", text: "hello" }
+  ]
+  const q = s => H.displayRows(hist, s, 50).map(r => r.previewText)
+  assert.deepStrictEqual(q("screenshot"), ["Screenshot · 75 KB"], "only real screenshots")
+  assert.deepStrictEqual(q("image"), ["Screenshot · 75 KB", "Image · 245 KB"], "all images")
+  assert.deepStrictEqual(q("245 kb"), ["Image · 245 KB"], "by size")
+  assert.deepStrictEqual(q("thursday"), ["Screenshot · 75 KB", "Image · 245 KB"], "copy day still searchable")
+  console.log("image search: ok")
 }

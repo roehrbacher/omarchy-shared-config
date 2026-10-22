@@ -35,7 +35,7 @@ ShellRoot {
       { type: "text", text: "Neubaugasse 12, 1070 Wien" },
       { type: "text", text: "roehrbacher/omarchy-clipboard#3" },
       { type: "text", text: "plain" },
-      { type: "image", path: "/nonexistent/a.png", mime: "image/png", capturedAt: "Thursday 20:40", bytes: 250880 }
+      { type: "image", path: "/nonexistent/a.png", mime: "image/png", capturedAt: "Thursday 20:40", bytes: 250880, screenshot: true }
     ]
     clip.rebuildDisplay(false)
     clip.cursorActive = true; clip.selectedIndex = 1

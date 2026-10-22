@@ -351,10 +351,22 @@ console.log("headings: ok")
   assert.strictEqual(H.formatBytes(250880), "245 KB")
   assert.strictEqual(H.formatBytes(1468006), "1.4 MB")
   assert.strictEqual(H.formatBytes(25 * 1024 * 1024), "25 MB")
-  const img = H.normalizeEntry({ type: "image", path: "/x/a.png", mime: "image/png", capturedAt: "Thursday 20:40", bytes: 250880 })
+  const img = H.normalizeEntry({ type: "image", path: "/x/a.png", mime: "image/png", capturedAt: "Thursday 20:40", bytes: 250880, screenshot: true })
   assert.strictEqual(img.bytes, 250880)
   assert.strictEqual(H.previewText(img), "Screenshot from Thursday 20:40 · 245 KB")
-  assert.strictEqual(H.previewText(H.normalizeEntry({ type: "image", path: "/x/b.png", mime: "image/png", capturedAt: "Thursday 20:40" })), "Screenshot from Thursday 20:40", "old entries without size")
+  assert.strictEqual(H.previewText(H.normalizeEntry({ type: "image", path: "/x/b.png", mime: "image/png", capturedAt: "Thursday 20:40" })), "Image from Thursday 20:40", "old entries: no size, generic Image")
   assert.strictEqual(H.normalizeEntry({ type: "image", path: "/x/c.png", bytes: "junk" }).bytes, undefined)
   console.log("image size: ok")
+}
+
+{
+  // 1.13.2: only real screenshots are labelled "Screenshot"
+  const web = H.normalizeEntry({ type: "image", path: "/x/w.png", mime: "image/png", capturedAt: "Thursday 20:51", bytes: 76593, screenshot: false })
+  assert.strictEqual(web.screenshot, undefined)
+  assert.strictEqual(H.previewText(web), "Image from Thursday 20:51 · 75 KB")
+  const shot = H.normalizeEntry({ type: "image", path: "/x/s.png", mime: "image/png", capturedAt: "Thursday 20:52", screenshot: true })
+  assert.strictEqual(H.previewText(shot), "Screenshot from Thursday 20:52")
+  let hh = H.addEntry([], shot, 10)
+  assert.strictEqual(hh[0].screenshot, true, "flag survives addEntry")
+  console.log("screenshot label: ok")
 }

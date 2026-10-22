@@ -25,6 +25,7 @@ function normalizeEntry(value) {
       entry.capturedAt = String(value.capturedAt)
     var bytes = Number(value.bytes)
     if (isFinite(bytes) && bytes > 0) entry.bytes = Math.round(bytes)
+    if (value.screenshot === true) entry.screenshot = true
   } else {
     return null
   }
@@ -234,7 +235,7 @@ function formatBytes(bytes) {
 function imagePreviewText(entry) {
   var timestamp = String(entry && entry.capturedAt || "")
   var label = !timestamp ? "Image"
-    : (String(entry && entry.mime || "") === "image/png" ? "Screenshot" : "Image") + " from " + timestamp
+    : (entry && entry.screenshot === true ? "Screenshot" : "Image") + " from " + timestamp
   var size = formatBytes(entry && entry.bytes)
   return size ? label + " · " + size : label
 }

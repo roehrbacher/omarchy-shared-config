@@ -58,9 +58,14 @@ emit_image() {
     mv "$tmp" "$file"
   fi
 
+  # A screenshot tool offers only image data; a browser "Copy image" also
+  # offers text/html, a source URL or text/x-moz-url, so that is an image.
+  local screenshot=true
+  grep -qvE '^image/' <<<"$types" && screenshot=false
+
   jq -cn --arg mime "$mime" --arg path "$file" --arg captured_at "$(date +'%A %H:%M')" \
-    --argjson bytes "$(stat -c %s "$file")" \
-    '{type:"image", mime:$mime, path:$path, capturedAt:$captured_at, bytes:$bytes}'
+    --argjson bytes "$(stat -c %s "$file")" --argjson screenshot "$screenshot" \
+    '{type:"image", mime:$mime, path:$path, capturedAt:$captured_at, bytes:$bytes, screenshot:$screenshot}'
 }
 
 emit_text() {
@@ -111,8 +116,12 @@ emit_text() {
   '
 }
 
+# One copy that offers an image (browser "Copy image": image/png + text/html +
+# a URL) wakes both watchers; keep only the image, not a separate link entry.
+has_image() { grep -q '^image/' <<<"$types"; }
+
 case "${1:-}" in
-text) emit_text; exit 0 ;;
+text) if has_image; then drain; else emit_text; fi; exit 0 ;;
 image/*) emit_image "$1"; exit 0 ;;
 esac
 

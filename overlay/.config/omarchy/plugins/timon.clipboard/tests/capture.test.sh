@@ -37,6 +37,13 @@ check "image captured" "$out" image
 img=$(ls "$tmp/data/timon.clipboard/images")
 check "image file is 0600" "$(stat -c %a "$tmp/data/timon.clipboard/images/$img")" 600
 check "image size recorded" "$(printf '\x89PNG\r\n\x1a\nfake' | "$here/capture.sh" image/png | jq -r .bytes)" 12
+# 1.13.2: browser "Copy image" (image + html + URL) vs screenshot tool (image only)
+web='text/x-moz-url\ntext/html\nimage/png\nchromium/x-source-url\n'
+out=$(printf 'https://i.example/a.webp' | FAKE_TYPES="$web" "$here/capture.sh" text)
+check "browser image copy: no separate link entry" "$out" ""
+check "browser image copy: not a screenshot" "$(printf '\x89PNG\r\n\x1a\nweb' | FAKE_TYPES="$web" "$here/capture.sh" image/png | jq -r .screenshot)" false
+check "screenshot tool (image only) is a screenshot" "$(printf '\x89PNG\r\n\x1a\nshot' | FAKE_TYPES='image/png\n' "$here/capture.sh" image/png | jq -r .screenshot)" true
+check "plain text still captured" "$(printf 'hi' | FAKE_TYPES='text/plain\nUTF8_STRING\n' "$here/capture.sh" text | jq -r .text)" hi
 
 out=$(head -c $((5 * 1024 * 1024)) /dev/zero | tr '\0' a | "$here/capture.sh" text)
 check "huge text (>4 MiB) skipped" "$out" ""

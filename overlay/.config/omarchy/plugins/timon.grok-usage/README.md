@@ -34,14 +34,10 @@ omarchy restart shell
 Based on [grokbar-omarchy](https://github.com/pixbroker/grokbar-omarchy) by pixbroker
 (fork of commit fdc88ed), MIT licensed. The original `LICENSE` is kept unchanged.
 
-## Glance looks (local patch, trial)
+## Usage ring (local patch)
 
-With "Icon only" on, the bar setting `"glanceVariants": "4,5,6,7,8,9"` adds Grok Bot
-weekly-usage looks right of the icon (`GlanceVariant.qml`): 1 ring + day dots,
-2 ring + "Nd", 3 two bars (usage, time left in the week), 4 ring that turns
-`bar.active` when usage runs ahead of the week. Hugging looks (all with 4's
-pace colour): 5 thin ring touching the logo disc, 6 ring centred on the disc
-edge, 7 logo scaled up into look 4's ring, 8 the logo disc itself is the
-gauge, 9 thick 3 px ring touching the disc. Drop numbers to remove looks;
-`""` turns it off. Offscreen render: `bash tests/glance/run.sh /tmp/glance`
-(software renderer; the icon's MultiEffect tint isn't drawn there).
+With "Icon only" on, `"usageRing": true` draws the Grok Bot weekly usage as a
+3 px ring hugging the logo (`UsageRing.qml`, track visible). It is the bar
+foreground normally and `bar.active` when usage runs ahead of the week.
+Offscreen render: `bash tests/glance/run.sh /tmp/glance` (software renderer;
+the icon's MultiEffect tint isn't drawn there).

@@ -1,7 +1,7 @@
 import Quickshell
 import QtQuick
 import qs.Commons
-// Offscreen render of the four glance variants on a bar-coloured strip.
+// Offscreen render of the usage ring on a bar-coloured strip.
 // Real numbers from the scanner are passed in via env (GLANCE_P/E/D/R).
 ShellRoot {
   id: shell
@@ -28,15 +28,12 @@ ShellRoot {
           objectName: "strip-" + modelData.tag
           spacing: Style.space(1)
           Repeater {
-            model: [4, 5, 6, 7, 8, 9]
-            GlanceVariant {
+            model: [9]
+            UsageRing {
               required property int modelData
               objectName: "v" + modelData
-              variant: modelData
               percent: strip.modelData.p
               elapsed: strip.modelData.e
-              daysLeft: shell.d
-              resetText: shell.r
               iconSource: Qt.resolvedUrl("assets/grok-bot.svg")
               // Theme colours when loaded, stock defaults otherwise.
               foreground: shell.fg

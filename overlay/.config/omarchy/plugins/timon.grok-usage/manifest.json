@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "timon.grok-usage",
   "name": "Grok",
-  "version": "1.9.0",
+  "version": "2.0.0",
   "author": "Timon Röhrbacher (based on grokbar-omarchy by pixbroker)",
   "license": "MIT",
   "description": "SuperGrok usage on the bar, plus optional Cursor, Grok Bot, and GPT.",
@@ -33,7 +33,7 @@
       "cursorAuthPath": "",
       "codexHome": "",
       "iconOnly": false,
-      "glanceVariants": ""
+      "usageRing": false
     },
     "schema": [
       {
@@ -44,11 +44,11 @@
         "defaultValue": false
       },
       {
-        "key": "glanceVariants",
-        "type": "string",
-        "label": "Glance looks (trial)",
-        "description": "Comma list of Grok Bot weekly-usage looks right of the icon (icon-only mode): 1 ring+dots, 2 ring+days, 3 two bars, 4 pace-coloured ring; hugging, all pace-coloured: 5 thin ring touching the disc, 6 ring on the disc edge, 7 logo scaled into look 4's ring, 8 logo disc as the gauge, 9 thick ring touching. Empty = off.",
-        "defaultValue": ""
+        "key": "usageRing",
+        "type": "boolean",
+        "label": "Usage ring",
+        "description": "Icon-only mode: a ring around the Grok Bot logo shows weekly usage, in bar.active when usage runs ahead of the week (local patch).",
+        "defaultValue": false
       },
       {
         "key": "showCursorUsage",

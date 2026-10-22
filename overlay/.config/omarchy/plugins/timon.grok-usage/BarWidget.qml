@@ -81,12 +81,9 @@ BarWidget {
   // Local patch (Timon): "iconOnly": true shows only the Grok Bot logo on the
   // bar, no usage numbers. Clicking it opens the same panel as before.
   readonly property bool iconOnly: setting("iconOnly", false) === true
-  // Local patch (Timon): "glanceVariants": "4,5,6,7,8,9" adds those Grok Bot
-  // weekly-usage looks (GlanceVariant.qml) right of the icon, side by side.
-  // Remove numbers to drop looks; "" turns it off.
-  readonly property var glanceList: String(setting("glanceVariants", "")).split(",")
-    .map(function(x) { return parseInt(x, 10) }).filter(function(n) { return n >= 1 && n <= 9 })
-  readonly property bool glanceOn: glanceList.length > 0
+  // Local patch (Timon): "usageRing": true draws the Grok Bot weekly usage
+  // as a ring around the logo (UsageRing.qml) in icon-only mode.
+  readonly property bool glanceOn: setting("usageRing", false) === true
   // Writable so a settings click flips immediately. shell.json reloads can
   // briefly replay the previous entry; persistGuardUntilMs ignores that echo.
   property bool showCursorUsage: false
@@ -1031,36 +1028,15 @@ BarWidget {
       anchors.centerIn: parent
     }
 
-    // Plain icon first (as before), then the trial looks, no gaps: each is
-    // one stock icon slot (variant 2 adds its "Nd" text).
-    Row {
+    UsageRing {
       id: glanceRow
       visible: !button.vertical && root.iconOnly && root.glanceOn
-      anchors.verticalCenter: parent.verticalCenter
-      x: 0
-      Item {
-        width: Style.bar.iconSlot
-        height: Style.bar.iconSlot
-        ThemedGrokBotIcon { anchors.centerIn: parent }
-      }
-      Repeater {
-        model: root.glanceList
-        GlanceVariant {
-          required property int modelData
-          variant: modelData
-          percent: root.grokBotHasData ? root.grokBotPercent : -1
-          elapsed: root.grokBotExpectedPace
-          daysLeft: {
-            var end = root.parseTimeMs(root.grokBotResetAt)
-            return end > 0 ? Math.max(0, (end - root.nowMs) / 86400000) : -1
-          }
-          resetText: root.grokBotResetText
-          foreground: root.foreground
-          alertColor: button.activeColor
-          iconSource: root.grokBotIconSource
-          fontFamily: button.fontFamily
-        }
-      }
+      anchors.centerIn: parent
+      percent: root.grokBotHasData ? root.grokBotPercent : -1
+      elapsed: root.grokBotExpectedPace
+      foreground: root.foreground
+      alertColor: button.activeColor
+      iconSource: root.grokBotIconSource
     }
 
     ThemedCursorIcon {

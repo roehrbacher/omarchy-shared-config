@@ -1,6 +1,6 @@
 import Quickshell
 import QtQuick
-// Compile check of BarWidget.qml + GlanceVariant.qml (no bar, no scanner run).
+// Compile check of BarWidget.qml + UsageRing.qml (no bar, no scanner run).
 ShellRoot {
   Component.onCompleted: {
     var c = Qt.createComponent("BarWidget.qml")

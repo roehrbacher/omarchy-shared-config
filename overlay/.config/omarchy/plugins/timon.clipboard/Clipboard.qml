@@ -889,6 +889,10 @@ Item {
           BorderSurface {
             id: searchButton
             visible: !root.searchShown && !root.infoOpen
+            // Above searchInput: the (invisible while collapsed) text field
+            // spans the whole row and is declared later, so without this it
+            // took most clicks meant for the button.
+            z: 2
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.bottom: parent.bottom
@@ -929,7 +933,7 @@ Item {
             // normal control border (0.4), same radius and insets.
             readonly property var spec: Border.controlSpec("normal", root.foreground, root.accent)
             color: Util.alpha(root.foreground, 0.12)
-            Component.onCompleted: console.log("timon.clipboard 1.10.1 header loaded, search fill=" + color)
+            Component.onCompleted: console.log("timon.clipboard 1.10.2 header loaded, search fill=" + color)
             borderSpec: spec
             radius: Style.cornerRadius
           }

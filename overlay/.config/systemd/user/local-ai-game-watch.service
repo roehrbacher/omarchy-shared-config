@@ -1,0 +1,12 @@
+[Unit]
+Description=Local AI: notify when a game starts while a model is loaded
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/python3 %h/.config/omarchy/plugins/timon.local-ai/game-watch.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

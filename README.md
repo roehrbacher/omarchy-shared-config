@@ -195,7 +195,7 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
 - `timon.hover-reveal` – now its own repo (github.com/roehrbacher/omarchy-hover-reveal),
   installed with `omarchy plugin add` and no longer copied from this overlay.
   Choices live in `~/.config/omarchy/hover-reveal.json`.
-- `timon.local-ai` 0.2.0 – skull-and-crossbones icon (filled = a local model is
+- `timon.local-ai` 0.3.0 – skull-and-crossbones icon (filled = a local model is
   running, outline = none, pulsing = loading). Click opens a popup with one
   switch per model that starts/stops its systemd user unit (never enables it);
   with `"exclusive": true` turning one on stops the others. Models come from
@@ -210,6 +210,12 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
   `~/.cache/huggingface/hub`, `~/.lmstudio/models`; `mmproj*` and split parts
   after the first are skipped). Turn off with `"listFiles": false`. The list
   refreshes on popup open, every few seconds, and on middle click.
+  Game notice: `game-watch.py` (user service `local-ai-game-watch`) listens to
+  Hyprland window events (no polling). When a game starts (same process match
+  as `omarchy-safe-gate`, or a `steam_app_*` window) while a model is loaded or
+  loading, one notification "Local AI loaded · <model>"; clicking it stops the
+  model unit like the popup switch. Once per game session, nothing while no
+  model runs. Off: `systemctl --user disable --now local-ai-game-watch`.
 - `timon.idle` – stock idle plugin, but moving or clicking the mouse also closes
   the screensaver (stock only reacts to keys). Retired automatically by the hook
   below once stock can do it.

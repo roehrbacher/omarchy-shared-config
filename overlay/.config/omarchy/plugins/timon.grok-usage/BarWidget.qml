@@ -81,11 +81,11 @@ BarWidget {
   // Local patch (Timon): "iconOnly": true shows only the Grok Bot logo on the
   // bar, no usage numbers. Clicking it opens the same panel as before.
   readonly property bool iconOnly: setting("iconOnly", false) === true
-  // Local patch (Timon): "glanceVariants": "1,2,3,4" adds those Grok Bot
+  // Local patch (Timon): "glanceVariants": "4,5,6,7,8,9" adds those Grok Bot
   // weekly-usage looks (GlanceVariant.qml) right of the icon, side by side.
   // Remove numbers to drop looks; "" turns it off.
   readonly property var glanceList: String(setting("glanceVariants", "")).split(",")
-    .map(function(x) { return parseInt(x, 10) }).filter(function(n) { return n >= 1 && n <= 4 })
+    .map(function(x) { return parseInt(x, 10) }).filter(function(n) { return n >= 1 && n <= 9 })
   readonly property bool glanceOn: glanceList.length > 0
   // Writable so a settings click flips immediately. shell.json reloads can
   // briefly replay the previous entry; persistGuardUntilMs ignores that echo.

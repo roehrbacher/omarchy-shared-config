@@ -28,7 +28,7 @@ ShellRoot {
           objectName: "strip-" + modelData.tag
           spacing: Style.space(1)
           Repeater {
-            model: [1, 2, 3, 4]
+            model: [4, 5, 6, 7, 8, 9]
             GlanceVariant {
               required property int modelData
               objectName: "v" + modelData

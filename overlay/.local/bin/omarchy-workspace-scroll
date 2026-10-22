@@ -1,7 +1,8 @@
 #!/bin/bash
 # Managed by omarchy-shared-config. Super+wheel (and the XPS 3-finger swipe):
 # step through workspaces lowest occupied - 1 (min 1) .. highest occupied + 1
-# (max 10), empty ones in between included. Wraps at the ends like stock e+1.
+# (max 10), empty ones in between included. Stops at the ends (no wrap),
+# like the touchpad swipe.
 # Usage: omarchy-workspace-scroll next|prev
 #        omarchy-workspace-scroll --plan next|prev CURRENT OCCUPIED...  (test, no dispatch)
 set -u
@@ -14,9 +15,9 @@ plan() { # dir cur occupied...
   lo=$((lo - 1)); ((lo < 1)) && lo=1
   hi=$((hi + 1)); ((hi > 10)) && hi=10
   if [[ $dir == next ]]; then
-    if ((cur < lo)); then echo "$lo"; elif ((cur >= hi)); then echo "$lo"; else echo $((cur + 1)); fi
+    if ((cur < lo)); then echo "$lo"; elif ((cur >= hi)); then echo "$cur"; else echo $((cur + 1)); fi
   else
-    if ((cur > hi)); then echo "$hi"; elif ((cur <= lo)); then echo "$hi"; else echo $((cur - 1)); fi
+    if ((cur > hi)); then echo "$hi"; elif ((cur <= lo)); then echo "$cur"; else echo $((cur - 1)); fi
   fi
 }
 

@@ -83,7 +83,7 @@ hl.unbind("SUPER + F")
 o.bind("SUPER + F", "Full screen", "omarchy-fullscreen-smart")
 
 -- Super+wheel: workspaces from lowest occupied - 1 to highest occupied + 1
--- (1..10), empty ones in between included; wraps at the ends like stock.
+-- (1..10), empty ones in between included; stops at the ends (no wrap).
 -- Runs detached (setsid -f), so Hyprland never waits on it.
 -- Undo: delete this block (stock e+1/e-1 binds come back).
 hl.unbind("SUPER + mouse_down")

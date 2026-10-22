@@ -508,8 +508,8 @@ Item {
   }
 
   function setFilter(nextFilter) {
-    // Typing expands the field; deleting the last character collapses it.
-    root.searchExpanded = nextFilter !== ""
+    // Typing expands the field; only Esc collapses it (not an empty search).
+    if (nextFilter !== "") root.searchExpanded = true
     root.filterText = nextFilter
     root.selectedIndex = 0
     root.cursorActive = true
@@ -871,7 +871,7 @@ Item {
             visible: !root.searchShown
             anchors.left: parent.left
             anchors.leftMargin: Style.spacing.controlPaddingX
-            anchors.right: incognitoBadge.visible ? incognitoBadge.left : searchButton.left
+            anchors.right: incognitoBadge.visible ? incognitoBadge.left : (searchButton.visible ? searchButton.left : parent.right)
             anchors.rightMargin: Style.space(12)
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
@@ -883,18 +883,36 @@ Item {
             elide: Text.ElideRight
           }
 
-          PanelActionButton {
+          // Square, styled exactly like the expanded search field (same
+          // fill, border and radius as searchBox), icon centred. Not on the
+          // settings page, where searching does nothing.
+          BorderSurface {
             id: searchButton
-            visible: !root.searchShown
+            visible: !root.searchShown && !root.infoOpen
             anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            iconText: "󰍉"
-            tooltipText: "Search (or just type)"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onClicked: {
-              root.searchExpanded = true
-              searchInput.forceActiveFocus()
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: height
+            color: searchBox.color
+            borderSpec: searchBox.spec
+            radius: searchBox.radius
+
+            Text {
+              anchors.centerIn: parent
+              textFormat: Text.PlainText
+              text: "󰍉"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.icon
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: {
+                root.searchExpanded = true
+                searchInput.forceActiveFocus()
+              }
             }
           }
 
@@ -911,7 +929,7 @@ Item {
             // normal control border (0.4), same radius and insets.
             readonly property var spec: Border.controlSpec("normal", root.foreground, root.accent)
             color: Util.alpha(root.foreground, 0.12)
-            Component.onCompleted: console.log("timon.clipboard 1.9.0 header loaded, search fill=" + color)
+            Component.onCompleted: console.log("timon.clipboard 1.10.0 header loaded, search fill=" + color)
             borderSpec: spec
             radius: Style.cornerRadius
           }
@@ -960,8 +978,8 @@ Item {
           Rectangle {
             id: incognitoBadge
             visible: root.privateMode
-            anchors.right: root.searchShown ? parent.right : searchButton.left
-            anchors.rightMargin: root.searchShown ? 0 : Style.space(8)
+            anchors.right: searchButton.visible ? searchButton.left : parent.right
+            anchors.rightMargin: searchButton.visible ? Style.space(8) : 0
             anchors.verticalCenter: parent.verticalCenter
             width: badgeText.implicitWidth + Style.space(12)
             height: badgeText.implicitHeight + Style.space(4)
@@ -1183,6 +1201,26 @@ Item {
                 Repeater {
                   model: [
                     { icon: "󰋚", label: "Keeps the last " + root.historyLimit, value: "pinned items kept" }
+                  ]
+                  delegate: infoValueRow
+                }
+
+                Text {
+                  text: "SHORTCUTS"
+                  color: root.dimText
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  topPadding: Style.space(10)
+                  bottomPadding: Style.space(4)
+                  leftPadding: Style.space(10)
+                }
+
+                Repeater {
+                  model: [
+                    { icon: "󰅍", label: "Open clipboard", value: "Alt+V · Super+Ctrl+V" },
+                    { icon: "󰐃", label: "Paste pinned item N, anywhere", value: "Alt+Shift+1…9" },
+                    { icon: "󰆏", label: "Paste row N, in this popup", value: "Alt+1…9" }
                   ]
                   delegate: infoValueRow
                 }

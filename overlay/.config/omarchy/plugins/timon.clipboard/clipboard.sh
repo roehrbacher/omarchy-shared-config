@@ -5,6 +5,9 @@
 #   clipboard.sh init                     create the data dir (user-only), import stock history once
 #   clipboard.sh paste <index>            copy entry <index> and paste it (Shift+Insert)
 #   clipboard.sh copy <index>             copy entry <index> only
+#   clipboard.sh copy-pinned <n>          copy the n-th pinned entry (1-based, popup order);
+#                                         used by the global Alt+Shift+N bind, which then
+#                                         sends Shift+Insert itself with explicit modifiers
 #   clipboard.sh send <index>             copy text entry <index> and send it to the phone (flux-cli clip)
 #   clipboard.sh open <index>             open a URL in the browser, text in the editor, an image in the editor
 #   clipboard.sh clear                    empty the live clipboard
@@ -61,6 +64,12 @@ paste | copy)
   [[ $1 == copy ]] && exit 0
   sleep 0.15
   wtype -M shift -k Insert -m shift 2>/dev/null || true
+  ;;
+copy-pinned)
+  [[ ${2:-} =~ ^[1-9]$ && -r $HISTORY ]] || exit 1
+  i=$(jq -r --argjson n "$2" '[to_entries[] | select(.value.pinned == true) | .key][$n - 1] // empty' "$HISTORY") || exit 1
+  [[ -n $i ]] || exit 1
+  copy_entry "$i" || exit 1
   ;;
 send)
   valid_index "${2:-}" || exit 1

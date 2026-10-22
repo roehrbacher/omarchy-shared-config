@@ -312,7 +312,7 @@ var KEY = {
   Shift: 0x01000020, Control: 0x01000021, Meta: 0x01000022, Alt: 0x01000023, AltGr: 0x01001103
 }
 
-// Esc in the popup: clear a search (which also collapses the field), else
+// Esc in the popup: clear a search (the field stays open), else
 // collapse an open empty field, else close the popup.
 function escapeAction(filterText, expanded) {
   if (String(filterText || "") !== "") return "clear"

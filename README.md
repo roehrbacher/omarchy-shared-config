@@ -295,7 +295,7 @@ default menu (the menu would otherwise blank them).
 
 **Insomnia** – vendored copy of my own repo
 [omarchy-insomnia](https://github.com/roehrbacher/omarchy-insomnia) (private;
-copy of `cd81ac4`: `.local/bin/omarchy-{insomnia,machine-kind,indicators-build,lid,lid-quiet,screen-off}`,
+copy of `9ec0113`: `.local/bin/omarchy-{insomnia,machine-kind,indicators-build,lid,lid-quiet,screen-off}`,
 `.local/share/omarchy-config/indicators/`, the rebuild hook and
 `omarchy-lid-quiet-thaw.service`; tests: `bash tests/insomnia.test.sh` there).
 Update: change it there, copy the files here. One more indicator in the bar's indicators group
@@ -328,9 +328,9 @@ can force `INSOMNIA_MODE=laptop|desktop` or override any `INSOMNIA_*` value.
   that for the active session, no sudo), so nothing suspends and closing the lid
   keeps it running **also on battery**. No lock on start (keep working, close the lid when done), unlocking
   doesn't end it (one session spans several close/open cycles). It no longer
-  ends at a battery level: on battery at **5 % or less** it refuses to start
+  ends at a battery level: on battery at or below the low-battery hibernate level (`HIBERNATE_PERCENT` in `~/.config/omarchy/low-battery-hibernate.conf`, default **5 %**, the same value `timon.battery` uses) it refuses to start
   ("Battery too low"; on AC any level is fine), and the XPS's low-battery
-  hibernate (`timon.battery`, 4 %) is the safety net: it ends the session and
+  hibernate (`timon.battery`) is the safety net: it ends the session and
   hibernates, also with the lid closed. When the time is up with the lid closed
   on battery, it suspends.
   Tooltip "Stay awake with lid closed". The laptop parts, all no-ops on a

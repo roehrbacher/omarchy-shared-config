@@ -19,8 +19,10 @@
 #     closing the lid on battery keeps
 #     it running like on AC (omarchy-lid: lock + screen off + quiet mode); no
 #     lock on start; survives unlocks (lid close/open cycles). It does NOT end
-#     at a battery level: it can't be started on battery at/below 5 %
-#     ("battery too low"; on AC any level is fine), and the low-battery
+#     at a battery level: it can't be started on battery at/below the
+#     low-battery hibernate level (HIBERNATE_PERCENT in
+#     ~/.config/omarchy/low-battery-hibernate.conf, default 5 %; "battery too
+#     low"; on AC any level is fine), and the low-battery
 #     hibernate (github.com/roehrbacher/omarchy-low-battery-hibernate) is the
 #     safety net: near empty it ends the session and hibernates, also with the
 #     lid closed. When the time is up with the lid closed on battery, it suspends.
@@ -33,7 +35,8 @@
 #   INSOMNIA_LOCK_ON_START=0             lock + screen off on start (1/0)
 #   INSOMNIA_FLOOR=20                    end on battery at/below this % (default empty: never)
 #   INSOMNIA_MIN_START=5                 refuse to start on battery at/below this %
-#                                        (laptop default 5, empty: always allow)
+#                                        (laptop default: the hibernate level, see
+#                                        above; empty: always allow)
 #   INSOMNIA_END_ON_UNLOCK=0             end when the lock screen is unlocked during
 #                                        the session (desktop default 1: waking the PC
 #                                        and unlocking means you are back)
@@ -65,6 +68,14 @@ CONF="$HOME/.config/omarchy/insomnia.conf"
 
 INSOMNIA_MODE=$(omarchy-machine-kind 2>/dev/null || echo desktop)
 
+# The low-battery hibernate level, same rule as the battery plugin
+# (BatteryModel.parseTriggerPercent): HIBERNATE_PERCENT=1..50, otherwise 5.
+hibernate_percent() {
+  local f=${LOW_BATTERY_HIBERNATE_CONF:-$HOME/.config/omarchy/low-battery-hibernate.conf} v
+  v=$(sed -n "s/^[[:space:]]*HIBERNATE_PERCENT[[:space:]]*=[[:space:]]*[\"']\{0,1\}\([0-9]\{1,\}\)[\"']\{0,1\}[[:space:]]*\(#.*\)\{0,1\}$/\1/p" "$f" 2>/dev/null | head -1)
+  if [[ $v =~ ^[0-9]+$ ]] && (( 10#$v >= 1 && 10#$v <= 50 )); then echo $((10#$v)); else echo 5; fi
+}
+
 lid_closed() {
   [[ $(busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager LidClosed 2>/dev/null) == "b true" ]]
 }
@@ -73,7 +84,7 @@ if [[ $INSOMNIA_MODE == laptop ]]; then
   INSOMNIA_INHIBIT="sleep:handle-lid-switch"
   INSOMNIA_LOCK_ON_START=0
   INSOMNIA_FLOOR=""
-  INSOMNIA_MIN_START=5
+  INSOMNIA_MIN_START=$(hibernate_percent)
   INSOMNIA_END_ON_UNLOCK=0
   INSOMNIA_DESC="Closing the lid keeps the laptop running, also on battery"
   INSOMNIA_TOOLTIP="Stay awake with lid closed"
@@ -185,7 +196,7 @@ start() {
   fi
   systemctl --user reset-failed "$UNIT" >/dev/null 2>&1
   local envs=() v
-  for v in INSOMNIA_FAKE_BATTERY INSOMNIA_FAKE_LOCK INSOMNIA_DRY_RUN INSOMNIA_FLOOR_OVERRIDE INSOMNIA_UNIT; do
+  for v in INSOMNIA_FAKE_BATTERY INSOMNIA_FAKE_LOCK INSOMNIA_DRY_RUN INSOMNIA_FLOOR_OVERRIDE INSOMNIA_UNIT LOW_BATTERY_HIBERNATE_CONF; do
     [[ -n ${!v:-} ]] && envs+=(-E "$v=${!v}")
   done
   [[ -n ${INSOMNIA_DRY_RUN:-} ]] && envs+=(-E "PATH=$PATH")
@@ -324,5 +335,5 @@ check-start)
   if too_low_to_start "${2:?percent}" "${3:?battery|ac}"; then echo "refuse (${2}% on $3, min ${INSOMNIA_MIN_START:-none})"; else echo "allow (${2}% on $3, min ${INSOMNIA_MIN_START:-none})"; fi ;;
 _hold) hold ;;
 _ended) ended ;;
-*) sed -n '2,58p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
+*) sed -n '2,61p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

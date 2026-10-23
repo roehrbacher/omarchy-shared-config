@@ -470,3 +470,37 @@ a.strictEqual(H.imageTextActions({type:"image",path:"/c",qr:"info@example.com"})
 a.strictEqual(H.imageTextActions({type:"image",path:"/c",qr:"BEGIN:VCARD"}).copyTip,"Copy QR code text")
 const re=H.addEntry(H.parseHistory(JSON.stringify(h)),{type:"image",path:"/a.png"},100);a.strictEqual(re[0].ocr,"Rechnung Betrag 42")
 console.log("filters/ocr: ok")}
+
+// ---- 1.17.0: Markdown paste, paste queue --------------------------------
+{
+  const html = '<p>Some <b>bold</b> <a href="https://e.x">link</a></p>'
+  let m = H.addEntry([], { type: "text", text: "Some bold link", html }, 10)
+  assert.strictEqual(m[0].html, html, "html kept on capture")
+  assert.strictEqual(H.hasRichHtml(m[0]), true, "formatted html offers Markdown")
+  assert.strictEqual(H.hasRichHtml({ type: "text", text: "x", html: "<span>x</span>" }), false, "plain html: no Markdown button")
+  assert.strictEqual(H.hasRichHtml({ type: "text", text: "x" }), false, "no html: no Markdown button")
+  m = H.addEntry(m, { type: "text", text: "Some bold link" }, 10)
+  assert.strictEqual(m[0].html, html, "re-copy from history keeps the html")
+  assert.strictEqual(H.normalizeEntry({ type: "text", text: "x", html: "a".repeat(300000) }).html, undefined, "oversized html dropped")
+  const rows = H.displayRows(m, "", 10)
+  assert.strictEqual(rows[0].hasMarkdown, true, "row flag")
+  assert.deepStrictEqual(H.rowActionNames(false, false, true, "", false, true), ["markdown", "delete", "pin"], "markdown button")
+
+  let q = []
+  q = H.toggleQueued(q, "a"); q = H.toggleQueued(q, "b"); q = H.toggleQueued(q, "c")
+  assert.deepStrictEqual([H.queueNumber(q, "a"), H.queueNumber(q, "b"), H.queueNumber(q, "c"), H.queueNumber(q, "z")], [1, 2, 3, 0], "order numbers")
+  q = H.toggleQueued(q, "a")
+  assert.deepStrictEqual([H.queueNumber(q, "b"), H.queueNumber(q, "c"), H.queueNumber(q, "a")], [1, 2, 0], "ctrl+click again removes, rest move up")
+  assert.deepStrictEqual(H.queueItems([{ type: "text", text: "t", html: "<b>t</b>", app: "x", at: 1 }, { type: "image", path: "/p.png", mime: "image/png", ocr: "o" }, null]),
+    [{ type: "text", text: "t" }, { type: "image", path: "/p.png", mime: "image/png" }], "queue items carry only what is pasted")
+  assert.strictEqual(H.queueButtonLabel(3, null), "Paste 3 in order")
+  assert.strictEqual(H.queueButtonLabel(0, { pos: 1, count: 5 }), "Pasting 2 of 5 · Cancel")
+  assert.strictEqual(H.queueButtonLabel(0, null), "")
+  const K = H.KEY || { Escape: 0x01000000, Return: 0x01000004 }
+  assert.strictEqual(H.searchKeyAction({ key: 0x20, ctrl: true }), "queueToggle", "Ctrl+Space")
+  assert.strictEqual(H.searchKeyAction({ key: 0x01000004, ctrl: true, queued: 2 }), "queueStart", "Ctrl+Enter starts")
+  assert.strictEqual(H.searchKeyAction({ key: 0x01000004, ctrl: true, queued: 0 }), "enter", "Ctrl+Enter without queue = Enter")
+  assert.strictEqual(H.searchKeyAction({ key: 0x01000000, queued: 2 }), "queueClear", "Esc clears the selection first")
+  assert.strictEqual(H.searchKeyAction({ key: 0x01000000, queued: 0 }), "escape")
+  console.log("markdown/queue: ok")
+}

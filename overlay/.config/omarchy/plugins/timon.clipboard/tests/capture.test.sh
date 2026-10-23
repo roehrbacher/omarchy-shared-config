@@ -10,6 +10,8 @@ cat >"$tmp/bin/wl-paste" <<'STUB'
 [[ ${1:-} == --list-types ]] && printf '%b' "${FAKE_TYPES:-text/plain\n}"
 STUB
 chmod +x "$tmp/bin/wl-paste"
+# No live window: a real Hyprland session would add its "app" field.
+printf "#!/bin/bash\nexit 1\n" >"$tmp/bin/hyprctl"; chmod +x "$tmp/bin/hyprctl"
 export PATH="$tmp/bin:$PATH" XDG_DATA_HOME="$tmp/data"
 fail=0
 check() { if [[ $2 == "$3" ]]; then echo "ok   $1"; else echo "FAIL $1: got '$2' want '$3'"; fail=1; fi; }

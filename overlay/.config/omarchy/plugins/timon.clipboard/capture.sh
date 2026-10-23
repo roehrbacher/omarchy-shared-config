@@ -34,6 +34,11 @@ fi
 
 types=$(wl-paste --list-types 2>/dev/null || true)
 
+# Password managers: Bitwarden desktop (arboard >= 3.6 exclude_from_history),
+# KeePassXC and `wl-copy --sensitive` offer the x-kde-passwordManagerHint
+# type ("secret"). wl-paste >= 2.3.0 then sets CLIPBOARD_STATE=sensitive for
+# the watch command, which is also what makes fluxd skip the copy. The type
+# list check covers the snapshot path and older wl-paste. No other heuristics.
 if [[ ${CLIPBOARD_STATE:-} == "sensitive" ]] || grep -qx 'x-kde-passwordManagerHint' <<<"$types"; then
   [[ -n ${1:-} ]] && drain
   exit 0
@@ -72,8 +77,24 @@ emit_image() {
     '{type:"image", mime:$mime, path:$path, capturedAt:$captured_at, bytes:$bytes, screenshot:$screenshot} + (if $app != "" then {app:$app} else {} end)'
 }
 
+# 1.17.0: a browser / office copy also offers text/html. Keep it (up to
+# 256 KiB, only when it has real formatting: headings, links, lists, bold,
+# italic, code, tables) so "Paste as Markdown" can convert it later. Written
+# to a user-only temp file for perl, never to argv or the environment.
+MAX_HTML_BYTES=$((256 * 1024))
+HTML_FILE=""
+grab_html() {
+  grep -qx 'text/html' <<<"$types" || return 0
+  HTML_FILE=$(mktemp --tmpdir="$DATA_DIR" html.XXXXXX) || { HTML_FILE=""; return 0; }
+  timeout 2s wl-paste --type text/html 2>/dev/null | head -c $((MAX_HTML_BYTES + 1)) >"$HTML_FILE"
+  if [[ $(stat -c %s "$HTML_FILE") -gt $MAX_HTML_BYTES ]] || ! grep -qiE '<(h[1-6]|a|li|b|strong|em|i|code|pre|table|blockquote)[ >]' "$HTML_FILE"; then
+    : >"$HTML_FILE"
+  fi
+}
+
 emit_text() {
-  MAX_TEXT_BYTES=$MAX_TEXT_BYTES perl -MEncode=decode,FB_CROAK,LEAVE_SRC -MJSON::PP=encode_json -0777 -e '
+  grab_html
+  HTML_FILE=$HTML_FILE MAX_TEXT_BYTES=$MAX_TEXT_BYTES perl -MEncode=decode,FB_CROAK,LEAVE_SRC -MJSON::PP=encode_json -0777 -e '
     my $raw = <STDIN>;
     exit unless length $raw;
     exit if length($raw) > $ENV{MAX_TEXT_BYTES};
@@ -117,8 +138,17 @@ emit_text() {
     }
     $text = decode("UTF-8", $raw) unless defined $text;
     my $app = defined $ENV{APP} && length $ENV{APP} ? ",\"app\":" . encode_json(decode("UTF-8", $ENV{APP})) : "";
-    print "{\"type\":\"text\",\"text\":", encode_json($text), $app, "}\n";
+    my $html = "";
+    if (length $ENV{HTML_FILE} && open(my $fh, "<", $ENV{HTML_FILE})) {
+      local $/; my $h = <$fh>; close $fh;
+      $h = eval { decode("UTF-8", $h, FB_CROAK) } if defined $h && length $h;
+      $html = ",\"html\":" . encode_json($h) if defined $h && length $h;
+    }
+    print "{\"type\":\"text\",\"text\":", encode_json($text), $html, $app, "}\n";
   '
+  local rc=$?
+  [[ -n $HTML_FILE ]] && rm -f "$HTML_FILE"
+  return $rc
 }
 
 # One copy that offers an image (browser "Copy image": image/png + text/html +

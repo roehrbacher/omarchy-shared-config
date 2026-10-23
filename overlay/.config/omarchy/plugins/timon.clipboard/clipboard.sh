@@ -7,6 +7,9 @@
 #   clipboard.sh copy <index>             copy entry <index> only
 #   clipboard.sh copy-pinned <n>          copy the n-th pinned entry (1-based, popup order);
 #                                         used by paste-pinned.sh (global Alt+Shift+N)
+#   clipboard.sh paste-md <index>         paste the HTML of entry <index> as Markdown (1.17.0):
+#                                         pandoc if installed, else html2md.py; plain text if both fail
+#   clipboard.sh markdown <index>         print that Markdown (tests)
 #   clipboard.sh send <index>             copy text entry <index> and send it to the phone (flux-cli clip)
 #   clipboard.sh open <index>             open a URL in the browser, text in the editor, an image in the editor
 #   clipboard.sh clear                    empty the live clipboard
@@ -64,6 +67,25 @@ paste | copy)
   sleep 0.15
   wtype -M shift -k Insert -m shift 2>/dev/null || true
   ;;
+markdown | paste-md)
+  valid_index "${2:-}" || exit 1
+  [[ $(field "$2" type) == text ]] || exit 1
+  md=""
+  if jq -e --argjson i "$2" '.[$i].html | type == "string" and length > 0' "$HISTORY" >/dev/null 2>&1; then
+    if command -v pandoc >/dev/null; then
+      md=$(jq -j --argjson i "$2" '.[$i].html' "$HISTORY" | timeout 10s pandoc -f html -t gfm-raw_html --wrap=none 2>/dev/null)
+    fi
+    if [[ -z ${md//[[:space:]]/} ]] && command -v python3 >/dev/null; then
+      md=$(jq -j --argjson i "$2" '.[$i].html' "$HISTORY" | timeout 10s python3 "$(dirname "$(readlink -f "$0")")/html2md.py" 2>/dev/null)
+    fi
+  fi
+  # Degrade gracefully: no HTML or no converter = the plain text.
+  [[ -n ${md//[[:space:]]/} ]] || md=$(jq -j --argjson i "$2" '.[$i].text' "$HISTORY")
+  if [[ $1 == markdown ]]; then printf '%s\n' "$md"; exit 0; fi
+  printf '%s' "$md" | wl-copy || exit 1
+  sleep 0.15
+  wtype -M shift -k Insert -m shift 2>/dev/null || true
+  ;;
 copy-pinned)
   [[ ${2:-} =~ ^[1-9]$ && -r $HISTORY ]] || exit 1
   i=$(jq -r --argjson n "$2" '[to_entries[] | select(.value.pinned == true) | .key][$n - 1] // empty' "$HISTORY") || exit 1
@@ -116,7 +138,7 @@ wipe)
   rm -rf "$DATA_DIR" "${XDG_STATE_HOME:-$HOME/.local/state}/timon.clipboard"
   ;;
 *)
-  sed -n '2,12p' "$0" >&2
+  sed -n '2,15p' "$0" >&2
   exit 1
   ;;
 esac

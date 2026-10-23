@@ -17,6 +17,8 @@ function normalizeEntry(value) {
     var text = String(value.text || "")
     if (text.trim().length === 0) return null
     entry = { type: "text", text: text }
+    // 1.17.0: the HTML a browser offered with it (for "Paste as Markdown").
+    if (typeof value.html === "string" && value.html && value.html.length <= 262144) entry.html = value.html
   } else if (type === "image") {
     var path = String(value.path || "")
     if (!path) return null
@@ -89,6 +91,8 @@ function addEntry(history, entry, limit) {
       if (existing.qr) normalized.qr = existing.qr
       normalized.scanned = true
     }
+    // Pasting it from the history re-copies plain text: keep its HTML.
+    if (existing && entryKey(existing) === key && existing.html && !normalized.html) normalized.html = existing.html
     if (existing && entryKey(existing) === key && existing.pinned) {
       var kept = values.slice()
       normalized.pinned = true
@@ -426,6 +430,7 @@ function displayRows(history, query, limit) {
       fromPhone: entry.origin === "phone",
       at: entry.legacy ? 0 : (entry.at || 0),
       imageActions: imageTextActions(entry),
+      hasMarkdown: hasRichHtml(entry),
       index: i
     }
     if (row.pinned) pinnedRows.push(row)
@@ -444,6 +449,43 @@ function displayRows(history, query, limit) {
   return out
 }
 
+// ---- Markdown paste (1.17.0) ----------------------------------------------
+// A text entry whose HTML has formatting Markdown can express.
+function hasRichHtml(entry) {
+  if (!entry || entry.type !== "text" || typeof entry.html !== "string") return false
+  return /<(h[1-6]|a|li|b|strong|em|i|code|pre|table|blockquote)[\s>]/i.test(entry.html)
+}
+
+// ---- paste queue (1.17.0) -------------------------------------------------
+// Ctrl+click adds a row to the queue (at the end) or takes it out; the rows
+// after it move up one number.
+function toggleQueued(keys, key) {
+  var list = Array.isArray(keys) ? keys.slice() : []
+  var at = list.indexOf(key)
+  if (at >= 0) list.splice(at, 1)
+  else list.push(key)
+  return list
+}
+function queueNumber(keys, key) {
+  return Array.isArray(keys) ? keys.indexOf(key) + 1 : 0
+}
+// What queue.sh gets: only what is needed to copy each item, in order.
+function queueItems(entries) {
+  var out = []
+  for (var i = 0; i < (entries || []).length; i++) {
+    var e = entries[i]
+    if (!e) continue
+    if (e.type === "text" && e.text) out.push({ type: "text", text: String(e.text) })
+    else if (e.type === "image" && e.path) out.push({ type: "image", path: String(e.path), mime: String(e.mime || "image/png") })
+  }
+  return out
+}
+function queueButtonLabel(selected, running) {
+  if (selected > 0) return "Paste " + selected + " in order"
+  if (running && running.count > 0) return "Pasting " + Math.min(running.pos + 1, running.count) + " of " + running.count + " · Cancel"
+  return ""
+}
+
 // ---- search field keys ----------------------------------------------------
 // Which popup action a key press in the search field triggers. "" means the
 // key belongs to the text field itself, so normal editing works: typing,
@@ -454,7 +496,7 @@ var KEY = {
   Escape: 0x01000000, Return: 0x01000004, Enter: 0x01000005, Insert: 0x01000006, Delete: 0x01000007,
   Home: 0x01000010, End: 0x01000011, Left: 0x01000012, Up: 0x01000013,
   Right: 0x01000014, Down: 0x01000015, PageUp: 0x01000016, PageDown: 0x01000017,
-  A: 0x41, C: 0x43, F: 0x46, I: 0x49, J: 0x4a, K: 0x4b, P: 0x50, S: 0x53, U: 0x55, V: 0x56, X: 0x58,
+  Space: 0x20, A: 0x41, C: 0x43, F: 0x46, I: 0x49, J: 0x4a, K: 0x4b, P: 0x50, S: 0x53, U: 0x55, V: 0x56, X: 0x58,
   Shift: 0x01000020, Control: 0x01000021, Meta: 0x01000022, Alt: 0x01000023, AltGr: 0x01001103
 }
 
@@ -695,7 +737,9 @@ function searchShown(filterText, expanded) {
 function searchKeyAction(ev) {
   var key = ev.key
   var digit = key >= 0x31 && key <= 0x39
-  if (key === KEY.Escape) return "escape"
+  if (key === KEY.Escape) return ev.queued > 0 ? "queueClear" : "escape"
+  if (ev.ctrl && !ev.alt && key === KEY.Space) return "queueToggle"
+  if (ev.ctrl && !ev.alt && !ev.shift && ev.queued > 0 && (key === KEY.Return || key === KEY.Enter)) return "queueStart"
   if (digit && ev.alt && !ev.ctrl) return "slot"
   if (ev.ctrl && !ev.alt && (key === KEY.C || key === KEY.Insert)) return ev.hasSelection ? "copySelection" : ""
   if (ev.ctrl && !ev.alt && key === KEY.X) return ev.hasSelection ? "cutSelection" : ""
@@ -735,11 +779,12 @@ function slotRowIndex(rows, slot) {
 // Left/Right keep moving the text cursor while you edit the search.
 // Row actions left to right: phone (send), trash, pin. Pin is last so it
 // stays in the slot where a pinned row shows it when not hovered.
-function rowActionNames(armed, phoneOnline, isText, linkKind, hasCopyText) {
+function rowActionNames(armed, phoneOnline, isText, linkKind, hasCopyText, hasMarkdown) {
   if (armed) return ["delete"]
   var out = []
   if (linkKind) out.push("link")
   if (hasCopyText) out.push("copytext")
+  if (hasMarkdown) out.push("markdown")
   if (phoneOnline && isText) out.push("send")
   out.push("delete")
   out.push("pin")
@@ -984,6 +1029,11 @@ if (typeof module !== "undefined") {
     kineticVelocity: kineticVelocity,
     kineticFlickVelocity: kineticFlickVelocity,
     actionFocusStep: actionFocusStep,
-    rowActionNames: rowActionNames
+    rowActionNames: rowActionNames,
+    hasRichHtml: hasRichHtml,
+    toggleQueued: toggleQueued,
+    queueNumber: queueNumber,
+    queueItems: queueItems,
+    queueButtonLabel: queueButtonLabel
   }
 }

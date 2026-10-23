@@ -30,6 +30,8 @@ In the popup:
 | Enter / click | paste into the window you came from |
 | Shift+Enter | copy only (select it without pasting) |
 | Alt+Enter | open (URL in browser, text in editor, image in editor) |
+| Ctrl+click / Ctrl+Space | add the row to the paste queue (numbered 1, 2, 3 …); again takes it out |
+| Ctrl+Enter (or the "Paste N in order" footer button) | start the paste queue: the popup closes, every Ctrl+V pastes the next item |
 | Alt+1…9 | paste the Nth item from the top, pinned items first (pastes when you let go of Alt) |
 | → / ← (search cursor at the end) | move between the selected row's actions (phone, trash, pin); Enter presses the focused one; Esc, ↑ or ↓ go back to the row |
 | Ctrl+P (or the pin icon) | pin / unpin (Ctrl+F works too) |
@@ -205,3 +207,36 @@ Saveau (MIT); no code from it is used.
   the buttons simply don't appear: `sudo pacman -S tesseract tesseract-data-eng tesseract-data-deu zbar`.
 - Search filters, combinable with normal search text: `type:image|screenshot|text|link|color|file`,
   `app:<window class>` (recorded from 1.16.0 on), `is:pinned`, `today`, `yesterday`, `<30m`, `<2h`, `<3d`.
+
+## Paste as Markdown, paste queue, password managers (1.17.0)
+
+- **Paste as Markdown:** a copy from a browser or office app also carries
+  HTML. When it has formatting (headings, links, lists, bold/italic, code,
+  quotes, tables) the HTML is kept with the entry (up to 256 KiB) and the row
+  shows a Markdown button (󰍔, "Paste as Markdown"). It converts with
+  `pandoc -t gfm` when pandoc is installed, else with the bundled
+  `html2md.py` (Python standard library, handles Google Docs' styled
+  spans); if neither works it pastes the plain text.
+- **Paste queue:** Ctrl+click rows (or Ctrl+Space on the selected one); each
+  gets a numbered badge in click order. The footer's Clear history button
+  turns into "Paste N in order" (Ctrl+Enter); Esc clears the selection.
+  Starting closes the popup and shows a notification "N items. Ctrl+V pastes
+  1 of N. Esc cancels.". Every Ctrl+V then pastes the next item and updates
+  the same notification ("Pasted 2 of 5 …"); after the last one it says
+  "Done". Esc cancels (and still reaches the window), so does the footer
+  button "Pasting k of N · Cancel" when you open the popup again, and a
+  queue ends by itself after 15 minutes without a paste.
+  How it works: while a queue runs, `queue.sh` binds Ctrl+V and Esc at
+  runtime (`hyprctl eval 'hl.bind(...)'`, removed with `hl.unbind` when it
+  ends). Ctrl+V puts the next item on the clipboard and sends Shift+Insert,
+  the same way Alt+Shift+N and Omarchy's universal paste do. Only Ctrl+V
+  advances the queue (Ctrl+Shift+V in a terminal pastes the current item
+  without advancing). Detecting pastes from the clipboard itself
+  (`wl-copy --paste-once`) does not work here: every clipboard watcher
+  (this plugin, Flux) reads each copy and would use the paste up.
+- **Password managers:** copies marked `x-kde-passwordManagerHint` are never
+  stored. Bitwarden desktop sets it on Linux for copied passwords (since
+  2025, through arboard's `exclude_from_history`), as do KeePassXC and
+  `wl-copy --sensitive`; wl-paste 2.3.0 then reports `CLIPBOARD_STATE=sensitive`,
+  which Flux also honours, so these copies are not sent to the phone either.
+  No guessing from window titles or browser fields.

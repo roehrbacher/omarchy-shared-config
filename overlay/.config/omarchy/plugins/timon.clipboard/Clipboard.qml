@@ -81,6 +81,47 @@ Item {
   readonly property string helper: pluginDir + "/clipboard.sh"
   readonly property string fluxScript: pluginDir + "/flux-pause.sh"
   readonly property string scanScript: pluginDir + "/scan.sh"
+  readonly property string queueScript: pluginDir + "/queue.sh"
+  readonly property string queuePath: dataDir + "/queue.json"
+
+  // ---- paste queue (1.17.0) ------------------------------------------------
+  // Ctrl+click (or Ctrl+Space) rows: they get 1, 2, 3 badges in click order.
+  // "Paste N in order" (footer button or Ctrl+Enter) hands them to queue.sh,
+  // closes the popup, and every Ctrl+V then pastes the next one. Keys are
+  // row keys (type + path + text), so a new copy while the popup is open
+  // does not shift the selection. Cleared when the popup closes.
+  property var queueKeys: []
+  // The armed queue (queue.json): { pos, count } or null.
+  property var queueRunning: null
+  onOpenedChanged: if (!root.opened && root.queueKeys.length) root.queueKeys = []
+  function toggleQueueIndex(index) {
+    if (index < 0 || index >= displayModel.count) return
+    root.queueKeys = ClipboardHistory.toggleQueued(root.queueKeys, root.rowKey(displayModel.get(index)))
+  }
+  function startQueue() {
+    var entries = []
+    for (var q = 0; q < root.queueKeys.length; q++) {
+      for (var i = 0; i < displayModel.count; i++) {
+        var r = displayModel.get(i)
+        if (root.rowKey(r) === root.queueKeys[q]) { entries.push(root.history[r.historyIndex]); break }
+      }
+    }
+    var items = ClipboardHistory.queueItems(entries)
+    root.queueKeys = []
+    if (!items.length) return
+    queueProc.payload = JSON.stringify(items)
+    root.close()
+    queueProc.running = true
+  }
+  function queueButtonClicked() {
+    if (root.queueKeys.length) root.startQueue()
+    else if (root.queueRunning) Quickshell.execDetached([root.queueScript, "cancel"])
+  }
+  function applyQueueFile(raw) {
+    var st = null
+    try { st = JSON.parse(String(raw || "")) } catch (e) { st = null }
+    root.queueRunning = st && Array.isArray(st.items) && st.items.length ? { pos: Number(st.pos || 0), count: st.items.length } : null
+  }
 
   // Same [menu] surface tokens as the stock clipboard, so every theme styles it.
   // Popup surface tokens, same as the stock Wi-Fi popup (KeyboardPanel).
@@ -122,6 +163,7 @@ Item {
 
   // ---- open / close (shell host API) ------------------------------------
   function open(payloadJson) {
+    if (root.ready && !queueStatusProc.running) queueStatusProc.running = true
     // Paths may have appeared/vanished since last time.
     root.pathInfo = ({})
     root.pathSingle = false
@@ -597,6 +639,7 @@ Item {
         pathCandidate: pathCand,
         copyText: row.imageActions ? row.imageActions.copy : "",
         copyTip: row.imageActions ? row.imageActions.copyTip : "",
+        hasMarkdown: row.hasMarkdown === true,
         historyIndex: row.index
       })
     }
@@ -836,12 +879,13 @@ Item {
   function rowActions(index, armedIndex, phone, count) {
     if (index < 0 || index >= displayModel.count) return []
     var row = displayModel.get(index)
-    return ClipboardHistory.rowActionNames(row.historyIndex === root.armedDeleteIndex, root.phoneOnline, row.entryType === "text", row.linkKind, row.copyText !== "")
+    return ClipboardHistory.rowActionNames(row.historyIndex === root.armedDeleteIndex, root.phoneOnline, row.entryType === "text", row.linkKind, row.copyText !== "", row.hasMarkdown)
   }
 
   function runRowAction(name, index) {
     if (name === "link") root.openLinkIndex(index)
     else if (name === "copytext") root.copyImageText(index)
+    else if (name === "markdown") root.runOnIndex(index, "paste-md")
     else if (name === "send") root.sendIndex(index)
     else if (name === "pin") root.togglePinDisplayIndex(index)
     else if (name === "delete") root.requestDelete(index)
@@ -882,7 +926,8 @@ Item {
     }
     var action = ClipboardHistory.searchKeyAction({
       key: event.key, ctrl: ctrl, alt: alt, shift: shift,
-      hasSelection: searchInput.selectedText.length > 0
+      hasSelection: searchInput.selectedText.length > 0,
+      queued: root.queueKeys.length
     })
     var digit = event.key >= Qt.Key_1 && event.key <= Qt.Key_9 ? event.key - Qt.Key_0 : 0
     // Any key other than Del cancels an armed pinned delete.
@@ -897,6 +942,9 @@ Item {
       else root.close()
       break
     case "slot": root.activateSlot(digit); break
+    case "queueToggle": if (root.cursorActive) root.toggleQueueIndex(root.selectedIndex); break
+    case "queueStart": root.startQueue(); break
+    case "queueClear": root.queueKeys = []; break
     case "copySelection": root.copyText(searchInput.selectedText); break
     case "cutSelection":
       root.copyText(searchInput.selectedText)
@@ -957,6 +1005,41 @@ Item {
       stdinEnabled = false
     }
     onExited: if (nextText) startCopy()
+  }
+
+  // queue.sh start: the items go over stdin (never argv).
+  Process {
+    id: queueProc
+    property string payload: ""
+    command: [root.queueScript, "start"]
+    stdinEnabled: true
+    onStarted: { write(payload); payload = ""; stdinEnabled = false }
+    onExited: stdinEnabled = true
+  }
+
+  // Also asked on every open: the file watch can miss a file created later.
+  Process {
+    id: queueStatusProc
+    command: [root.queueScript, "status"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var t = String(text).trim()
+        var st = null
+        try { st = t ? JSON.parse(t) : null } catch (e) { st = null }
+        root.queueRunning = st && st.count > 0 ? { pos: Number(st.pos || 0), count: Number(st.count) } : null
+      }
+    }
+  }
+
+  FileView {
+    id: queueFile
+    path: root.ready ? root.queuePath : ""
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.applyQueueFile(text())
+    onLoadFailed: root.queueRunning = null
+    onFileChanged: reload()
   }
 
   // ---- startup ----------------------------------------------------------
@@ -1729,6 +1812,9 @@ Item {
                   required property string linkLabel
                   required property string copyText
                   required property string copyTip
+                  required property string path
+                  required property bool hasMarkdown
+                  readonly property int queueNo: ClipboardHistory.queueNumber(root.queueKeys, root.rowKey(row))
 
                   readonly property bool hasCursor: root.cursorActive && (root.dragRow >= 0 && root.dragHistoryIndex >= 0 ? historyIndex === root.dragHistoryIndex : index === root.selectedIndex)
                   readonly property bool armed: root.armedDeleteIndex !== -1 && historyIndex === root.armedDeleteIndex
@@ -1787,11 +1873,13 @@ Item {
                       resultList.interactive = true
                       root.dragFinish()
                     }
-                    onClicked: {
+                    onClicked: function(mouse) {
                       // A drop is not a click (1.15.1 pasted the row and closed the popup).
                       if (root.dragMoved || dropped) { dropped = false; return }
                       root.cursorActive = true
                       root.selectedIndex = row.index
+                      // Ctrl+click: add to / take out of the paste queue.
+                      if (mouse.modifiers & Qt.ControlModifier) { root.toggleQueueIndex(row.index); return }
                       root.activateIndex(row.index)
                     }
                   }
@@ -1863,13 +1951,43 @@ Item {
                             tip: "link", show: row.showActions && !row.armed && row.linkKind !== "" && row.linkKind !== "color",
                             text: ClipboardHistory.targetTooltip(row.linkKind, row.linkLabel) },
                           { glyph: "", tip: "link", swatch: true, show: !row.armed && row.linkKind === "color", text: ClipboardHistory.targetTooltip("color", row.linkLabel) },
-                          { glyph: "󰆏", tip: "copytext", show: row.showActions && !row.armed && row.copyText !== "", text: row.copyTip }
+                          { glyph: "󰆏", tip: "copytext", show: row.showActions && !row.armed && row.copyText !== "", text: row.copyTip },
+                          { glyph: "󰍔", tip: "markdown", show: row.showActions && !row.armed && row.hasMarkdown, text: "Paste as Markdown" }
                         ]
                         delegate: actionDelegate
                       }
 
+                      // Paste queue position (1, 2, 3 …), accent badge.
                       Item {
-                        visible: !row.showActions && !row.armed && row.slot <= 9 && root.filterText === ""
+                        objectName: "clipQueueBadge"
+                        visible: row.queueNo > 0 && !row.armed
+                        width: visible ? queueBadge.width + Style.space(6) : 0
+                        height: actions.height
+
+                        Rectangle {
+                          id: queueBadge
+                          anchors.verticalCenter: parent.verticalCenter
+                          width: Math.max(height, queueNoText.implicitWidth + Style.space(8))
+                          height: Math.round(Style.font.body * 1.5)
+                          radius: height / 2
+                          color: root.accent
+
+                          Text {
+                            id: queueNoText
+                            objectName: "clipQueueNumber"
+                            anchors.centerIn: parent
+                            textFormat: Text.PlainText
+                            text: String(row.queueNo)
+                            color: root.background
+                            font.family: root.fontFamily
+                            font.pixelSize: Style.font.caption
+                            font.bold: true
+                          }
+                        }
+                      }
+
+                      Item {
+                        visible: !row.showActions && !row.armed && row.queueNo === 0 && row.slot <= 9 && root.filterText === ""
                         width: visible ? slotHint.implicitWidth + Style.space(6) : 0
                         height: actions.height
 
@@ -2001,7 +2119,46 @@ Item {
             width: parent.width
             height: root.footerRowHeight
 
+              // Paste queue: replaces Clear history while rows are queued
+              // ("Paste 3 in order") or a queue is armed ("Pasting 2 of 5 · Cancel").
               Rectangle {
+                id: queueButton
+                objectName: "clipQueueButton"
+                readonly property string label: ClipboardHistory.queueButtonLabel(root.queueKeys.length, root.queueRunning)
+                visible: label !== ""
+                anchors.left: parent.left
+                width: queueLabel.implicitWidth + Style.space(16)
+                height: root.footerRowHeight
+                radius: root.cornerRadius
+                color: queueMouse.containsMouse ? Util.alpha(root.accent, 0.28) : Util.alpha(root.accent, 0.16)
+
+                Text {
+                  id: queueLabel
+                  objectName: "clipQueueLabel"
+                  anchors.centerIn: parent
+                  textFormat: Text.PlainText
+                  text: queueButton.label
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                }
+
+                MouseArea {
+                  id: queueMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.queueButtonClicked()
+                }
+
+                PanelToolTip {
+                  visible: queueMouse.containsMouse
+                  text: root.queueKeys.length ? "Then every Ctrl+V pastes the next one (Ctrl+Enter)" : "Stop the paste queue"
+                }
+              }
+
+              Rectangle {
+                visible: !queueButton.visible
                 anchors.left: parent.left
                 width: clearLabel.implicitWidth + Style.space(16)
                 height: root.footerRowHeight

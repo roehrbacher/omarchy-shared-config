@@ -14,7 +14,7 @@ check() { if [[ $2 == "$3" ]]; then echo "ok   $1"; else echo "FAIL $1: got '$2'
 out=$(printf '%s' '[{"type":"text","text":"one"},{"type":"text","text":"two"},{"type":"text","text":"three"}]' | "$here/queue.sh" start)
 check "start binds Ctrl+V" "$(grep -c 'hl.bind("CTRL + V"' <<<"$out")" 1
 check "start binds Esc" "$(grep -c 'hl.bind("Escape"' <<<"$out")" 1
-check "start notification" "$(grep -o 'Ctrl+V pastes 1 of 3' <<<"$out")" "Ctrl+V pastes 1 of 3"
+check "start notification" "$(grep -o 'Queue ready: 3 items. Ctrl+V pastes 1 of 3. Esc cancels.' <<<"$out")" "Queue ready: 3 items. Ctrl+V pastes 1 of 3. Esc cancels."
 check "queue file is 0600" "$(stat -c %a "$Q")" 600
 check "status" "$("$here/queue.sh" status)" '{"pos":0,"count":3}'
 out=$("$here/queue.sh" next)

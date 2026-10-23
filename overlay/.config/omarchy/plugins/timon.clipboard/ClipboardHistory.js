@@ -343,22 +343,21 @@ function qrSummary(entry) {
 }
 
 function imageTextActions(entry) {
-  var out = { link: null, copy: "", copyTip: "" }
+  // 1.19.0: the QR action and the OCR text are independent: an image with
+  // both gets both buttons. `wifi` marks a Wi-Fi password (lock icon).
+  var out = { link: null, copy: "", copyTip: "", wifi: false, ocr: "", ocrTip: "" }
   if (!entry || entry.type !== "image") return out
   var qr = String(entry.qr || "").trim(), ocr = String(entry.ocr || "").trim()
   if (qr) {
     var l = linkTarget(qr)
+    var pass = /^WIFI:/i.test(qr) ? wifiField(qr, "P") : ""
+    var mail = qrMail(qr)
     if (l) out.link = l
-    else {
-      var pass = /^WIFI:/i.test(qr) ? wifiField(qr, "P") : ""
-      var mail = qrMail(qr)
-      if (pass) { out.copy = pass; out.copyTip = "Copy Wi-Fi password" }
-      else if (mail) { out.link = { kind: "mail", target: "mailto:" + mail }; return out }
-      else { out.copy = qr; out.copyTip = "Copy QR code text" }
-      return out
-    }
+    else if (pass) { out.copy = pass; out.copyTip = "Copy Wi-Fi password"; out.wifi = true }
+    else if (mail) out.link = { kind: "mail", target: "mailto:" + mail }
+    else { out.copy = qr; out.copyTip = "Copy QR code text" }
   }
-  if (ocr) { out.copy = ocr; out.copyTip = entry.screenshot === true ? "Copy text from screenshot" : "Copy text from image" }
+  if (ocr) { out.ocr = ocr; out.ocrTip = entry.screenshot === true ? "Copy text from screenshot" : "Copy text from image" }
   return out
 }
 
@@ -507,6 +506,50 @@ function hasRichHtml(entry) {
   return /<(h[1-6]|a|li|b|strong|em|i|code|pre|table|blockquote)[\s>]/i.test(entry.html)
 }
 
+// What a paste/click does with Ctrl-selected rows (1.19.0): 2+ = close the
+// popup, which starts the queue; 0 or 1 = the normal pick of that row.
+function queueOnPick(selected) { return selected >= 2 }
+// Running queue (queue.json items) -> history keys, for the badges.
+function queueItemKeys(items) {
+  var out = []
+  for (var i = 0; i < (items || []).length; i++) {
+    var it = items[i]
+    out.push(it && it.type === "image" ? "image:" + String(it.path || "") : "text:" + String(it && it.text || ""))
+  }
+  return out
+}
+// Key of what is on the system clipboard, comparable per entry: text by
+// md5 of its UTF-8 text, images by the sha256 in their stored file name.
+function clipKeyOf(entry, md5) {
+  if (!entry) return ""
+  if (entry.type === "image") { var m = /([0-9a-f]{64})\.[a-z0-9]+$/.exec(String(entry.path || "")); return m ? "image:" + m[1] : "" }
+  return entry.type === "text" && entry.text ? "text:" + md5(String(entry.text)) : ""
+}
+
+// ---- unpin by drag (1.19.0): goes to the top of History, as if just copied.
+function unpinToTop(history, index, now) {
+  var values = Array.isArray(history) ? history.slice() : []
+  var e = normalizeEntry(values[index])
+  if (!e) return values
+  delete e.pinned
+  e.at = now
+  delete e.legacy
+  values.splice(index, 1)
+  var at = 0
+  while (at < values.length && values[at] && values[at].pinned === true) at++
+  values.splice(at, 0, e)
+  return values
+}
+
+// Settings: the pacman command for the first common language pack that is
+// not installed yet (German first), else the generic form.
+function ocrInstallCommand(installed) {
+  var have = installed || []
+  var wish = ["deu", "fra", "spa", "ita"]
+  for (var i = 0; i < wish.length; i++) if (have.indexOf(wish[i]) < 0) return "sudo pacman -S tesseract-data-" + wish[i]
+  return "sudo pacman -S tesseract-data-<code>"
+}
+
 // ---- click action (1.18.0) ------------------------------------------------
 // "paste": select, paste and close (default). "copy": put it on the
 // clipboard, popup stays open.
@@ -565,8 +608,10 @@ function queueItems(entries) {
   }
   return out
 }
+// 1.19.0: no start button any more (2+ selected rows start the queue when
+// the popup closes); the footer only shows a running queue.
 function queueButtonLabel(selected, running) {
-  if (selected > 0) return "Paste " + selected + " in order"
+  if (selected >= 2) return "Paste queue: " + selected + " items in order · Ctrl+V pastes them one by one"
   if (running && running.count > 0) return "Pasting " + Math.min(running.pos + 1, running.count) + " of " + running.count + " · Cancel"
   return ""
 }
@@ -824,7 +869,6 @@ function searchKeyAction(ev) {
   var digit = key >= 0x31 && key <= 0x39
   if (key === KEY.Escape) return ev.queued > 0 ? "queueClear" : "escape"
   if (ev.ctrl && !ev.alt && key === KEY.Space) return "queueToggle"
-  if (ev.ctrl && !ev.alt && !ev.shift && ev.queued > 0 && (key === KEY.Return || key === KEY.Enter)) return "queueStart"
   if (digit && ev.alt && !ev.ctrl) return "slot"
   if (ev.ctrl && !ev.alt && (key === KEY.C || key === KEY.Insert)) return ev.hasSelection ? "copySelection" : ""
   if (ev.ctrl && !ev.alt && key === KEY.X) return ev.hasSelection ? "cutSelection" : ""
@@ -864,12 +908,13 @@ function slotRowIndex(rows, slot) {
 // Left/Right keep moving the text cursor while you edit the search.
 // Row actions left to right: phone (send), trash, pin. Pin is last so it
 // stays in the slot where a pinned row shows it when not hovered.
-function rowActionNames(armed, phoneOnline, isText, linkKind, hasCopyText, hasMarkdown) {
+function rowActionNames(armed, phoneOnline, isText, linkKind, hasCopyText, hasMarkdown, hasOcr) {
   if (armed) return ["delete"]
   var out = []
   if (linkKind) out.push("link")
   if (hasCopyText) out.push("copytext")
-  if (hasMarkdown) out.push("markdown")
+  if (hasOcr) out.push("ocrtext")
+  if (hasMarkdown) { out.push("markdown"); out.push("plaintext") }
   if (phoneOnline && isText) out.push("send")
   out.push("delete")
   out.push("pin")
@@ -1120,6 +1165,11 @@ if (typeof module !== "undefined") {
     queueNumber: queueNumber,
     queueItems: queueItems,
     queueButtonLabel: queueButtonLabel,
+    queueOnPick: queueOnPick,
+    ocrInstallCommand: ocrInstallCommand,
+    queueItemKeys: queueItemKeys,
+    clipKeyOf: clipKeyOf,
+    unpinToTop: unpinToTop,
     qrSummary: qrSummary,
     needsScan: needsScan,
     SCAN_VERSION: SCAN_VERSION,

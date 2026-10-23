@@ -31,7 +31,7 @@ In the popup:
 | Shift+Enter | copy only (select it without pasting) |
 | Alt+Enter | open (URL in browser, text in editor, image in editor) |
 | Ctrl+click / Ctrl+Space | add the row to the paste queue (numbered 1, 2, 3 …); again takes it out |
-| Ctrl+Enter (or the "Paste N in order" footer button) | start the paste queue: the popup closes, every Ctrl+V pastes the next item |
+| Ctrl+click / Ctrl+Space 2+ items, then close the popup (Enter, click, Esc twice or click outside) | start the paste queue: every Ctrl+V pastes the next item, Esc cancels |
 | Alt+1…9 | paste the Nth item from the top, pinned items first (pastes when you let go of Alt) |
 | → / ← (search cursor at the end) | move between the selected row's actions (phone, trash, pin); Enter presses the focused one; Esc, ↑ or ↓ go back to the row |
 | Ctrl+P (or the pin icon) | pin / unpin (Ctrl+F works too) |
@@ -108,6 +108,15 @@ right section, before the audio icon). It uses the standard
 fixed-width bar icon slot, so switching icons never shifts its neighbours.
 Left click opens / closes the history, right click toggles incognito, and it
 turns into the incognito icon (󰗹) while incognito is on. It has no hover tooltip.
+
+## 1.19.0 notes
+
+- Paste queue starts by itself: select 2+ items with Ctrl+click or Ctrl+Space and close the popup. Notification: "Queue ready: N items. Ctrl+V pastes 1 of N. Esc cancels." One Ctrl+clicked item is a normal pick. Reopening during a queue shows progress, badges and Cancel. A new 2+ selection replaces a running queue.
+- The item currently on the clipboard has an accent bar on the left (updates live).
+- Images with a QR code and text show both buttons. Wi-Fi QR uses a lock icon.
+- Paste as Markdown (M glyph) always comes with Paste as plain text.
+- Dragging a pinned item into History unpins it and puts it at the top of History.
+- OCR languages: all installed tesseract packs are used (eng first, at most 3), or `OMARCHY_OCR_LANGS` (e.g. `eng+deu`, filtered to installed packs). Settings lists installed languages and shows a copyable install command such as `sudo pacman -S tesseract-data-deu`. Nothing is downloaded or installed automatically.
 
 ## Flux
 
@@ -219,7 +228,7 @@ Saveau (MIT); no code from it is used.
   spans); if neither works it pastes the plain text.
 - **Paste queue:** Ctrl+click rows (or Ctrl+Space on the selected one); each
   gets a numbered badge in click order. The footer's Clear history button
-  turns into "Paste N in order" (Ctrl+Enter); Esc clears the selection.
+  shows "Paste queue: N items in order"; closing the popup starts the queue. Esc clears the selection first.
   Starting closes the popup and shows a notification "N items. Ctrl+V pastes
   1 of N. Esc cancels.". Every Ctrl+V then pastes the next item and updates
   the same notification ("Pasted 2 of 5 …"); after the last one it says

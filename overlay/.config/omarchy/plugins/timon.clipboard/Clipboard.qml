@@ -98,7 +98,21 @@ Item {
   property var queueKeys: []
   // The armed queue (queue.json): { pos, count } or null.
   property var queueRunning: null
-  onOpenedChanged: if (!root.opened && root.queueKeys.length) root.queueKeys = []
+  // 1.19.0: no start button. 2+ selected rows start the queue as soon as
+  // the popup closes (any way except Esc, which clears the selection first);
+  // a single Ctrl-selected row is just a normal pick.
+  onOpenedChanged: {
+    if (root.opened) return
+    if (ClipboardHistory.queueOnPick(root.queueKeys.length)) root.startQueue()
+    else if (root.queueKeys.length) root.queueKeys = []
+  }
+  // Keys (history entry keys) of the running queue, for the badges.
+  property var runningKeys: []
+  // 1.19.0: what is on the system clipboard ("text:<md5>" / "image:<sha256>"),
+  // from each captured copy (live) and `clipboard.sh current` on open.
+  property string currentClipKey: ""
+  // OCR languages for the settings view (scan.sh --langs).
+  property var ocrInfo: ({ installed: [], used: "", env: "" })
   function toggleQueueIndex(index) {
     if (index < 0 || index >= displayModel.count) return
     root.queueKeys = ClipboardHistory.toggleQueued(root.queueKeys, root.rowKey(displayModel.get(index)))
@@ -115,17 +129,26 @@ Item {
     root.queueKeys = []
     if (!items.length) return
     queueProc.payload = JSON.stringify(items)
-    root.close()
     queueProc.running = true
   }
   function queueButtonClicked() {
-    if (root.queueKeys.length) root.startQueue()
-    else if (root.queueRunning) Quickshell.execDetached([root.queueScript, "cancel"])
+    if (root.queueKeys.length === 0 && root.queueRunning) Quickshell.execDetached([root.queueScript, "cancel"])
   }
   function applyQueueFile(raw) {
     var st = null
     try { st = JSON.parse(String(raw || "")) } catch (e) { st = null }
     root.queueRunning = st && Array.isArray(st.items) && st.items.length ? { pos: Number(st.pos || 0), count: st.items.length } : null
+    root.runningKeys = root.queueRunning ? ClipboardHistory.queueItemKeys(st.items) : []
+  }
+  // Badge number of a row: the selection while picking, else its place in
+  // the running queue (rows already pasted are dimmed).
+  function queueBadge(row, keys, running, runKeys, history) {
+    var n = ClipboardHistory.queueNumber(keys, root.rowKey(row))
+    if (n > 0 || keys.length > 0 || !running) return { n: n, done: false }
+    var e = history[row.historyIndex]
+    var k = e ? ClipboardHistory.entryKey(e) : ""
+    var at = runKeys.indexOf(k)
+    return { n: at + 1, done: at >= 0 && at < running.pos }
   }
 
   // Same [menu] surface tokens as the stock clipboard, so every theme styles it.
@@ -168,7 +191,8 @@ Item {
 
   // ---- open / close (shell host API) ------------------------------------
   function open(payloadJson) {
-    if (root.ready && !queueStatusProc.running) queueStatusProc.running = true
+    if (root.ready) { queueFile.reload(); if (!queueStatusProc.running) queueStatusProc.running = true }
+    if (root.ready && !clipKeyProc.running) clipKeyProc.running = true
     // Paths may have appeared/vanished since last time.
     root.pathInfo = ({})
     root.pathSingle = false
@@ -414,7 +438,7 @@ Item {
   }
   // Left click on a row, per the "Click action" setting.
   function clickIndex(index) {
-    if (root.clickAction !== "copy") { root.activateIndex(index); return }
+    if (root.clickAction !== "copy" || ClipboardHistory.queueOnPick(root.queueKeys.length)) { root.activateIndex(index); return }
     if (index < 0 || index >= displayModel.count) return
     var r = displayModel.get(index)
     root.reselectKey = root.rowKey(r)
@@ -436,6 +460,7 @@ Item {
     if (root.privateMode) return
     var entry = ClipboardHistory.parseEntryJson(line)
     if (!entry) return
+    root.currentClipKey = ClipboardHistory.clipKeyOf(entry, Qt.md5)
     entry.at = Date.now()  // copy time: day headings and auto-delete
     root.history = ClipboardHistory.pruneByAge(ClipboardHistory.addEntry(root.history, entry, root.historyLimit), root.keepDays, Date.now())
     root.saveHistory()
@@ -625,8 +650,12 @@ Item {
     }
     var next = root.history
     // Pinned or unpinned by the drag: flip it first, then apply the order.
-    if (nowPinned !== root.dragOrigPinned) next = ClipboardHistory.togglePinAt(next, historyIndex)
-    root.history = ClipboardHistory.reorderPinned(next, order)
+    var unpinned = root.dragOrigPinned && !nowPinned
+    if (nowPinned && !root.dragOrigPinned) next = ClipboardHistory.togglePinAt(next, historyIndex)
+    next = ClipboardHistory.reorderPinned(next, order)
+    // 1.19.0: unpinned by dragging = the newest History item (top, now).
+    if (unpinned) next = ClipboardHistory.unpinToTop(next, historyIndex, Date.now())
+    root.history = next
     root.saveHistory()
     root.rebuildDisplay(true)
     // reorderPinned keeps each slot's history position, so the dragged
@@ -686,6 +715,10 @@ Item {
         pathCandidate: pathCand,
         copyText: row.imageActions ? row.imageActions.copy : "",
         copyTip: row.imageActions ? row.imageActions.copyTip : "",
+        copyWifi: row.imageActions ? row.imageActions.wifi === true : false,
+        ocrText: row.imageActions ? row.imageActions.ocr : "",
+        ocrTip: row.imageActions ? row.imageActions.ocrTip : "",
+        clipKey: ClipboardHistory.clipKeyOf(root.history[row.index], Qt.md5),
         hasMarkdown: row.hasMarkdown === true,
         historyIndex: row.index
       })
@@ -891,7 +924,12 @@ Item {
     Quickshell.execDetached([root.helper, action, String(row.historyIndex)])
   }
 
-  function activateIndex(index) { root.runOnIndex(index, "paste") }
+  // With 2+ rows selected, Enter / click / Alt+N close the popup, which
+  // starts the queue (the selection is what gets pasted, in order).
+  function activateIndex(index) {
+    if (ClipboardHistory.queueOnPick(root.queueKeys.length)) { root.close(); return }
+    root.runOnIndex(index, "paste")
+  }
   function sendIndex(index) {
     if (index < 0 || index >= displayModel.count || displayModel.get(index).entryType !== "text" || !root.phoneOnline) return
     root.runOnIndex(index, "send")
@@ -922,6 +960,14 @@ Item {
     root.close()
     Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "2000", r.copyTip.replace(/^Copy/, "Copied")])
   }
+  function copyOcrText(index) {
+    if (index < 0 || index >= displayModel.count) return
+    var r = displayModel.get(index)
+    if (!r.ocrText) return
+    root.copyText(r.ocrText)
+    root.close()
+    Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "2000", r.ocrTip.replace(/^Copy/, "Copied")])
+  }
   function openIndex(index) { root.runOnIndex(index, "open") }
 
   // Actions shown on a selected row, left to right (the extra arguments only
@@ -929,13 +975,15 @@ Item {
   function rowActions(index, armedIndex, phone, count) {
     if (index < 0 || index >= displayModel.count) return []
     var row = displayModel.get(index)
-    return ClipboardHistory.rowActionNames(row.historyIndex === root.armedDeleteIndex, root.phoneOnline, row.entryType === "text", row.linkKind, row.copyText !== "", row.hasMarkdown)
+    return ClipboardHistory.rowActionNames(row.historyIndex === root.armedDeleteIndex, root.phoneOnline, row.entryType === "text", row.linkKind, row.copyText !== "", row.hasMarkdown, row.ocrText !== "")
   }
 
   function runRowAction(name, index) {
     if (name === "link") root.openLinkIndex(index)
     else if (name === "copytext") root.copyImageText(index)
     else if (name === "markdown") root.runOnIndex(index, "paste-md")
+    else if (name === "plaintext") root.runOnIndex(index, "paste")
+    else if (name === "ocrtext") root.copyOcrText(index)
     else if (name === "send") root.sendIndex(index)
     else if (name === "pin") root.togglePinDisplayIndex(index)
     else if (name === "delete") root.requestDelete(index)
@@ -1055,6 +1103,29 @@ Item {
       stdinEnabled = false
     }
     onExited: if (nextText) startCopy()
+  }
+
+  Process {
+    id: ocrLangProc
+    command: [root.scanScript, "--langs"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var st = null
+        try { st = JSON.parse(String(text)) } catch (e) { st = null }
+        if (st && Array.isArray(st.installed)) root.ocrInfo = { installed: st.installed, used: String(st.used || ""), env: String(st.env || "") }
+      }
+    }
+  }
+  onInfoOpenChanged: if (root.infoOpen && !ocrLangProc.running) ocrLangProc.running = true
+
+  Process {
+    id: clipKeyProc
+    command: [root.helper, "current"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.currentClipKey = String(text).trim()
+    }
   }
 
   // queue.sh start: the items go over stdin (never argv).
@@ -1753,8 +1824,86 @@ Item {
                 }
 
                 Repeater {
+                  id: filterRows
                   model: ClipboardHistory.SEARCH_FILTER_EXAMPLES.map(function(f) { return { icon: "󰍉", label: f.label, value: f.value } })
                   delegate: infoValueRow
+                }
+
+                // 1.19.0: OCR languages. Only installed packs are used,
+                // nothing is downloaded; OMARCHY_OCR_LANGS picks them, like
+                // Omarchy's own text capture (Super+Ctrl+Print).
+                Text {
+                  objectName: "clipOcrHeading"
+                  width: infoColumn.width
+                  text: "TEXT IN IMAGES (OCR)"
+                  color: root.dimText
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  topPadding: Style.space(10)
+                  bottomPadding: Style.space(4)
+                  leftPadding: Style.space(10)
+                }
+
+                Repeater {
+                  model: [
+                    { icon: "󰗊", label: "Installed languages", value: root.ocrInfo.installed.length ? root.ocrInfo.installed.join(", ") : "none (tesseract missing)" },
+                    { icon: "󰄬", label: root.ocrInfo.env ? "Used (OMARCHY_OCR_LANGS)" : "Used", value: root.ocrInfo.used || "–" }
+                  ]
+                  delegate: infoValueRow
+                }
+
+                // Click copies the install command (run it in a terminal).
+                Rectangle {
+                  objectName: "clipOcrInstall"
+                  width: infoColumn.width
+                  height: root.rowHeight
+                  radius: root.cornerRadius
+                  color: ocrCmdMouse.containsMouse ? Util.alpha(root.foreground, 0.08) : "transparent"
+                  readonly property string cmd: ClipboardHistory.ocrInstallCommand(root.ocrInfo.installed)
+
+                  Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Style.space(10)
+                    anchors.right: ocrCmdText.left
+                    anchors.rightMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    text: "󰆏  Add a language (click copies)"
+                    color: root.foreground
+                    elide: Text.ElideRight
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                  }
+
+                  Text {
+                    id: ocrCmdText
+                    objectName: "clipOcrCmd"
+                    anchors.right: parent.right
+                    anchors.rightMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    text: parent.cmd
+                    color: root.dimText
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                  }
+
+                  MouseArea {
+                    id: ocrCmdMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                      root.copyText(parent.cmd)
+                      Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "3000", "Copied install command", "Run it in a terminal; other packs are tesseract-data-<code> (fra, spa, ita …)."])
+                    }
+                  }
+
+                  PanelToolTip {
+                    visible: ocrCmdMouse.containsMouse
+                    text: "Other languages: tesseract-data-<code>, e.g. fra, spa, ita"
+                  }
                 }
               }
             }
@@ -1923,9 +2072,16 @@ Item {
                   required property string linkLabel
                   required property string copyText
                   required property string copyTip
+                  required property bool copyWifi
+                  required property string ocrText
+                  required property string ocrTip
+                  required property string clipKey
+                  // 1.19.0: this entry is what is on the clipboard right now.
+                  readonly property bool onClipboard: clipKey !== "" && clipKey === root.currentClipKey
                   required property string path
                   required property bool hasMarkdown
-                  readonly property int queueNo: ClipboardHistory.queueNumber(root.queueKeys, root.rowKey(row))
+                  readonly property var queueInfo: root.queueBadge(row, root.queueKeys, root.queueRunning, root.runningKeys, root.history)
+                  readonly property int queueNo: queueInfo.n
 
                   readonly property bool hasCursor: root.cursorActive && (root.dragRow >= 0 && root.dragHistoryIndex >= 0 ? historyIndex === root.dragHistoryIndex : index === root.selectedIndex)
                   readonly property bool armed: root.armedDeleteIndex !== -1 && historyIndex === root.armedDeleteIndex
@@ -1937,6 +2093,18 @@ Item {
                   foreground: root.foreground
                   accent: root.accent
                   color: armed ? Util.alpha(root.urgent, 0.85) : (hasCursor ? fill : "transparent")
+
+                  // On the clipboard now: a small accent bar at the left edge.
+                  Rectangle {
+                    objectName: "clipCurrentMark"
+                    visible: row.onClipboard
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Style.space(3)
+                    height: parent.height - Style.space(10)
+                    radius: width / 2
+                    color: root.accent
+                  }
 
                   MouseArea {
                     id: rowMouse
@@ -2065,8 +2233,10 @@ Item {
                             tip: "link", show: row.showActions && !row.armed && row.linkKind !== "" && row.linkKind !== "color",
                             text: ClipboardHistory.targetTooltip(row.linkKind, row.linkLabel) },
                           { glyph: "", tip: "link", swatch: true, show: !row.armed && row.linkKind === "color", text: ClipboardHistory.targetTooltip("color", row.linkLabel) },
-                          { glyph: "󰆏", tip: "copytext", show: row.showActions && !row.armed && row.copyText !== "", text: row.copyTip },
-                          { glyph: "󰍔", tip: "markdown", show: row.showActions && !row.armed && row.hasMarkdown, text: "Paste as Markdown" }
+                          { glyph: row.copyWifi ? "󰌾" : "󰆏", tip: "copytext", show: row.showActions && !row.armed && row.copyText !== "", text: row.copyTip },
+                          { glyph: "󰆏", tip: "ocrtext", show: row.showActions && !row.armed && row.ocrText !== "", text: row.ocrTip },
+                          { glyph: "\uf48a", tip: "markdown", show: row.showActions && !row.armed && row.hasMarkdown, text: "Paste as Markdown" },
+                          { glyph: "󰦨", tip: "plaintext", show: row.showActions && !row.armed && row.hasMarkdown, text: "Paste as plain text" }
                         ]
                         delegate: actionDelegate
                       }
@@ -2085,6 +2255,7 @@ Item {
                           height: Math.round(Style.font.body * 1.5)
                           radius: height / 2
                           color: root.accent
+                          opacity: row.queueInfo.done ? 0.4 : 1
 
                           Text {
                             id: queueNoText
@@ -2239,12 +2410,15 @@ Item {
                 id: queueButton
                 objectName: "clipQueueButton"
                 readonly property string label: ClipboardHistory.queueButtonLabel(root.queueKeys.length, root.queueRunning)
+                // 2+ selected: a plain info line (not a button); a running
+                // queue: the Cancel button.
+                readonly property bool info: root.queueKeys.length >= 2
                 visible: label !== ""
                 anchors.left: parent.left
-                width: queueLabel.implicitWidth + Style.space(16)
+                width: Math.min(queueLabel.implicitWidth + Style.space(16), Math.max(0, incognitoSwitch.x - Style.space(8)))
                 height: root.footerRowHeight
                 radius: root.cornerRadius
-                color: queueMouse.containsMouse ? Util.alpha(root.accent, 0.28) : Util.alpha(root.accent, 0.16)
+                color: info ? "transparent" : (queueMouse.containsMouse ? Util.alpha(root.accent, 0.28) : Util.alpha(root.accent, 0.16))
 
                 Text {
                   id: queueLabel
@@ -2252,7 +2426,9 @@ Item {
                   anchors.centerIn: parent
                   textFormat: Text.PlainText
                   text: queueButton.label
-                  color: root.foreground
+                  width: Math.min(implicitWidth, queueButton.width - Style.space(16))
+                  elide: Text.ElideRight
+                  color: queueButton.info ? root.dimText : root.foreground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
                 }
@@ -2261,13 +2437,14 @@ Item {
                   id: queueMouse
                   anchors.fill: parent
                   hoverEnabled: true
+                  enabled: !queueButton.info
                   cursorShape: Qt.PointingHandCursor
                   onClicked: root.queueButtonClicked()
                 }
 
                 PanelToolTip {
                   visible: queueMouse.containsMouse
-                  text: root.queueKeys.length ? "Then every Ctrl+V pastes the next one (Ctrl+Enter)" : "Stop the paste queue"
+                  text: "Stop the paste queue"
                 }
               }
 

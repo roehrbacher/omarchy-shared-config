@@ -85,7 +85,7 @@ start)
   [[ $n -gt 0 ]] || { rm -f "$Q"; exit 1; }
   jq -n --argjson items "$items" --arg id "$$-$(date +%s%N)" '{items: $items, pos: 0, id: $id}' >"$Q" || exit 1
   bind_keys
-  notify "$n items. Ctrl+V pastes 1 of $n. Esc cancels." 10000
+  notify "Queue ready: $n items. Ctrl+V pastes 1 of $n. Esc cancels." 10000
   [[ ${QUEUE_DRY:-0} == 1 ]] || setsid -f "$me" watchdog "$(jq -r .id "$Q")" </dev/null >/dev/null 2>&1 9>&-
   ;;
 next)

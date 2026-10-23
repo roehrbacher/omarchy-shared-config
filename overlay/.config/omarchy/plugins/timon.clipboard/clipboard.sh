@@ -10,6 +10,8 @@
 #   clipboard.sh paste-md <index>         paste the HTML of entry <index> as Markdown (1.17.0):
 #                                         pandoc if installed, else html2md.py; plain text if both fail
 #   clipboard.sh markdown <index>         print that Markdown (tests)
+#   clipboard.sh current                  print a key of what is on the clipboard (text:<md5> or
+#                                         image:<sha256>), for the "on the clipboard" mark (1.19.0)
 #   clipboard.sh send <index>             copy text entry <index> and send it to the phone (flux-cli clip)
 #   clipboard.sh open <index>             open a URL in the browser, text in the editor, an image in the editor
 #   clipboard.sh clear                    empty the live clipboard
@@ -66,6 +68,17 @@ paste | copy)
   [[ $1 == copy ]] && exit 0
   sleep 0.15
   wtype -M shift -k Insert -m shift 2>/dev/null || true
+  ;;
+current)
+  types=$(timeout 2s wl-paste --list-types 2>/dev/null) || exit 0
+  grep -qx 'x-kde-passwordManagerHint' <<<"$types" && exit 0
+  mime=""  # same order as capture.sh, so the hash matches the stored file
+  for m in image/png image/jpeg image/webp image/gif image/bmp image/tiff; do grep -qx "$m" <<<"$types" && { mime=$m; break; }; done
+  if [[ -n $mime ]]; then
+    echo "image:$(timeout 3s wl-paste --type "$mime" 2>/dev/null | sha256sum | awk '{print $1}')"
+  elif grep -qE '^text/|^UTF8_STRING$|^STRING$' <<<"$types"; then
+    echo "text:$(timeout 2s wl-paste --type text --no-newline 2>/dev/null | md5sum | awk '{print $1}')"
+  fi
   ;;
 markdown | paste-md)
   valid_index "${2:-}" || exit 1
@@ -149,7 +162,7 @@ wipe)
   rm -rf "$DATA_DIR" "${XDG_STATE_HOME:-$HOME/.local/state}/timon.clipboard"
   ;;
 *)
-  sed -n '2,15p' "$0" >&2
+  sed -n '2,17p' "$0" >&2
   exit 1
   ;;
 esac

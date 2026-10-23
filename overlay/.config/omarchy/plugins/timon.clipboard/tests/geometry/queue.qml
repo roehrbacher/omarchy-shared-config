@@ -72,8 +72,8 @@ ShellRoot {
     t3.start()
   }
   function check2() {
-    console.log("QUE before Ctrl+Enter: " + badges())
-    key(Qt.Key_Return, Qt.ControlModifier)
+    console.log("QUE before close: " + badges())
+    clip.close()  // 1.19.0: closing with 2+ selected starts the queue
     clip.queueRunning = { pos: 1, count: 5 }
     console.log("QUE running footer=" + footer())
     t4.start()

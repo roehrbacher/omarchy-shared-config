@@ -30,4 +30,13 @@ want dark.png 'WIFI:T:WPA;S:ExampleNet;P:not-a-real-pass;;'
 want small.png 'https://example.org/small'
 # What 1.16/1.17 (zbar alone, no border) made of the hard ones:
 for f in tight dark small; do echo "note zbar-only $f: '$(zbarimg --quiet --raw "$d/$f.png" 2>/dev/null)'"; done
+# 1.19.0: OCR languages, with a fake tesseract that has eng, deu, fra installed.
+fb="$tmp/fakebin"; mkdir -p "$fb"
+printf '#!/bin/bash\n[[ $1 == --list-langs ]] && printf "List of available languages (4):\\neng\\ndeu\\nfra\\nosd\\n"\n' >"$fb/tesseract"; chmod +x "$fb/tesseract"
+l() { PATH="$fb:$PATH" "$here/../scan.sh" --langs | jq -r "$1"; }
+[[ $(l .used) == "eng+deu+fra" ]] && ok "langs: all installed (eng first)" || bad "langs all: $(l .used)"
+[[ $(l '.installed|join(",")') == "deu,eng,fra" ]] && ok "langs: osd not listed" || bad "installed: $(l '.installed|join(",")')"
+[[ $(OMARCHY_OCR_LANGS=deu l .used) == deu ]] && ok "langs: OMARCHY_OCR_LANGS=deu" || bad "env deu"
+[[ $(OMARCHY_OCR_LANGS=deu+spa l .used) == deu ]] && ok "langs: not-installed spa skipped, nothing downloaded" || bad "env deu+spa"
+[[ $(OMARCHY_OCR_LANGS=spa l .used) == "eng+deu+fra" ]] && ok "langs: nothing usable in env -> installed ones" || bad "env spa"
 exit $fail

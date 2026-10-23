@@ -6,6 +6,33 @@
 set -uo pipefail
 umask 077
 IMAGE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/timon.clipboard/images"
+
+# OCR languages (1.19.0): only language packs that are installed are used;
+# nothing is ever downloaded. Like Omarchy's own omarchy-capture-text,
+# OMARCHY_OCR_LANGS (e.g. "eng+deu") picks them; without it every installed
+# pack is used (English first, at most 3, so a scan stays quick).
+#   scan.sh --langs     print {"installed":[...],"used":"eng+deu","env":"..."}
+ocr_installed() { tesseract --list-langs 2>/dev/null | tail -n +2 | grep -vxE 'osd|equ|snum' | sort -u; }
+ocr_langs() {
+  local have want picked=()
+  have=$(ocr_installed)
+  [[ -n $have ]] || return 0
+  if [[ -n ${OMARCHY_OCR_LANGS:-} ]]; then
+    for want in ${OMARCHY_OCR_LANGS//+/ }; do grep -qx "$want" <<<"$have" && picked+=("$want"); done
+  fi
+  if (( ${#picked[@]} == 0 )); then
+    grep -qx eng <<<"$have" && picked+=(eng)
+    while read -r want; do [[ $want == eng ]] || picked+=("$want"); done <<<"$have"
+    picked=("${picked[@]:0:3}")
+  fi
+  local IFS=+; echo "${picked[*]}"
+}
+if [[ ${1:-} == --langs ]]; then
+  command -v tesseract >/dev/null || { echo '{"installed":[],"used":"","env":""}'; exit 0; }
+  jq -cn --arg inst "$(ocr_installed)" --arg used "$(ocr_langs)" --arg env "${OMARCHY_OCR_LANGS:-}" \
+    '{installed: ($inst | split("\n") | map(select(. != ""))), used: $used, env: $env}'
+  exit 0
+fi
 img=${1:-}
 [[ $img == "$IMAGE_DIR"/* && -r $img ]] || exit 1
 
@@ -28,8 +55,7 @@ elif ! command -v ZXingReader >/dev/null; then
   complete=false
 fi
 if command -v tesseract >/dev/null; then
-  langs=eng
-  tesseract --list-langs 2>/dev/null | grep -qx deu && langs=eng+deu
+  langs=$(ocr_langs); [[ -n $langs ]] || langs=eng
   ocr=$(OMP_THREAD_LIMIT=1 timeout 30s nice -n 19 tesseract "$img" - -l "$langs" 2>/dev/null | head -c 8192)
 else
   complete=false

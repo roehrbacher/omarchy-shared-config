@@ -464,8 +464,8 @@ const t=q=>H.displayRows(h,q,50).map(r=>r.index).join(",")
 a.strictEqual(t("type:link"),"0");a.strictEqual(t("type:color"),"1");a.strictEqual(t("type:image"),"3,4");a.strictEqual(t("type:screenshot"),"3")
 a.strictEqual(t("app:chrom"),"0");a.strictEqual(t("is:pinned"),"2");a.strictEqual(t("<2h"),"0,3,4");a.strictEqual(t("today type:text"),"0,1")
 a.strictEqual(t("rechnung"),"3");a.strictEqual(t("is:pinned hello"),"2");a.strictEqual(t("today"),"0,1,3,4")
-a.deepStrictEqual(H.imageTextActions(H.parseHistory(JSON.stringify(h))[4]),{link:null,copy:"se;cret",copyTip:"Copy Wi-Fi password"})
-const u=H.imageTextActions({type:"image",path:"/c",qr:"https://example.com/x",ocr:"foo"});a.strictEqual(u.link.kind,"url");a.strictEqual(u.copyTip,"Copy text from image")
+a.deepStrictEqual(H.imageTextActions(H.parseHistory(JSON.stringify(h))[4]),{link:null,copy:"se;cret",copyTip:"Copy Wi-Fi password",wifi:true,ocr:"",ocrTip:""})
+const u=H.imageTextActions({type:"image",path:"/c",qr:"https://example.com/x",ocr:"foo"});a.strictEqual(u.link.kind,"url");a.strictEqual(u.ocrTip,"Copy text from image")
 a.strictEqual(H.imageTextActions({type:"image",path:"/c",qr:"info@example.com"}).link.target,"mailto:info@example.com")
 a.strictEqual(H.imageTextActions({type:"image",path:"/c",qr:"BEGIN:VCARD"}).copyTip,"Copy QR code text")
 const re=H.addEntry(H.parseHistory(JSON.stringify(h)),{type:"image",path:"/a.png"},100);a.strictEqual(re[0].ocr,"Rechnung Betrag 42")
@@ -484,7 +484,7 @@ console.log("filters/ocr: ok")}
   assert.strictEqual(H.normalizeEntry({ type: "text", text: "x", html: "a".repeat(300000) }).html, undefined, "oversized html dropped")
   const rows = H.displayRows(m, "", 10)
   assert.strictEqual(rows[0].hasMarkdown, true, "row flag")
-  assert.deepStrictEqual(H.rowActionNames(false, false, true, "", false, true), ["markdown", "delete", "pin"], "markdown button")
+  assert.deepStrictEqual(H.rowActionNames(false, false, true, "", false, true), ["markdown", "plaintext", "delete", "pin"], "markdown button")
 
   let q = []
   q = H.toggleQueued(q, "a"); q = H.toggleQueued(q, "b"); q = H.toggleQueued(q, "c")
@@ -493,12 +493,12 @@ console.log("filters/ocr: ok")}
   assert.deepStrictEqual([H.queueNumber(q, "b"), H.queueNumber(q, "c"), H.queueNumber(q, "a")], [1, 2, 0], "ctrl+click again removes, rest move up")
   assert.deepStrictEqual(H.queueItems([{ type: "text", text: "t", html: "<b>t</b>", app: "x", at: 1 }, { type: "image", path: "/p.png", mime: "image/png", ocr: "o" }, null]),
     [{ type: "text", text: "t" }, { type: "image", path: "/p.png", mime: "image/png" }], "queue items carry only what is pasted")
-  assert.strictEqual(H.queueButtonLabel(3, null), "Paste 3 in order")
+  assert.strictEqual(H.queueButtonLabel(3, null), "Paste queue: 3 items in order · Ctrl+V pastes them one by one", "1.19.0: info line, no start button"); assert.strictEqual(H.queueButtonLabel(1, null), "", "1 selected: no queue")
   assert.strictEqual(H.queueButtonLabel(0, { pos: 1, count: 5 }), "Pasting 2 of 5 · Cancel")
   assert.strictEqual(H.queueButtonLabel(0, null), "")
   const K = H.KEY || { Escape: 0x01000000, Return: 0x01000004 }
   assert.strictEqual(H.searchKeyAction({ key: 0x20, ctrl: true }), "queueToggle", "Ctrl+Space")
-  assert.strictEqual(H.searchKeyAction({ key: 0x01000004, ctrl: true, queued: 2 }), "queueStart", "Ctrl+Enter starts")
+  assert.strictEqual(H.searchKeyAction({ key: 0x01000004, ctrl: true, queued: 2 }), "enter", "1.19.0: Ctrl+Enter no longer starts")
   assert.strictEqual(H.searchKeyAction({ key: 0x01000004, ctrl: true, queued: 0 }), "enter", "Ctrl+Enter without queue = Enter")
   assert.strictEqual(H.searchKeyAction({ key: 0x01000000, queued: 2 }), "queueClear", "Esc clears the selection first")
   assert.strictEqual(H.searchKeyAction({ key: 0x01000000, queued: 0 }), "escape")
@@ -509,15 +509,15 @@ console.log("filters/ocr: ok")}
 {
   const img = q => ({ type: "image", path: "/x.png", mime: "image/png", bytes: 2048, qr: q, scanned: true, scanv: 2 })
   assert.strictEqual(H.previewText(img("WIFI:T:WPA;S:ExampleNet;P:not-real;;")), "Wi-Fi name: ExampleNet")
-  assert.deepStrictEqual(H.imageTextActions(img("WIFI:T:WPA;S:ExampleNet;P:not-real;;")), { link: null, copy: "not-real", copyTip: "Copy Wi-Fi password" })
+  assert.deepStrictEqual(H.imageTextActions(img("WIFI:T:WPA;S:ExampleNet;P:not-real;;")), { link: null, copy: "not-real", copyTip: "Copy Wi-Fi password", wifi: true, ocr: "", ocrTip: "" })
   assert.strictEqual(H.previewText(img("https://example.com/menu")), "QR link: example.com/menu")
   assert.strictEqual(H.imageTextActions(img("https://example.com/menu")).link.kind, "url")
   assert.strictEqual(H.previewText(img("mailto:someone@example.org")), "QR e-mail: someone@example.org")
   assert.strictEqual(H.imageTextActions(img("MATMSG:TO:someone@example.org;SUB:Hi;;")).link.target, "mailto:someone@example.org")
   assert.strictEqual(H.previewText(img("Locker 12, code 0000")), "QR: Locker 12, code 0000")
   assert.strictEqual(H.previewText({ type: "image", path: "/s.png", screenshot: true, bytes: 2048 }), "Screenshot · 2 KB")
-  assert.strictEqual(H.imageTextActions({ type: "image", path: "/s", ocr: "x", screenshot: true }).copyTip, "Copy text from screenshot")
-  assert.strictEqual(H.imageTextActions({ type: "image", path: "/s", ocr: "x" }).copyTip, "Copy text from image")
+  assert.strictEqual(H.imageTextActions({ type: "image", path: "/s", ocr: "x", screenshot: true }).ocrTip, "Copy text from screenshot")
+  assert.strictEqual(H.imageTextActions({ type: "image", path: "/s", ocr: "x" }).ocrTip, "Copy text from image")
   assert.strictEqual(H.needsScan({ type: "image", path: "/a", scanned: true }), true, "zbar-only scans are redone")
   assert.strictEqual(H.needsScan(H.normalizeEntry({ type: "image", path: "/a", scanned: true, scanv: 2 })), false)
   assert.strictEqual(H.clickActionOf("copy"), "copy"); assert.strictEqual(H.clickActionOf(undefined), "paste")
@@ -531,3 +531,24 @@ console.log("filters/ocr: ok")}
   assert.ok(H.searchFilterExamples.length === 11 && H.searchFilterExamples.some(f => f.value === "app:firefox"))
   console.log("qr/click/drag: ok")
 }
+
+// ---- 1.19.0 ----------------------------------------------------------------
+{
+  const both = H.imageTextActions({ type: "image", path: "/q.png", qr: "WIFI:T:WPA;S:ExampleNet;P:not-real;;", ocr: "Guest network", screenshot: true })
+  assert.deepStrictEqual([both.copy, both.wifi, both.ocr, both.ocrTip], ["not-real", true, "Guest network", "Copy text from screenshot"], "QR + OCR: both")
+  const url = H.imageTextActions({ type: "image", path: "/q.png", qr: "https://example.com", ocr: "Menu" })
+  assert.deepStrictEqual([url.link.kind, url.ocrTip], ["url", "Copy text from image"])
+  assert.deepStrictEqual(H.rowActionNames(false, false, false, "url", true, false, true), ["link", "copytext", "ocrtext", "delete", "pin"])
+  assert.strictEqual(H.queueOnPick(1), false); assert.strictEqual(H.queueOnPick(2), true)
+  assert.deepStrictEqual(H.queueItemKeys([{ type: "text", text: "a" }, { type: "image", path: "/i/x.png" }]), ["text:a", "image:/i/x.png"])
+  const sha = "a".repeat(64)
+  assert.strictEqual(H.clipKeyOf({ type: "image", path: "/d/images/" + sha + ".png" }, null), "image:" + sha)
+  assert.strictEqual(H.clipKeyOf({ type: "text", text: "hi" }, t => "md5(" + t + ")"), "text:md5(hi)")
+  let h = [{ type: "text", text: "new", at: 5000 }, { type: "text", text: "old pin", pinned: true, at: 1 }, { type: "text", text: "older", at: 100 }]
+  h = H.unpinToTop(h, 1, 9999)
+  assert.deepStrictEqual(h.map(e => e.text + (e.pinned ? "*" : "") + "@" + e.at), ["old pin@9999", "new@5000", "older@100"], "unpinned goes to the top of History, now")
+  assert.strictEqual(H.displayRows(h, "", 10)[0].fullText, "old pin")
+  console.log("1.19.0: ok")
+}
+assert.strictEqual(H.ocrInstallCommand(["eng"]), "sudo pacman -S tesseract-data-deu")
+assert.strictEqual(H.ocrInstallCommand(["eng", "deu"]), "sudo pacman -S tesseract-data-fra")

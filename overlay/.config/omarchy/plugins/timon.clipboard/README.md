@@ -194,3 +194,14 @@ See `TESTING.md` for the last manual run.
 Built on Omarchy's stock clipboard manager (`shell/plugins/clipboard`, MIT,
 David Heinemeier Hansson). UX modelled on GNOME Clipboard History by Alex
 Saveau (MIT); no code from it is used.
+
+## Text in images, QR codes and search filters (1.16.0)
+
+- Images are read in the background (niced): text with `tesseract`
+  (English, plus German when `tesseract-data-deu` is installed) and QR codes
+  with `zbarimg`. The text is searchable. Hovering an image row shows
+  **Copy text**; a QR link or e-mail gets the open button, a Wi-Fi QR code
+  copies the password, any other QR code copies its text. Without the tools
+  the buttons simply don't appear: `sudo pacman -S tesseract tesseract-data-eng tesseract-data-deu zbar`.
+- Search filters, combinable with normal search text: `type:image|screenshot|text|link|color|file`,
+  `app:<window class>` (recorded from 1.16.0 on), `is:pinned`, `today`, `yesterday`, `<30m`, `<2h`, `<3d`.

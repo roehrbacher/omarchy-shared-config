@@ -26,6 +26,10 @@ function normalizeEntry(value) {
     var bytes = Number(value.bytes)
     if (isFinite(bytes) && bytes > 0) entry.bytes = Math.round(bytes)
     if (value.screenshot === true) entry.screenshot = true
+    // 1.16.0: text read from the image (OCR) and a decoded QR code.
+    if (typeof value.ocr === "string" && value.ocr.trim()) entry.ocr = value.ocr.slice(0, 8192)
+    if (typeof value.qr === "string" && value.qr.trim()) entry.qr = value.qr.slice(0, 4096)
+    if (value.scanned === true) entry.scanned = true
   } else {
     return null
   }
@@ -34,6 +38,8 @@ function normalizeEntry(value) {
   var at = Number(value.at)
   if (isFinite(at) && at > 0) entry.at = Math.round(at)
   if (value.legacy === true) entry.legacy = true
+  // 1.16.0: window class of the app it was copied from (search app:<name>).
+  if (typeof value.app === "string" && value.app) entry.app = value.app.slice(0, 64)
   return entry
 }
 
@@ -77,6 +83,12 @@ function addEntry(history, entry, limit) {
   for (var i = 0; i < values.length; i++) {
     var existing = normalizeEntry(values[i])
     // A pinned entry keeps its place, so the dragged pin order stays put.
+    // A re-copied image keeps the text already read from it.
+    if (existing && entryKey(existing) === key && existing.scanned && !normalized.scanned) {
+      if (existing.ocr) normalized.ocr = existing.ocr
+      if (existing.qr) normalized.qr = existing.qr
+      normalized.scanned = true
+    }
     if (existing && entryKey(existing) === key && existing.pinned) {
       var kept = values.slice()
       normalized.pinned = true
@@ -203,7 +215,7 @@ function parseEntryJson(line) {
 
 function searchableText(entry) {
   if (!entry) return ""
-  if (entry.type === "image") return imagePreviewText(entry).toLowerCase() + " image " + String(entry.mime || "") + " " + String(entry.capturedAt || "")
+  if (entry.type === "image") return imagePreviewText(entry).toLowerCase() + " image " + String(entry.mime || "") + " " + String(entry.capturedAt || "") + " " + String(entry.ocr || "") + " " + String(entry.qr || "")
   return String(entry.text || "") + " " + fileEntryText(entry)
 }
 
@@ -220,6 +232,81 @@ function makeMatcher(query) {
     if (s.toLowerCase().indexOf(lower) >= 0) return true
     return re !== null && re.test(s)
   }
+}
+
+// ---- search filters (1.16.0) -----------------------------------------------
+// Tokens type:image|screenshot|text|link|color|file, app:<name>, is:pinned,
+// today, yesterday and <30m / <2h / <3d are filters; the rest is the search.
+var TYPE_FILTERS = ["image", "screenshot", "text", "link", "color", "file"]
+function parseQuery(query) {
+  var out = { text: "", types: [], apps: [], pinned: false, since: 0, day: "" }
+  var rest = []
+  var words = String(query || "").trim().split(/\s+/)
+  for (var i = 0; i < words.length; i++) {
+    var w = words[i], lw = w.toLowerCase(), m
+    if (!w) continue
+    if ((m = /^type:(\w+)$/.exec(lw)) && TYPE_FILTERS.indexOf(m[1].replace(/s$/, "").replace("colour", "color")) >= 0) out.types.push(m[1].replace(/s$/, "").replace("colour", "color"))
+    else if ((m = /^app:(.+)$/.exec(lw))) out.apps.push(m[1])
+    else if (lw === "is:pinned") out.pinned = true
+    else if (lw === "today" || lw === "yesterday") out.day = lw
+    else if ((m = /^<(\d+)(m|h|d)$/.exec(lw))) out.since = Number(m[1]) * (m[2] === "m" ? 60000 : m[2] === "h" ? 3600000 : 86400000)
+    else rest.push(w)
+  }
+  out.text = rest.join(" ")
+  out.active = out.types.length > 0 || out.apps.length > 0 || out.pinned || out.since > 0 || out.day !== ""
+  return out
+}
+
+function entryKinds(entry) {
+  if (entry.type === "image") return entry.screenshot ? ["image", "screenshot"] : ["image"]
+  if (filePaths(entry).length > 0) return ["file"]
+  var kinds = ["text"]
+  var s = String(entry.text || "")
+  if (linkTarget(s) || /^https?:\/\//i.test(s.trim())) kinds.push("link")
+  if (colorTarget(s)) kinds.push("color")
+  return kinds
+}
+
+function matchesFilters(entry, q, now) {
+  if (!q.active) return true
+  if (q.pinned && entry.pinned !== true) return false
+  if (q.types.length > 0) {
+    var kinds = entryKinds(entry)
+    for (var t = 0; t < q.types.length; t++) if (kinds.indexOf(q.types[t]) < 0) return false
+  }
+  if (q.apps.length > 0) {
+    var app = String(entry.app || "").toLowerCase()
+    for (var a = 0; a < q.apps.length; a++) if (!app || app.indexOf(q.apps[a]) < 0) return false
+  }
+  var at = entry.legacy ? 0 : Number(entry.at || 0)
+  if (q.since > 0 && !(at > 0 && now - at <= q.since)) return false
+  if (q.day !== "") {
+    var label = at > 0 ? dayLabel(at, now) : ""
+    if (label !== (q.day === "today" ? "today" : "Yesterday")) return false
+  }
+  return true
+}
+
+// What an image row offers besides paste (1.16.0). A QR link or e-mail
+// gets the open button; any other QR content (Wi-Fi, vCard, plain text) is
+// copied by the copy-text button; otherwise the text read from the image.
+// { link: {kind,target}|null, copy: text, copyTip }.
+function imageTextActions(entry) {
+  var out = { link: null, copy: "", copyTip: "" }
+  if (!entry || entry.type !== "image") return out
+  var qr = String(entry.qr || "").trim(), ocr = String(entry.ocr || "").trim()
+  if (qr) {
+    var l = linkTarget(qr)
+    if (l) out.link = l
+    else {
+      var wifi = /^WIFI:/i.test(qr) ? /(?:^WIFI:|;)P:((?:\\.|[^;])*)/i.exec(qr) : null
+      if (wifi && wifi[1]) { out.copy = wifi[1].replace(/\\(.)/g, "$1"); out.copyTip = "Copy Wi-Fi password (QR code)" }
+      else { out.copy = qr; out.copyTip = "Copy QR code text" }
+      return out
+    }
+  }
+  if (ocr) { out.copy = ocr; out.copyTip = "Copy text" }
+  return out
 }
 
 function decodeFileUri(uri) {
@@ -304,6 +391,7 @@ function cappedEntry(entry) {
   if (entry.origin) capped.origin = entry.origin
   if (entry.at) capped.at = entry.at
   if (entry.legacy) capped.legacy = true
+  if (entry.app) capped.app = entry.app
   return capped
 }
 
@@ -313,14 +401,16 @@ function displayRows(history, query, limit) {
   var values = Array.isArray(history) ? history : []
   var max = limitOf(limit, 200)
   if (max === 0) return []
-  var match = makeMatcher(query)
+  var q = parseQuery(query)
+  var match = makeMatcher(q.text)
+  var now = Date.now()
   var pinnedRows = []
   var rows = []
 
   for (var i = 0; i < values.length; i++) {
     var entry = cappedEntry(normalizeEntry(values[i]))
     if (!entry) continue
-    if (!match(searchableText(entry))) continue
+    if (!matchesFilters(entry, q, now) || !match(searchableText(entry))) continue
     var paths = filePaths(entry)
     var isFile = paths.length > 0
     var isImage = entry.type === "image"
@@ -335,6 +425,7 @@ function displayRows(history, query, limit) {
       pinned: entry.pinned === true,
       fromPhone: entry.origin === "phone",
       at: entry.legacy ? 0 : (entry.at || 0),
+      imageActions: imageTextActions(entry),
       index: i
     }
     if (row.pinned) pinnedRows.push(row)
@@ -644,10 +735,11 @@ function slotRowIndex(rows, slot) {
 // Left/Right keep moving the text cursor while you edit the search.
 // Row actions left to right: phone (send), trash, pin. Pin is last so it
 // stays in the slot where a pinned row shows it when not hovered.
-function rowActionNames(armed, phoneOnline, isText, linkKind) {
+function rowActionNames(armed, phoneOnline, isText, linkKind, hasCopyText) {
   if (armed) return ["delete"]
   var out = []
   if (linkKind) out.push("link")
+  if (hasCopyText) out.push("copytext")
   if (phoneOnline && isText) out.push("send")
   out.push("delete")
   out.push("pin")
@@ -868,6 +960,9 @@ if (typeof module !== "undefined") {
     filePaths: filePaths,
     fullText: fullText,
     displayRows: displayRows,
+    parseQuery: parseQuery,
+    matchesFilters: matchesFilters,
+    imageTextActions: imageTextActions,
     KEY: KEY,
     searchKeyAction: searchKeyAction,
     slotRowIndex: slotRowIndex,

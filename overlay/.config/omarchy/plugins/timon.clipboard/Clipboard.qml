@@ -80,6 +80,7 @@ Item {
   readonly property string captureScript: pluginDir + "/capture.sh"
   readonly property string helper: pluginDir + "/clipboard.sh"
   readonly property string fluxScript: pluginDir + "/flux-pause.sh"
+  readonly property string scanScript: pluginDir + "/scan.sh"
 
   // Same [menu] surface tokens as the stock clipboard, so every theme styles it.
   // Popup surface tokens, same as the stock Wi-Fi popup (KeyboardPanel).
@@ -281,6 +282,68 @@ Item {
     root.historyLoaded = true
     if (!root.pruneOld() && stamped.changed) root.saveHistory()
     if (root.opened) root.rebuildDisplay(true)
+    root.queueScans()
+  }
+
+  // ---- text and QR codes in images (1.16.0) --------------------------------
+  // One image at a time, niced, in the background: scan.sh reads the text
+  // (tesseract) and QR codes (zbarimg); the result is stored on the entry so
+  // it is searchable and the copy-text / open-link buttons appear. Images
+  // are tried once per shell session; with a tool missing they are tried
+  // again after the next shell start.
+  property var scanQueue: []
+  property var scanTried: ({})
+  function queueScans() {
+    for (var i = 0; i < root.history.length; i++) {
+      var e = root.history[i]
+      if (!e || e.type !== "image" || e.scanned || root.scanTried[e.path] || root.scanQueue.indexOf(e.path) >= 0) continue
+      root.scanQueue.push(e.path)
+    }
+    if (root.scanQueue.length && !scanProc.running) scanTimer.restart()
+  }
+  function applyScan(path, raw) {
+    var res = null
+    try { res = JSON.parse(String(raw || "")) } catch (e) { res = null }
+    if (!res) return
+    var changed = false
+    var next = root.history.slice()
+    for (var i = 0; i < next.length; i++) {
+      var e = next[i]
+      if (!e || e.type !== "image" || e.path !== path) continue
+      var u = Object.assign({}, e)
+      if (res.ocr) u.ocr = String(res.ocr); else delete u.ocr
+      if (res.qr) u.qr = String(res.qr); else delete u.qr
+      if (res.complete === true) u.scanned = true
+      next[i] = u
+      changed = true
+    }
+    if (!changed) return
+    root.history = next
+    root.saveHistory()
+    if (root.opened && root.dragRow < 0) root.rebuildDisplay(true)
+  }
+  Timer {
+    id: scanTimer
+    interval: 1500
+    onTriggered: {
+      if (scanProc.running || root.scanQueue.length === 0) return
+      // Never rescan in the middle of a drag; try again shortly.
+      if (root.dragRow >= 0) { restart(); return }
+      var path = root.scanQueue.shift()
+      root.scanTried[path] = true
+      scanProc.path = path
+      scanProc.command = [root.scanScript, path]
+      scanProc.running = true
+    }
+  }
+  Process {
+    id: scanProc
+    property string path: ""
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.applyScan(scanProc.path, text)
+    }
+    onExited: if (root.scanQueue.length) scanTimer.restart()
   }
 
   // Deletes unpinned entries older than keepDays; true when it saved.
@@ -314,6 +377,7 @@ Item {
     root.history = ClipboardHistory.pruneByAge(ClipboardHistory.addEntry(root.history, entry, root.historyLimit), root.keepDays, Date.now())
     root.saveHistory()
     if (root.opened) root.rebuildDisplay(true)
+    if (entry.type === "image") root.queueScans()
     if (entry.type === "text" && root.fluxPresent && !root.fluxPaused) {
       root.originQueue = root.originQueue.concat([entry.text]).slice(-5)
       originTimer.restart()
@@ -509,7 +573,7 @@ Item {
     var items = []
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i]
-      var t = row.entryType === "text" ? ClipboardHistory.rowTarget(row.fullText, root.homeDir) : null
+      var t = row.entryType === "text" ? ClipboardHistory.rowTarget(row.fullText, root.homeDir) : (row.entryType === "image" ? row.imageActions.link : null)
       var pathCand = t && t.kind === "path?" ? t.target : ""
       if (pathCand) {
         var known = root.pathInfo[pathCand]
@@ -531,6 +595,8 @@ Item {
         linkTarget: t ? t.target : "",
         linkLabel: t && t.label ? t.label : "",
         pathCandidate: pathCand,
+        copyText: row.imageActions ? row.imageActions.copy : "",
+        copyTip: row.imageActions ? row.imageActions.copyTip : "",
         historyIndex: row.index
       })
     }
@@ -754,6 +820,15 @@ Item {
     }
   }
   function copyIndex(index) { root.runOnIndex(index, "copy") }
+  // Text read from an image / QR content: over stdin to wl-copy (never argv).
+  function copyImageText(index) {
+    if (index < 0 || index >= displayModel.count) return
+    var r = displayModel.get(index)
+    if (!r.copyText) return
+    root.copyText(r.copyText)
+    root.close()
+    Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "2000", r.copyTip === "Copy text" ? "Copied text from image" : r.copyTip.replace(/^Copy/, "Copied")])
+  }
   function openIndex(index) { root.runOnIndex(index, "open") }
 
   // Actions shown on a selected row, left to right (the extra arguments only
@@ -761,11 +836,12 @@ Item {
   function rowActions(index, armedIndex, phone, count) {
     if (index < 0 || index >= displayModel.count) return []
     var row = displayModel.get(index)
-    return ClipboardHistory.rowActionNames(row.historyIndex === root.armedDeleteIndex, root.phoneOnline, row.entryType === "text", row.linkKind)
+    return ClipboardHistory.rowActionNames(row.historyIndex === root.armedDeleteIndex, root.phoneOnline, row.entryType === "text", row.linkKind, row.copyText !== "")
   }
 
   function runRowAction(name, index) {
     if (name === "link") root.openLinkIndex(index)
+    else if (name === "copytext") root.copyImageText(index)
     else if (name === "send") root.sendIndex(index)
     else if (name === "pin") root.togglePinDisplayIndex(index)
     else if (name === "delete") root.requestDelete(index)
@@ -1481,7 +1557,8 @@ Item {
                   model: [
                     { icon: "󰅍", label: "Open clipboard", value: "Alt+V · Super+Ctrl+V" },
                     { icon: "󰐃", label: "Paste pinned item N, anywhere", value: "Alt+Shift+1…9" },
-                    { icon: "󰆏", label: "Paste row N, in this popup", value: "Alt+1…9" }
+                    { icon: "󰆏", label: "Paste row N, in this popup", value: "Alt+1…9" },
+                    { icon: "󰍉", label: "Search filters", value: "type: app: is:pinned today <2h" }
                   ]
                   delegate: infoValueRow
                 }
@@ -1650,6 +1727,8 @@ Item {
                   required property string linkKind
                   required property string linkTarget
                   required property string linkLabel
+                  required property string copyText
+                  required property string copyTip
 
                   readonly property bool hasCursor: root.cursorActive && (root.dragRow >= 0 && root.dragHistoryIndex >= 0 ? historyIndex === root.dragHistoryIndex : index === root.selectedIndex)
                   readonly property bool armed: root.armedDeleteIndex !== -1 && historyIndex === root.armedDeleteIndex
@@ -1672,6 +1751,7 @@ Item {
                     preventStealing: row.pinned
                     property real pressY: 0
                     onPressed: function(mouse) {
+                      dropped = false
                       if (!row.pinned || root.filterText !== "") return
                       pressY = mouse.y
                       root.dragRow = row.index
@@ -1684,15 +1764,22 @@ Item {
                         if (!root.dragMoved && Math.abs(mouse.y - pressY) < Qt.styleHints.startDragDistance) return
                         var p = rowMouse.mapToItem(resultList.contentItem, mouse.x, mouse.y)
                         var t = resultList.indexAt(Style.space(10), p.y)
-                        if (t < 0) t = p.y < resultList.contentItem.mapFromItem(row, 0, 0).y ? 0 : root.pinnedDisplayCount() - 1
-                        if (!root.dragMoved) root.dragMoved = true
+                        if (t < 0) {
+                          // In the gap between two rows: stay put (1.15.1 sent the
+                          // row to the top/bottom for a frame = the flicker).
+                          if (resultList.indexAt(Style.space(10), p.y - resultList.spacing - 1) >= 0) return
+                          t = p.y < resultList.contentItem.mapFromItem(row, 0, 0).y ? 0 : root.pinnedDisplayCount() - 1
+                        }
+                        if (!root.dragMoved) { root.dragMoved = true; root.cursorActive = true; root.selectedIndex = row.index }
                         root.dragMoveTo(t)
                         return
                       }
                       root.selectFromPointer(row.index, row, mouse)
                     }
+                    property bool dropped: false
                     onReleased: {
                       resultList.interactive = true
+                      dropped = root.dragMoved
                       if (root.dragMoved) root.dragFinish()
                       else { root.dragRow = -1; root.dragHistoryIndex = -1 }
                     }
@@ -1701,7 +1788,8 @@ Item {
                       root.dragFinish()
                     }
                     onClicked: {
-                      if (root.dragMoved) return
+                      // A drop is not a click (1.15.1 pasted the row and closed the popup).
+                      if (root.dragMoved || dropped) { dropped = false; return }
                       root.cursorActive = true
                       root.selectedIndex = row.index
                       root.activateIndex(row.index)
@@ -1738,7 +1826,7 @@ Item {
                       fontFamily: root.fontFamily
                       pixelSize: Style.font.body
                       bold: row.armed
-                      running: !row.armed && root.dragRow < 0 && (rowMouse.containsMouse || row.hasCursor)
+                      running: !row.armed && !root.dragMoved && (rowMouse.containsMouse || row.hasCursor)
                       opacity: !row.armed && (row.entryType === "image" || row.entryType === "file") ? 0.72 : 1.0
                     }
 
@@ -1774,7 +1862,8 @@ Item {
                           { glyph: row.linkKind === "mail" ? "󰇮" : row.linkKind === "phone" ? "󰏲" : row.linkKind === "path" ? "󰉋" : row.linkKind === "maps" ? "󰍎" : row.linkKind === "github" ? "󰊤" : "󰏌",
                             tip: "link", show: row.showActions && !row.armed && row.linkKind !== "" && row.linkKind !== "color",
                             text: ClipboardHistory.targetTooltip(row.linkKind, row.linkLabel) },
-                          { glyph: "", tip: "link", swatch: true, show: !row.armed && row.linkKind === "color", text: ClipboardHistory.targetTooltip("color", row.linkLabel) }
+                          { glyph: "", tip: "link", swatch: true, show: !row.armed && row.linkKind === "color", text: ClipboardHistory.targetTooltip("color", row.linkLabel) },
+                          { glyph: "󰆏", tip: "copytext", show: row.showActions && !row.armed && row.copyText !== "", text: row.copyTip }
                         ]
                         delegate: actionDelegate
                       }

@@ -454,3 +454,19 @@ console.log("headings: ok")
   assert.strictEqual(H.pruneByAge([norm], 1, now + 2 * DAY).length, 0)
   console.log("auto-delete: ok")
 }
+
+// 1.16.0: search filters, OCR/QR actions
+{const H=require('../ClipboardHistory.js'),a=require('assert')
+const now=Date.now()
+const h=[{type:"text",text:"https://x.com/a",at:now-1000,app:"chromium"},{type:"text",text:"#ff0000",at:now-3*3600e3},{type:"text",text:"hello",pinned:true,at:now-2*86400e3,app:"kitty"},
+{type:"image",path:"/a.png",screenshot:true,at:now,ocr:"Rechnung Betrag 42",scanned:true},{type:"image",path:"/b.png",at:now,qr:"WIFI:T:WPA;S:Home;P:se\\;cret;;",scanned:true}]
+const t=q=>H.displayRows(h,q,50).map(r=>r.index).join(",")
+a.strictEqual(t("type:link"),"0");a.strictEqual(t("type:color"),"1");a.strictEqual(t("type:image"),"3,4");a.strictEqual(t("type:screenshot"),"3")
+a.strictEqual(t("app:chrom"),"0");a.strictEqual(t("is:pinned"),"2");a.strictEqual(t("<2h"),"0,3,4");a.strictEqual(t("today type:text"),"0,1")
+a.strictEqual(t("rechnung"),"3");a.strictEqual(t("is:pinned hello"),"2");a.strictEqual(t("today"),"0,1,3,4")
+a.deepStrictEqual(H.imageTextActions(H.parseHistory(JSON.stringify(h))[4]),{link:null,copy:"se;cret",copyTip:"Copy Wi-Fi password (QR code)"})
+const u=H.imageTextActions({type:"image",path:"/c",qr:"https://example.com/x",ocr:"foo"});a.strictEqual(u.link.kind,"url");a.strictEqual(u.copyTip,"Copy text")
+a.strictEqual(H.imageTextActions({type:"image",path:"/c",qr:"info@example.com"}).link.target,"mailto:info@example.com")
+a.strictEqual(H.imageTextActions({type:"image",path:"/c",qr:"BEGIN:VCARD"}).copyTip,"Copy QR code text")
+const re=H.addEntry(H.parseHistory(JSON.stringify(h)),{type:"image",path:"/a.png"},100);a.strictEqual(re[0].ocr,"Rechnung Betrag 42")
+console.log("filters/ocr: ok")}

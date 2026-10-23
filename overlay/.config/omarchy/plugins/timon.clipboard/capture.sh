@@ -21,6 +21,10 @@ MAX_IMAGE_BYTES=$((25 * 1024 * 1024))
 mkdir -p "$IMAGE_DIR"
 chmod 700 "$DATA_DIR" "$IMAGE_DIR" 2>/dev/null
 
+# Window class of the app copied from (search app:<name>); empty if unknown.
+APP=$(timeout 1s hyprctl activewindow -j 2>/dev/null | jq -r '.class // empty' 2>/dev/null | head -c 64)
+export APP
+
 drain() { cat >/dev/null 2>&1 || true; }
 
 if [[ -r $STATE_FILE ]] && jq -e '.private == true' "$STATE_FILE" >/dev/null 2>&1; then
@@ -64,8 +68,8 @@ emit_image() {
   grep -qvE '^image/' <<<"$types" && screenshot=false
 
   jq -cn --arg mime "$mime" --arg path "$file" --arg captured_at "$(date +'%A %H:%M')" \
-    --argjson bytes "$(stat -c %s "$file")" --argjson screenshot "$screenshot" \
-    '{type:"image", mime:$mime, path:$path, capturedAt:$captured_at, bytes:$bytes, screenshot:$screenshot}'
+    --argjson bytes "$(stat -c %s "$file")" --argjson screenshot "$screenshot" --arg app "$APP" \
+    '{type:"image", mime:$mime, path:$path, capturedAt:$captured_at, bytes:$bytes, screenshot:$screenshot} + (if $app != "" then {app:$app} else {} end)'
 }
 
 emit_text() {
@@ -112,7 +116,8 @@ emit_text() {
       $text = undef;
     }
     $text = decode("UTF-8", $raw) unless defined $text;
-    print "{\"type\":\"text\",\"text\":", encode_json($text), "}\n";
+    my $app = defined $ENV{APP} && length $ENV{APP} ? ",\"app\":" . encode_json(decode("UTF-8", $ENV{APP})) : "";
+    print "{\"type\":\"text\",\"text\":", encode_json($text), $app, "}\n";
   '
 }
 

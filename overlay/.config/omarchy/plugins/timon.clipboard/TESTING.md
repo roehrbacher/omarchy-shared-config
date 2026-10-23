@@ -1,3 +1,5 @@
+# Test run – 2026-10-23 (1.15.1): pinned drag flicker fixed. Cause: during a drag the row highlight was bound to the row position (index === selectedIndex); displayModel.move() changed the indexes before selectedIndex caught up, so the passed row got the highlight for one binding step and the stock CursorSurface 60 ms colour fade started on it (and the Alt+N numbers only jumped on drop). Now the highlight follows the dragged entry by identity and the slots update live. New offscreen test tests/tst_dragflicker.qml (old logic flashes, new logic none, same delegate kept) 4 passed; keepscroll 4, headerclick 4, kinetic 6, searchfield 15 passed; history tests ok.
+
 # Test run – 2026-10-21 (1.6.1): phone button moved from the header to the footer, left of the gear, same size and hover as the gear; icon + tooltip per Flux state; click opens Flux (flux-cli open). Unit tests pass.
 
 # Test run – 2026-10-20 (1.5.0), a desktop (visual QA), Omarchy 4.0.6

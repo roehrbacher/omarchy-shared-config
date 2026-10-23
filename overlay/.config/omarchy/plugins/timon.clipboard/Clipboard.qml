@@ -436,6 +436,7 @@ Item {
   // without movement is still a normal click. Wheel/touchpad scroll as before.
   property int dragRow: -1          // display index being dragged (-1 = none)
   property bool dragMoved: false
+  property int dragHistoryIndex: -1 // history index of the dragged entry (stable while rows move)
 
   function pinnedDisplayCount() {
     var n = 0
@@ -448,10 +449,15 @@ Item {
     var last = root.pinnedDisplayCount() - 1
     target = Math.max(0, Math.min(last, target))
     if (target === root.dragRow || target < 0) return
+    // The highlight follows the dragged entry by identity (hasCursor), so
+    // move() never leaves it on a neighbour for a frame and the 60 ms colour
+    // fade of the stock row never starts on the rows being passed.
     displayModel.move(root.dragRow, target, 1)
     root.dragRow = target
     root.selectedIndex = target
     root.dragMoved = true
+    // Alt+N numbers follow the new order live, so nothing jumps on drop.
+    for (var i = 0; i <= last; i++) if (displayModel.get(i).slot !== i + 1) displayModel.setProperty(i, "slot", i + 1)
   }
 
   function dragFinish() {
@@ -460,6 +466,7 @@ Item {
     var historyIndex = displayModel.get(root.dragRow).historyIndex
     root.dragRow = -1
     root.dragMoved = false
+    root.dragHistoryIndex = -1
     if (!moved) return
     var order = []
     for (var i = 0; i < displayModel.count; i++) {
@@ -1644,7 +1651,7 @@ Item {
                   required property string linkTarget
                   required property string linkLabel
 
-                  readonly property bool hasCursor: root.cursorActive && index === root.selectedIndex
+                  readonly property bool hasCursor: root.cursorActive && (root.dragRow >= 0 && root.dragHistoryIndex >= 0 ? historyIndex === root.dragHistoryIndex : index === root.selectedIndex)
                   readonly property bool armed: root.armedDeleteIndex !== -1 && historyIndex === root.armedDeleteIndex
                   readonly property bool showActions: hasCursor || rowMouse.containsMouse
 
@@ -1668,6 +1675,7 @@ Item {
                       if (!row.pinned || root.filterText !== "") return
                       pressY = mouse.y
                       root.dragRow = row.index
+                      root.dragHistoryIndex = row.historyIndex
                       root.dragMoved = false
                       resultList.interactive = false
                     }
@@ -1686,7 +1694,7 @@ Item {
                     onReleased: {
                       resultList.interactive = true
                       if (root.dragMoved) root.dragFinish()
-                      else root.dragRow = -1
+                      else { root.dragRow = -1; root.dragHistoryIndex = -1 }
                     }
                     onCanceled: {
                       resultList.interactive = true

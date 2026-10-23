@@ -82,9 +82,20 @@ markdown | paste-md)
   # Degrade gracefully: no HTML or no converter = the plain text.
   [[ -n ${md//[[:space:]]/} ]] || md=$(jq -j --argjson i "$2" '.[$i].text' "$HISTORY")
   if [[ $1 == markdown ]]; then printf '%s\n' "$md"; exit 0; fi
+  # 1.18.0: the Markdown is a paste, not a copy: capture.sh drops the one
+  # copy whose hash is in skip-next (and nothing else), so it never becomes
+  # a history entry. Afterwards the entry itself goes back on the clipboard.
+  printf '%s' "$md" | sha256sum | awk '{print $1}' >"$DATA_DIR/skip-next"
   printf '%s' "$md" | wl-copy || exit 1
   sleep 0.15
   wtype -M shift -k Insert -m shift 2>/dev/null || true
+  # The target app reads the paste on its own time; give it a second, then
+  # restore only if the clipboard still holds our Markdown.
+  sleep 1
+  if [[ $(wl-paste --no-newline --type text 2>/dev/null | sha256sum | awk '{print $1}') == "$(printf '%s' "$md" | sha256sum | awk '{print $1}')" ]]; then
+    copy_entry "$2" || true
+  fi
+  rm -f "$DATA_DIR/skip-next"
   ;;
 copy-pinned)
   [[ ${2:-} =~ ^[1-9]$ && -r $HISTORY ]] || exit 1

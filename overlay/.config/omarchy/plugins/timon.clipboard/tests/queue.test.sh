@@ -12,8 +12,8 @@ fail=0
 check() { if [[ $2 == "$3" ]]; then echo "ok   $1"; else echo "FAIL $1: got '$2' want '$3'"; fail=1; fi; }
 
 out=$(printf '%s' '[{"type":"text","text":"one"},{"type":"text","text":"two"},{"type":"text","text":"three"}]' | "$here/queue.sh" start)
-check "start binds Ctrl+V" "$(grep -c 'hl.bind(\"CTRL + V\"' <<<"$out")" 1
-check "start binds Esc" "$(grep -c 'hl.bind(\"Escape\"' <<<"$out")" 1
+check "start binds Ctrl+V" "$(grep -c 'hl.bind("CTRL + V"' <<<"$out")" 1
+check "start binds Esc" "$(grep -c 'hl.bind("Escape"' <<<"$out")" 1
 check "start notification" "$(grep -o 'Ctrl+V pastes 1 of 3' <<<"$out")" "Ctrl+V pastes 1 of 3"
 check "queue file is 0600" "$(stat -c %a "$Q")" 600
 check "status" "$("$here/queue.sh" status)" '{"pos":0,"count":3}'
@@ -36,7 +36,7 @@ printf '%s' '[{"type":"text","text":"a"},{"type":"text","text":"b"}]' | "$here/q
 "$here/queue.sh" next >/dev/null
 out=$("$here/queue.sh" cancel esc)
 check "Esc cancels" "$(grep -o 'Cancelled after 1 of 2' <<<"$out")" "Cancelled after 1 of 2"
-check "Esc unbinds before passing Esc on" "$(grep -nE 'unbind|Escape\", state' <<<"$out" | head -1 | grep -c unbind)" 1
+check "Esc unbinds before passing Esc on" "$(grep -nE 'unbind|Escape", state' <<<"$out" | head -1 | grep -c unbind)" 1
 check "Esc is passed on to the window" "$(grep -c 'key = "Escape", state' <<<"$out")" 2
 check "cancel: queue file gone" "$([[ -e $Q ]] && echo yes || echo no)" no
 
@@ -48,4 +48,18 @@ printf '%s' "[{\"type\":\"image\",\"path\":\"$tmp/data/timon.clipboard/images/x.
 check "image item copied with its type" "$(tail -1 "$tmp/copies")" "--type image/png"
 : >"$tmp/clip"; "$here/queue.sh" next >/dev/null
 check "image outside the image dir refused" "$(cat "$tmp/clip")" ""
+# 1.18.0 regression: real wl-copy forks a daemon that keeps serving the
+# clipboard. In 1.17.0 it inherited the queue lock, so the 2nd Ctrl+V found
+# the lock taken and pasted nothing. This stub forks the same way.
+printf '#!/bin/bash\ncat > "%s/clip"\n( exec sleep 20 ) &\n' "$tmp" >"$tmp/bin/wl-copy"
+printf '%s' '[{"type":"text","text":"first"},{"type":"text","text":"second"},{"type":"text","text":"third"}]' | "$here/queue.sh" start >/dev/null
+"$here/queue.sh" next >/dev/null
+check "daemonising wl-copy: item 1" "$(cat "$tmp/clip")" first
+s0=$(date +%s); "$here/queue.sh" next >/dev/null; rc=$?
+check "daemonising wl-copy: 2nd Ctrl+V runs" "$rc" 0
+check "daemonising wl-copy: item 2 pasted" "$(cat "$tmp/clip")" second
+check "daemonising wl-copy: no lock wait" "$(( $(date +%s) - s0 < 2 ))" 1
+"$here/queue.sh" next >/dev/null
+check "daemonising wl-copy: item 3 pasted" "$(cat "$tmp/clip")" third
+pkill -f 'sleep 20' 2>/dev/null
 exit $fail

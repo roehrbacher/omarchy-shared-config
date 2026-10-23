@@ -155,8 +155,22 @@ emit_text() {
 # a URL) wakes both watchers; keep only the image, not a separate link entry.
 has_image() { grep -q '^image/' <<<"$types"; }
 
+# 1.18.0: "Paste as Markdown" puts the converted text on the clipboard only
+# to paste it; clipboard.sh leaves its hash in skip-next (valid 15 s). That
+# one copy is dropped; any other copy is captured as usual.
+SKIP_FILE="$DATA_DIR/skip-next"
+skip_own_paste() {
+  [[ -s $SKIP_FILE ]] && (( $(date +%s) - $(stat -c %Y "$SKIP_FILE") <= 15 )) || return 1
+  local tmp sum
+  tmp=$(mktemp --tmpdir="$DATA_DIR" own.XXXXXX) || return 1
+  head -c $((MAX_TEXT_BYTES + 1)) >"$tmp"
+  sum=$(sha256sum "$tmp" | awk '{print $1}')
+  if [[ $sum == "$(cat "$SKIP_FILE")" ]]; then rm -f "$tmp" "$SKIP_FILE"; return 0; fi
+  emit_text <"$tmp"; rm -f "$tmp"; return 0
+}
+
 case "${1:-}" in
-text) if has_image; then drain; else emit_text; fi; exit 0 ;;
+text) if has_image; then drain; elif skip_own_paste; then :; else emit_text; fi; exit 0 ;;
 image/*) emit_image "$1"; exit 0 ;;
 esac
 

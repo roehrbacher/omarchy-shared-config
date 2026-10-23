@@ -19,6 +19,11 @@
 # A watchdog ends a queue after 15 min without a paste, and a Hyprland
 # config reload (which drops runtime binds) leaves nothing stuck behind.
 # Item contents live only in the user-only queue file, never in argv.
+# 1.18.0 fix: every command runs under a lock (fd 9). wl-copy forks a
+# daemon that serves the clipboard until the next copy; in 1.17.0 it
+# inherited fd 9 and so held the lock, and the 2nd Ctrl+V gave up waiting
+# for it: item 1 pasted, item 2 never did. Children now get fd 9 closed
+# (9>&-), and `next` never waits more than 2 s for the lock.
 # QUEUE_DRY=1: print the hyprctl calls instead of running them (tests).
 set -uo pipefail
 umask 077
@@ -30,7 +35,7 @@ me=$(readlink -f "$0")
 mkdir -p "$DATA_DIR"
 
 hypr() {
-  if [[ ${QUEUE_DRY:-0} == 1 ]]; then echo "hyprctl $*"; else timeout 3 hyprctl "$@" >/dev/null 2>&1; fi
+  if [[ ${QUEUE_DRY:-0} == 1 ]]; then echo "hyprctl $*"; else timeout 3 hyprctl "$@" >/dev/null 2>&1 9>&-; fi
 }
 key() { hypr dispatch "hl.dsp.send_key_state({ mods = \"$1\", key = \"$2\", state = \"$3\" })"; }
 notify() {
@@ -38,7 +43,7 @@ notify() {
   local id
   [[ ${QUEUE_DRY:-0} == 1 ]] && { echo "notify $*"; return; }
   id=$(jq -r '.notify // 0' "$Q" 2>/dev/null || echo 0)
-  id=$(notify-send -a Clipboard -p -r "${id:-0}" -t "${2:-6000}" "Paste queue" "$1" 2>/dev/null) || return 0
+  id=$(timeout 3 notify-send -a Clipboard -p -r "${id:-0}" -t "${2:-6000}" "Paste queue" "$1" 2>/dev/null 9>&-) || return 0
   [[ -s $Q && $id =~ ^[0-9]+$ ]] && jq --argjson id "$id" '.notify = $id' "$Q" >"$Q.tmp" && mv "$Q.tmp" "$Q"
 }
 bind_keys() {
@@ -59,9 +64,9 @@ copy_item() {
     local path mime
     path=$(jq -r --argjson k "$k" '.items[$k].path' "$Q"); mime=$(jq -r --argjson k "$k" '.items[$k].mime // "image/png"' "$Q")
     [[ $path == "$DATA_DIR"/images/* && -r $path ]] || return 1
-    timeout -s KILL 5 wl-copy --type "$mime" <"$path"
+    timeout -s KILL 5 wl-copy --type "$mime" <"$path" 9>&-
   else
-    jq -j --argjson k "$k" '.items[$k].text' "$Q" | timeout -s KILL 5 wl-copy
+    jq -j --argjson k "$k" '.items[$k].text' "$Q" | timeout -s KILL 5 wl-copy 9>&-
   fi
 }
 
@@ -78,13 +83,13 @@ start)
   items=$(jq -c '[.[] | select(type == "object" and ((.type == "text" and (.text | type == "string") and (.text | length > 0)) or (.type == "image" and (.path | type == "string"))))]' 2>/dev/null) || exit 1
   n=$(jq 'length' <<<"$items")
   [[ $n -gt 0 ]] || { rm -f "$Q"; exit 1; }
-  jq -n --argjson items "$items" '{items: $items, pos: 0}' >"$Q" || exit 1
+  jq -n --argjson items "$items" --arg id "$$-$(date +%s%N)" '{items: $items, pos: 0, id: $id}' >"$Q" || exit 1
   bind_keys
   notify "$n items. Ctrl+V pastes 1 of $n. Esc cancels." 10000
-  [[ ${QUEUE_DRY:-0} == 1 ]] || setsid -f "$me" watchdog </dev/null >/dev/null 2>&1
+  [[ ${QUEUE_DRY:-0} == 1 ]] || setsid -f "$me" watchdog "$(jq -r .id "$Q")" </dev/null >/dev/null 2>&1 9>&-
   ;;
 next)
-  flock -w 5 9 || exit 1
+  flock -w 2 9 || exit 1
   [[ -s $Q ]] || { unbind_keys; exit 0; }
   n=$(count); k=$(pos)
   if (( k >= n )); then finish; exit 0; fi
@@ -112,8 +117,10 @@ status)
   ;;
 watchdog)
   exec 9>&-
+  # One watchdog per queue: a newer queue (other id) ends this one.
   while sleep 30; do
     [[ -s $Q ]] || exit 0
+    [[ $(jq -r .id "$Q" 2>/dev/null) == "${2:-}" ]] || exit 0
     if (( $(date +%s) - $(stat -c %Y "$Q") > IDLE )); then "$me" cancel; exit 0; fi
   done
   ;;

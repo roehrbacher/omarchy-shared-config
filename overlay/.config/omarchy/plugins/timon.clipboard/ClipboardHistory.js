@@ -32,6 +32,8 @@ function normalizeEntry(value) {
     if (typeof value.ocr === "string" && value.ocr.trim()) entry.ocr = value.ocr.slice(0, 8192)
     if (typeof value.qr === "string" && value.qr.trim()) entry.qr = value.qr.slice(0, 4096)
     if (value.scanned === true) entry.scanned = true
+    // 1.18.0: scans before scanner version 2 (zbar only) are redone once.
+    if (value.scanv === SCAN_VERSION) entry.scanv = SCAN_VERSION
   } else {
     return null
   }
@@ -90,6 +92,7 @@ function addEntry(history, entry, limit) {
       if (existing.ocr) normalized.ocr = existing.ocr
       if (existing.qr) normalized.qr = existing.qr
       normalized.scanned = true
+      if (existing.scanv) normalized.scanv = existing.scanv
     }
     // Pasting it from the history re-copies plain text: keep its HTML.
     if (existing && entryKey(existing) === key && existing.html && !normalized.html) normalized.html = existing.html
@@ -295,6 +298,50 @@ function matchesFilters(entry, q, now) {
 // gets the open button; any other QR content (Wi-Fi, vCard, plain text) is
 // copied by the copy-text button; otherwise the text read from the image.
 // { link: {kind,target}|null, copy: text, copyTip }.
+var SCAN_VERSION = 2
+function needsScan(entry) {
+  return !!entry && entry.type === "image" && !(entry.scanned && entry.scanv === SCAN_VERSION)
+}
+
+// Wi-Fi QR fields (WIFI:T:WPA;S:<ssid>;P:<password>;;), backslash escapes undone.
+function wifiField(qr, key) {
+  var m = new RegExp("(?:^WIFI:|;)" + key + ":((?:\\\\.|[^;])*)", "i").exec(qr)
+  return m ? m[1].replace(/\\(.)/g, "$1") : ""
+}
+function qrMail(qr) {
+  var m = /^MATMSG:(?:.*;)?TO:([^;]+)/i.exec(qr) || /^mailto:([^?\s]+)/i.exec(qr)
+  if (m) return m[1]
+  var l = linkTarget(qr)
+  return l && l.kind === "mail" ? l.target.replace(/^mailto:/i, "") : ""
+}
+function shortUrl(url) {
+  var s = String(url).replace(/^https?:\/\//i, "").replace(/\/$/, "")
+  return s.length > 60 ? s.slice(0, 59) + "…" : s
+}
+function snippet(text, n) {
+  var s = String(text || "").replace(/\s+/g, " ").trim()
+  return s.length > n ? s.slice(0, n - 1) + "…" : s
+}
+// 1.18.0: what a QR image row shows instead of "Image · 12 KB".
+function qrSummary(entry) {
+  var qr = String(entry && entry.qr || "").trim()
+  if (!qr) return ""
+  if (/^WIFI:/i.test(qr)) {
+    var ssid = wifiField(qr, "S")
+    return ssid ? "Wi-Fi name: " + ssid : "Wi-Fi QR code"
+  }
+  var mail = qrMail(qr)
+  if (mail) return "QR e-mail: " + mail
+  if (/^tel:/i.test(qr)) return "QR phone: " + qr.slice(4)
+  if (/^BEGIN:VCARD/i.test(qr)) {
+    var fn = /\nFN[^:\n]*:([^\r\n]+)/i.exec(qr)
+    return "QR contact" + (fn ? ": " + fn[1].trim() : "")
+  }
+  var l = linkTarget(qr)
+  if (l && l.kind === "url") return "QR link: " + shortUrl(qr)
+  return "QR: " + snippet(qr, 80)
+}
+
 function imageTextActions(entry) {
   var out = { link: null, copy: "", copyTip: "" }
   if (!entry || entry.type !== "image") return out
@@ -303,13 +350,15 @@ function imageTextActions(entry) {
     var l = linkTarget(qr)
     if (l) out.link = l
     else {
-      var wifi = /^WIFI:/i.test(qr) ? /(?:^WIFI:|;)P:((?:\\.|[^;])*)/i.exec(qr) : null
-      if (wifi && wifi[1]) { out.copy = wifi[1].replace(/\\(.)/g, "$1"); out.copyTip = "Copy Wi-Fi password (QR code)" }
+      var pass = /^WIFI:/i.test(qr) ? wifiField(qr, "P") : ""
+      var mail = qrMail(qr)
+      if (pass) { out.copy = pass; out.copyTip = "Copy Wi-Fi password" }
+      else if (mail) { out.link = { kind: "mail", target: "mailto:" + mail }; return out }
       else { out.copy = qr; out.copyTip = "Copy QR code text" }
       return out
     }
   }
-  if (ocr) { out.copy = ocr; out.copyTip = "Copy text" }
+  if (ocr) { out.copy = ocr; out.copyTip = entry.screenshot === true ? "Copy text from screenshot" : "Copy text from image" }
   return out
 }
 
@@ -363,6 +412,8 @@ function formatBytes(bytes) {
 }
 
 function imagePreviewText(entry) {
+  var qr = qrSummary(entry)
+  if (qr) return qr
   var label = entry && entry.screenshot === true ? "Screenshot" : "Image"
   var size = formatBytes(entry && entry.bytes)
   return size ? label + " · " + size : label
@@ -454,6 +505,40 @@ function displayRows(history, query, limit) {
 function hasRichHtml(entry) {
   if (!entry || entry.type !== "text" || typeof entry.html !== "string") return false
   return /<(h[1-6]|a|li|b|strong|em|i|code|pre|table|blockquote)[\s>]/i.test(entry.html)
+}
+
+// ---- click action (1.18.0) ------------------------------------------------
+// "paste": select, paste and close (default). "copy": put it on the
+// clipboard, popup stays open.
+var CLICK_ACTIONS = ["copy", "paste"]
+function clickActionOf(v) { return v === "copy" ? "copy" : "paste" }
+
+// ---- settings: search filter examples (1.18.0) ----------------------------
+var SEARCH_FILTER_EXAMPLES = [
+  { value: "type:image", label: "Images" },
+  { value: "type:screenshot", label: "Screenshots" },
+  { value: "type:text", label: "Text" },
+  { value: "type:link", label: "Links" },
+  { value: "type:color", label: "Colour codes" },
+  { value: "type:file", label: "Copied files" },
+  { value: "app:firefox", label: "Copied from an app" },
+  { value: "is:pinned", label: "Pinned items" },
+  { value: "today", label: "Copied today" },
+  { value: "yesterday", label: "Copied yesterday" },
+  { value: "<30m  <2h  <3d", label: "Copied in the last …" }
+]
+
+// ---- drag between Pinned and History (1.18.0) ------------------------------
+// Where the dragged row goes for pointer target `t` (display index).
+// `others`: pinned rows not counting the dragged one; `count`: all rows;
+// `origPinned`/`origIndex`: where the drag started. Over the pinned rows
+// (t <= others) it becomes pinned at that slot; below them it is unpinned
+// and shown right under Pinned (a pinned row) or back at its own place
+// (a history row) until the drop sorts it by copy time.
+function dragPlan(t, others, count, origPinned, origIndex) {
+  var target = Math.max(0, Math.min(count - 1, t))
+  if (target <= others) return { index: Math.min(target, others), pinned: true }
+  return { index: origPinned ? others : Math.max(others, Math.min(count - 1, origIndex)), pinned: false }
 }
 
 // ---- paste queue (1.17.0) -------------------------------------------------
@@ -1034,6 +1119,13 @@ if (typeof module !== "undefined") {
     toggleQueued: toggleQueued,
     queueNumber: queueNumber,
     queueItems: queueItems,
-    queueButtonLabel: queueButtonLabel
+    queueButtonLabel: queueButtonLabel,
+    qrSummary: qrSummary,
+    needsScan: needsScan,
+    SCAN_VERSION: SCAN_VERSION,
+    CLICK_ACTIONS: CLICK_ACTIONS,
+    clickActionOf: clickActionOf,
+    dragPlan: dragPlan,
+    searchFilterExamples: SEARCH_FILTER_EXAMPLES
   }
 }

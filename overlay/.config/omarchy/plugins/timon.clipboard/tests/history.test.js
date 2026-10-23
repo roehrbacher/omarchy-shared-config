@@ -464,8 +464,8 @@ const t=q=>H.displayRows(h,q,50).map(r=>r.index).join(",")
 a.strictEqual(t("type:link"),"0");a.strictEqual(t("type:color"),"1");a.strictEqual(t("type:image"),"3,4");a.strictEqual(t("type:screenshot"),"3")
 a.strictEqual(t("app:chrom"),"0");a.strictEqual(t("is:pinned"),"2");a.strictEqual(t("<2h"),"0,3,4");a.strictEqual(t("today type:text"),"0,1")
 a.strictEqual(t("rechnung"),"3");a.strictEqual(t("is:pinned hello"),"2");a.strictEqual(t("today"),"0,1,3,4")
-a.deepStrictEqual(H.imageTextActions(H.parseHistory(JSON.stringify(h))[4]),{link:null,copy:"se;cret",copyTip:"Copy Wi-Fi password (QR code)"})
-const u=H.imageTextActions({type:"image",path:"/c",qr:"https://example.com/x",ocr:"foo"});a.strictEqual(u.link.kind,"url");a.strictEqual(u.copyTip,"Copy text")
+a.deepStrictEqual(H.imageTextActions(H.parseHistory(JSON.stringify(h))[4]),{link:null,copy:"se;cret",copyTip:"Copy Wi-Fi password"})
+const u=H.imageTextActions({type:"image",path:"/c",qr:"https://example.com/x",ocr:"foo"});a.strictEqual(u.link.kind,"url");a.strictEqual(u.copyTip,"Copy text from image")
 a.strictEqual(H.imageTextActions({type:"image",path:"/c",qr:"info@example.com"}).link.target,"mailto:info@example.com")
 a.strictEqual(H.imageTextActions({type:"image",path:"/c",qr:"BEGIN:VCARD"}).copyTip,"Copy QR code text")
 const re=H.addEntry(H.parseHistory(JSON.stringify(h)),{type:"image",path:"/a.png"},100);a.strictEqual(re[0].ocr,"Rechnung Betrag 42")
@@ -503,4 +503,31 @@ console.log("filters/ocr: ok")}
   assert.strictEqual(H.searchKeyAction({ key: 0x01000000, queued: 2 }), "queueClear", "Esc clears the selection first")
   assert.strictEqual(H.searchKeyAction({ key: 0x01000000, queued: 0 }), "escape")
   console.log("markdown/queue: ok")
+}
+
+// ---- 1.18.0: QR previews, click action, drag between sections ----------
+{
+  const img = q => ({ type: "image", path: "/x.png", mime: "image/png", bytes: 2048, qr: q, scanned: true, scanv: 2 })
+  assert.strictEqual(H.previewText(img("WIFI:T:WPA;S:ExampleNet;P:not-real;;")), "Wi-Fi name: ExampleNet")
+  assert.deepStrictEqual(H.imageTextActions(img("WIFI:T:WPA;S:ExampleNet;P:not-real;;")), { link: null, copy: "not-real", copyTip: "Copy Wi-Fi password" })
+  assert.strictEqual(H.previewText(img("https://example.com/menu")), "QR link: example.com/menu")
+  assert.strictEqual(H.imageTextActions(img("https://example.com/menu")).link.kind, "url")
+  assert.strictEqual(H.previewText(img("mailto:someone@example.org")), "QR e-mail: someone@example.org")
+  assert.strictEqual(H.imageTextActions(img("MATMSG:TO:someone@example.org;SUB:Hi;;")).link.target, "mailto:someone@example.org")
+  assert.strictEqual(H.previewText(img("Locker 12, code 0000")), "QR: Locker 12, code 0000")
+  assert.strictEqual(H.previewText({ type: "image", path: "/s.png", screenshot: true, bytes: 2048 }), "Screenshot · 2 KB")
+  assert.strictEqual(H.imageTextActions({ type: "image", path: "/s", ocr: "x", screenshot: true }).copyTip, "Copy text from screenshot")
+  assert.strictEqual(H.imageTextActions({ type: "image", path: "/s", ocr: "x" }).copyTip, "Copy text from image")
+  assert.strictEqual(H.needsScan({ type: "image", path: "/a", scanned: true }), true, "zbar-only scans are redone")
+  assert.strictEqual(H.needsScan(H.normalizeEntry({ type: "image", path: "/a", scanned: true, scanv: 2 })), false)
+  assert.strictEqual(H.clickActionOf("copy"), "copy"); assert.strictEqual(H.clickActionOf(undefined), "paste")
+  // 2 pinned + 4 history rows; drag history row 4 up: pinned at slot 1, back down: home again
+  assert.deepStrictEqual(H.dragPlan(1, 2, 6, false, 4), { index: 1, pinned: true })
+  assert.deepStrictEqual(H.dragPlan(2, 2, 6, false, 4), { index: 2, pinned: true }, "right under the last pin is still pinned")
+  assert.deepStrictEqual(H.dragPlan(3, 2, 6, false, 4), { index: 4, pinned: false })
+  // pinned row 0 (1 other pin) dragged into history: unpinned, shown under Pinned
+  assert.deepStrictEqual(H.dragPlan(4, 1, 6, true, 0), { index: 1, pinned: false })
+  assert.deepStrictEqual(H.dragPlan(0, 1, 6, true, 0), { index: 0, pinned: true })
+  assert.ok(H.searchFilterExamples.length === 11 && H.searchFilterExamples.some(f => f.value === "app:firefox"))
+  console.log("qr/click/drag: ok")
 }

@@ -21,6 +21,11 @@ Item {
   // (1, 2, 5, 10 or 20, picked in settings, saved in state.json). Pinned
   // entries are never deleted. historyLimit is only a safety cap.
   property int keepDays: ClipboardHistory.DEFAULT_KEEP_DAYS
+  // 1.18.0 setting: what a left click on a row does ("paste" = select,
+  // paste and close; "copy" = only put it on the clipboard, popup stays).
+  property string clickAction: "paste"
+  // After a copy-only click the entry moves to the top; keep it selected.
+  property string reselectKey: ""
   property int historyLimit: 2000
   // Rows rendered per search (the rest is a search away).
   property int displayLimit: 200
@@ -39,7 +44,7 @@ Item {
   // Settings view (gear icon in the footer).
   property bool infoOpen: false
   property int infoIndex: 0
-  readonly property var infoActions: ["incognito", "clear", "back", "send", "keep"]
+  readonly property var infoActions: ["incognito", "clear", "back", "send", "keep", "click"]
   // Flux details for the settings view (from `flux-cli status --json`).
   property string phoneName: ""
   property int lastSync: 0
@@ -231,6 +236,7 @@ Item {
     else if (name === "clear") { root.infoOpen = false; root.requestClearHistory() }
     else if (name === "send") root.sendCurrentClipboard()
     else if (name === "keep") root.stepKeepDays(1, true)
+    else if (name === "click") root.setClickAction(root.clickAction === "paste" ? "copy" : "paste")
     else root.closeInfo()
   }
 
@@ -241,6 +247,7 @@ Item {
     var n = root.infoActions.length
     if ((event.modifiers & Qt.ControlModifier) && k === Qt.Key_S) root.sendCurrentClipboard()
     else if (k === Qt.Key_Escape) root.closeInfo()
+    else if ((k === Qt.Key_Left || k === Qt.Key_Right) && root.infoActions[root.infoIndex] === "click") root.setClickAction(k === Qt.Key_Right ? "paste" : "copy")
     else if ((k === Qt.Key_Left || k === Qt.Key_Right) && root.infoActions[root.infoIndex] === "keep") root.stepKeepDays(k === Qt.Key_Right ? 1 : -1, false)
     else if (k === Qt.Key_Down || k === Qt.Key_Tab) root.infoIndex = (root.infoIndex + 1) % n
     else if (k === Qt.Key_Up || k === Qt.Key_Backtab) root.infoIndex = (root.infoIndex + n - 1) % n
@@ -297,13 +304,14 @@ Item {
   }
 
   function writeState() {
-    stateFile.setText(JSON.stringify({ private: root.privateMode, keepDays: root.keepDays }) + "\n")
+    stateFile.setText(JSON.stringify({ private: root.privateMode, keepDays: root.keepDays, clickAction: root.clickAction }) + "\n")
   }
 
   function loadState(raw) {
     var st = {}
     try { st = JSON.parse(String(raw || "{}")) || {} } catch (e) { st = {} }
     root.privateMode = st.private === true
+    root.clickAction = ClipboardHistory.clickActionOf(st.clickAction)
     var days = ClipboardHistory.keepDaysOf(st.keepDays)
     if (days !== root.keepDays) { root.keepDays = days; root.pruneOld() }
     // Also runs at shell start: resumes Flux if private mode ended while the
@@ -338,7 +346,7 @@ Item {
   function queueScans() {
     for (var i = 0; i < root.history.length; i++) {
       var e = root.history[i]
-      if (!e || e.type !== "image" || e.scanned || root.scanTried[e.path] || root.scanQueue.indexOf(e.path) >= 0) continue
+      if (!ClipboardHistory.needsScan(e) || root.scanTried[e.path] || root.scanQueue.indexOf(e.path) >= 0) continue
       root.scanQueue.push(e.path)
     }
     if (root.scanQueue.length && !scanProc.running) scanTimer.restart()
@@ -355,7 +363,7 @@ Item {
       var u = Object.assign({}, e)
       if (res.ocr) u.ocr = String(res.ocr); else delete u.ocr
       if (res.qr) u.qr = String(res.qr); else delete u.qr
-      if (res.complete === true) u.scanned = true
+      if (res.complete === true) { u.scanned = true; u.scanv = ClipboardHistory.SCAN_VERSION }
       next[i] = u
       changed = true
     }
@@ -398,6 +406,19 @@ Item {
     root.saveHistory()
     if (root.opened) root.rebuildDisplay(true)
     return true
+  }
+
+  function setClickAction(v) {
+    root.clickAction = ClipboardHistory.clickActionOf(v)
+    root.writeState()
+  }
+  // Left click on a row, per the "Click action" setting.
+  function clickIndex(index) {
+    if (root.clickAction !== "copy") { root.activateIndex(index); return }
+    if (index < 0 || index >= displayModel.count) return
+    var r = displayModel.get(index)
+    root.reselectKey = root.rowKey(r)
+    Quickshell.execDetached([root.helper, "copy", String(r.historyIndex)])
   }
 
   function setKeepDays(days) {
@@ -543,6 +564,20 @@ Item {
   property int dragRow: -1          // display index being dragged (-1 = none)
   property bool dragMoved: false
   property int dragHistoryIndex: -1 // history index of the dragged entry (stable while rows move)
+  // 1.18.0: any row can be dragged; over Pinned it becomes pinned at that
+  // slot, a pinned row dragged below Pinned is unpinned on drop.
+  property bool dragOrigPinned: false
+  property int dragOrigIndex: -1
+  property string dragOrigSection: ""
+  function dragStart(index) {
+    var r = displayModel.get(index)
+    root.dragRow = index
+    root.dragHistoryIndex = r.historyIndex
+    root.dragOrigPinned = r.pinned
+    root.dragOrigIndex = index
+    root.dragOrigSection = r.sectionName
+    root.dragMoved = false
+  }
 
   function pinnedDisplayCount() {
     var n = 0
@@ -552,18 +587,25 @@ Item {
 
   function dragMoveTo(target) {
     if (root.dragRow < 0) return
-    var last = root.pinnedDisplayCount() - 1
-    target = Math.max(0, Math.min(last, target))
-    if (target === root.dragRow || target < 0) return
+    var cur = displayModel.get(root.dragRow)
+    var others = root.pinnedDisplayCount() - (cur.pinned ? 1 : 0)
+    var plan = ClipboardHistory.dragPlan(target, others, displayModel.count, root.dragOrigPinned, root.dragOrigIndex)
+    if (plan.index === root.dragRow && plan.pinned === cur.pinned) return
     // The highlight follows the dragged entry by identity (hasCursor), so
     // move() never leaves it on a neighbour for a frame and the 60 ms colour
     // fade of the stock row never starts on the rows being passed.
-    displayModel.move(root.dragRow, target, 1)
-    root.dragRow = target
-    root.selectedIndex = target
+    if (plan.index !== root.dragRow) displayModel.move(root.dragRow, plan.index, 1)
+    root.dragRow = plan.index
+    root.selectedIndex = plan.index
     root.dragMoved = true
+    if (plan.pinned !== cur.pinned) {
+      // Section follows: "Pinned" inside, the neighbour's heading below.
+      var below = plan.index + 1 < displayModel.count ? displayModel.get(plan.index + 1).sectionName : "History"
+      displayModel.setProperty(plan.index, "pinned", plan.pinned)
+      displayModel.setProperty(plan.index, "sectionName", plan.pinned ? "Pinned" : (root.dragOrigPinned ? (below === "Pinned" ? "History" : below) : root.dragOrigSection))
+    }
     // Alt+N numbers follow the new order live, so nothing jumps on drop.
-    for (var i = 0; i <= last; i++) if (displayModel.get(i).slot !== i + 1) displayModel.setProperty(i, "slot", i + 1)
+    for (var i = 0; i < displayModel.count; i++) if (displayModel.get(i).slot !== i + 1) displayModel.setProperty(i, "slot", i + 1)
   }
 
   function dragFinish() {
@@ -574,12 +616,17 @@ Item {
     root.dragMoved = false
     root.dragHistoryIndex = -1
     if (!moved) return
+    var nowPinned = false
     var order = []
     for (var i = 0; i < displayModel.count; i++) {
       var r = displayModel.get(i)
+      if (r.historyIndex === historyIndex) nowPinned = r.pinned
       if (r.pinned) order.push(r.historyIndex)
     }
-    root.history = ClipboardHistory.reorderPinned(root.history, order)
+    var next = root.history
+    // Pinned or unpinned by the drag: flip it first, then apply the order.
+    if (nowPinned !== root.dragOrigPinned) next = ClipboardHistory.togglePinAt(next, historyIndex)
+    root.history = ClipboardHistory.reorderPinned(next, order)
     root.saveHistory()
     root.rebuildDisplay(true)
     // reorderPinned keeps each slot's history position, so the dragged
@@ -649,6 +696,9 @@ Item {
     root.firstHistorySection = pinnedCount > 0 && root.filterText === "" ? firstDay : ""
     root.syncModel(items)
 
+    if (root.reselectKey !== "") {
+      for (var rs = 0; rs < displayModel.count; rs++) if (root.rowKey(displayModel.get(rs)) === root.reselectKey) { selectedIndex = rs; root.reselectKey = ""; break }
+    }
     if (displayModel.count === 0) selectedIndex = 0
     else if (selectedIndex >= displayModel.count) selectedIndex = displayModel.count - 1
     else if (selectedIndex < 0) selectedIndex = 0
@@ -870,7 +920,7 @@ Item {
     if (!r.copyText) return
     root.copyText(r.copyText)
     root.close()
-    Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "2000", r.copyTip === "Copy text" ? "Copied text from image" : r.copyTip.replace(/^Copy/, "Copied")])
+    Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "2000", r.copyTip.replace(/^Copy/, "Copied")])
   }
   function openIndex(index) { root.runOnIndex(index, "open") }
 
@@ -1625,6 +1675,47 @@ Item {
                   }
                 }
 
+                Repeater {
+                  model: [
+                    { icon: "󰍽", label: "Click action", value: root.clickAction === "copy" ? "stays open" : "closes the popup" }
+                  ]
+                  delegate: infoValueRow
+                }
+
+                // Same stock pills as "Delete items after".
+                Grid {
+                  id: clickRow
+                  objectName: "clipClickRow"
+                  x: Style.space(10)
+                  width: infoColumn.width - Style.space(20)
+                  columns: 2
+                  spacing: Style.spacing.xs
+                  readonly property real cellWidth: (width - spacing) / 2
+
+                  Repeater {
+                    model: [
+                      { key: "copy", label: "Select (copy only)" },
+                      { key: "paste", label: "Select, paste & close" }
+                    ]
+
+                    Button {
+                      required property var modelData
+                      objectName: "clipClickPill"
+                      width: clickRow.cellWidth
+                      text: modelData.label
+                      fontSize: Style.font.caption
+                      foreground: root.foreground
+                      fontFamily: root.fontFamily
+                      horizontalPadding: Style.spacing.sm
+                      verticalPadding: Style.spacing.controlPaddingY
+                      bordered: true
+                      active: root.clickAction === modelData.key
+                      hasCursor: root.infoActions[root.infoIndex] === "click" && root.clickAction === modelData.key
+                      onClicked: { root.infoIndex = root.infoActions.indexOf("click"); root.setClickAction(modelData.key) }
+                    }
+                  }
+                }
+
                 Text {
                   text: "SHORTCUTS"
                   color: root.dimText
@@ -1641,8 +1732,28 @@ Item {
                     { icon: "󰅍", label: "Open clipboard", value: "Alt+V · Super+Ctrl+V" },
                     { icon: "󰐃", label: "Paste pinned item N, anywhere", value: "Alt+Shift+1…9" },
                     { icon: "󰆏", label: "Paste row N, in this popup", value: "Alt+1…9" },
-                    { icon: "󰍉", label: "Search filters", value: "type: app: is:pinned today <2h" }
+                    { icon: "󰒆", label: "Paste queue: pick rows, then paste in order", value: "Ctrl+click · Ctrl+Enter" }
                   ]
+                  delegate: infoValueRow
+                }
+
+                // Search filters: one row per filter, the example to type on
+                // the right; combine them with text, e.g. "type:link github".
+                Text {
+                  objectName: "clipFilterHeading"
+                  width: infoColumn.width
+                  text: "SEARCH FILTERS"
+                  color: root.dimText
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  topPadding: Style.space(10)
+                  bottomPadding: Style.space(4)
+                  leftPadding: Style.space(10)
+                }
+
+                Repeater {
+                  model: ClipboardHistory.SEARCH_FILTER_EXAMPLES.map(function(f) { return { icon: "󰍉", label: f.label, value: f.value } })
                   delegate: infoValueRow
                 }
               }
@@ -1834,15 +1945,13 @@ Item {
                     cursorShape: root.dragRow === row.index && root.dragMoved ? Qt.ClosedHandCursor : Qt.PointingHandCursor
                     // Pinned rows: the press belongs to the row (drag = reorder),
                     // so the ListView must not turn it into a scroll.
-                    preventStealing: row.pinned
+                    preventStealing: root.filterText === ""
                     property real pressY: 0
                     onPressed: function(mouse) {
                       dropped = false
-                      if (!row.pinned || root.filterText !== "") return
+                      if (root.filterText !== "" || (mouse.modifiers & Qt.ControlModifier)) return
                       pressY = mouse.y
-                      root.dragRow = row.index
-                      root.dragHistoryIndex = row.historyIndex
-                      root.dragMoved = false
+                      root.dragStart(row.index)
                       resultList.interactive = false
                     }
                     onPositionChanged: function(mouse) {
@@ -1854,7 +1963,12 @@ Item {
                           // In the gap between two rows: stay put (1.15.1 sent the
                           // row to the top/bottom for a frame = the flicker).
                           if (resultList.indexAt(Style.space(10), p.y - resultList.spacing - 1) >= 0) return
-                          t = p.y < resultList.contentItem.mapFromItem(row, 0, 0).y ? 0 : root.pinnedDisplayCount() - 1
+                          // Over a section heading (e.g. "History" under
+                          // Pinned): count as the row above it, so crossing
+                          // the heading moves one step, never to the end.
+                          var above = -1
+                          for (var dy = 4; dy <= root.rowHeight * 2 && above < 0; dy += 4) above = resultList.indexAt(Style.space(10), p.y - dy)
+                          t = above >= 0 ? above : (p.y < resultList.contentItem.mapFromItem(row, 0, 0).y ? 0 : displayModel.count - 1)
                         }
                         if (!root.dragMoved) { root.dragMoved = true; root.cursorActive = true; root.selectedIndex = row.index }
                         root.dragMoveTo(t)
@@ -1880,7 +1994,7 @@ Item {
                       root.selectedIndex = row.index
                       // Ctrl+click: add to / take out of the paste queue.
                       if (mouse.modifiers & Qt.ControlModifier) { root.toggleQueueIndex(row.index); return }
-                      root.activateIndex(row.index)
+                      root.clickIndex(row.index)
                     }
                   }
 

@@ -240,3 +240,26 @@ Saveau (MIT); no code from it is used.
   `wl-copy --sensitive`; wl-paste 2.3.0 then reports `CLIPBOARD_STATE=sensitive`,
   which Flux also honours, so these copies are not sent to the phone either.
   No guessing from window titles or browser fields.
+
+## 1.18.0
+
+- **Click action** (settings): "Select, paste & close" (default) or
+  "Select (copy only)": a click only puts the item on the clipboard and the
+  popup stays open.
+- **QR codes:** read with ZXing (`ZXingReader` from zxing-cpp) when it is
+  installed, else zbar (also retried with a white border for tightly
+  cropped screenshots). zbar alone missed light-on-dark, small/blurred and
+  styled codes. Images scanned by older versions are scanned once more.
+- **QR previews:** a QR image row shows what is in it instead of
+  "Image": `Wi-Fi name: <network>` (button: Copy Wi-Fi password),
+  `QR link: example.com/…` (Open link), `QR e-mail: …` (Send email),
+  `QR phone: …`, `QR contact: …`, or `QR: <text>` (Copy QR code text).
+- **OCR button:** "Copy text from screenshot" / "Copy text from image".
+- **Drag between sections:** drag any row into Pinned to pin it at that
+  spot; drag a pinned row below Pinned to unpin it (it then goes back to its
+  place by copy time).
+- **Paste as Markdown** no longer adds the Markdown as a new history item,
+  and the original entry is put back on the clipboard afterwards.
+- **Paste queue fix:** the 2nd Ctrl+V pasted nothing (wl-copy's background
+  process held the queue's lock); fixed.
+- Settings list every search filter with an example.

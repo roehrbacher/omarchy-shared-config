@@ -47,4 +47,29 @@ MD
 check "converted to Markdown (bundled html2md.py)" "$("$here/clipboard.sh" markdown 0)" "$want"
 echo '[{"type":"text","text":"just text"}]' >"$tmp/data/timon.clipboard/history.json"
 check "no html: falls back to the text" "$("$here/clipboard.sh" markdown 0)" "just text"
+# 1.18.0: the pasted Markdown is not captured; the entry is restored after.
+D="$tmp/data/timon.clipboard"
+printf '%s' '# Hi' | sha256sum | awk '{print $1}' >"$D/skip-next"
+check "own Markdown paste not captured" "$(printf '%s' '# Hi' | "$here/capture.sh" text)" ""
+check "skip marker used up" "$([[ -e $D/skip-next ]] && echo left || echo gone)" gone
+printf '%s' '# Hi' | sha256sum | awk '{print $1}' >"$D/skip-next"
+check "a different copy is still captured" "$(printf 'other' | "$here/capture.sh" text | jq -r .text)" other
+rm -f "$D/skip-next"
+check "same text copied by you later is captured" "$(printf '%s' '# Hi' | "$here/capture.sh" text | jq -r .text)" "# Hi"
+# paste-md end to end with a fake clipboard (wl-copy/wl-paste share a file)
+cat >"$tmp/bin/wl-copy" <<STUB
+#!/bin/bash
+cat >"$tmp/board"; echo copy >>"$tmp/log"
+STUB
+cat >"$tmp/bin/wl-paste" <<STUB
+#!/bin/bash
+cat "$tmp/board"
+STUB
+printf '#!/bin/bash\necho paste >>"%s/log"\n' "$tmp" >"$tmp/bin/wtype"
+chmod +x "$tmp/bin/"*
+jq -c '[.]' <<<"$out" >"$D/history.json"
+"$here/clipboard.sh" paste-md 0
+check "paste-md: Markdown copied, pasted, then the entry restored" "$(tr '\n' ' ' <"$tmp/log")" "copy paste copy "
+check "paste-md: clipboard holds the original text again" "$(cat "$tmp/board")" "Plan Read the doc"
+check "paste-md: marker cleaned up" "$([[ -e $D/skip-next ]] && echo left || echo gone)" gone
 exit $fail

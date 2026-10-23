@@ -1,4 +1,4 @@
 #!/bin/bash
-# Managed by omarchy-shared-config. Re-clone the stock indicators group (with
+# Part of omarchy-insomnia (github.com/roehrbacher/omarchy-insomnia). Re-clone the stock indicators group (with
 # Insomnia) after an Omarchy update, so timon.indicators follows upstream.
 "$HOME/.local/bin/omarchy-indicators-build" || omarchy-notification-send -u critical "Indicators" "Could not rebuild timon.indicators after the update; the previous build is still in use." >/dev/null 2>&1 || true

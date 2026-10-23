@@ -1,5 +1,5 @@
 #!/bin/bash
-# Managed by omarchy-shared-config. Build timon.indicators: Omarchy's stock
+# Part of omarchy-insomnia (github.com/roehrbacher/omarchy-insomnia). Build timon.indicators: Omarchy's stock
 # indicators group (omarchy.indicators) cloned the way `omarchy plugin clone`
 # does it, plus the Insomnia indicator (~/.local/share/omarchy-config/indicators)
 # inserted into its list just before StayAwake (the coffee).

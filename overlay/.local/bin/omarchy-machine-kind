@@ -1,5 +1,5 @@
 #!/bin/bash
-# Managed by omarchy-shared-config. Print "laptop" or "desktop".
+# Part of omarchy-insomnia (github.com/roehrbacher/omarchy-insomnia). Print "laptop" or "desktop".
 #
 # laptop  = a system battery is present (power_supply type Battery, not a
 #           peripheral's: scope Device is skipped) AND there is a lid

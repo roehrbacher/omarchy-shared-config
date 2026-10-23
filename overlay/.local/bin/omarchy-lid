@@ -1,5 +1,5 @@
 #!/bin/bash
-# Managed by omarchy-shared-config. Bound to the lid switch in
+# Part of omarchy-insomnia (github.com/roehrbacher/omarchy-insomnia). Bound to the lid switch in
 # hypr/shared-bindings.lua (desktops have no lid switch, so it never runs there;
 # on a desktop it would just do the stock lid commands).
 #
@@ -15,8 +15,8 @@
 #          - an Insomnia session runs (omarchy-insomnia holds logind's lid
 #            handling, so battery behaves like AC), or
 #          - it is on AC and logind ignores the lid on AC
-#            (HandleLidSwitchExternalPower=ignore/lock; not set on the
-#            XPS, which suspends on AC by choice).
+#            (HandleLidSwitchExternalPower=ignore/lock; not the logind
+#            default, where it suspends on AC too).
 #        Otherwise logind suspends as usual and this does nothing more.
 # open:  quiet mode ends (apps continued, power profile restored), then
 #        Omarchy's clamshell handler, then the display comes back on at the

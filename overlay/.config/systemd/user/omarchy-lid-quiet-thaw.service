@@ -1,4 +1,4 @@
-# Managed by omarchy-shared-config. No-op on desktops (omarchy-lid-quiet checks).
+# Part of omarchy-insomnia (github.com/roehrbacher/omarchy-insomnia). No-op on desktops (omarchy-lid-quiet checks).
 [Unit]
 Description=Safety net: continue any app the lid quiet mode froze
 After=graphical-session.target

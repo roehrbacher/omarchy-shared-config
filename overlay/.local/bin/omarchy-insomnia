@@ -1,6 +1,6 @@
 #!/bin/bash
-# Managed by omarchy-shared-config. Insomnia: keep this machine awake and
-# reachable (for Grok Bot) for a while. Started from the Insomnia eye in the
+# Insomnia (github.com/roehrbacher/omarchy-insomnia): keep this machine awake
+# and reachable (SSH, downloads, agents) for a while. Started from the Insomnia eye in the
 # bar centre (an indicator in timon.indicators). Named after, and using the eye of,
 # Krish Garg's macOS app Insomnia (github.com/krishhgg/Insomnia, MIT).
 #
@@ -12,14 +12,18 @@
 #
 # What a session does depends on the machine (omarchy-machine-kind: battery +
 # lid = laptop, else desktop):
-#   desktop (gaming PC): inhibit sleep, so nothing suspends or hibernates;
+#   desktop: inhibit sleep, so nothing suspends or hibernates;
 #     starting a session locks and turns the displays off (omarchy-screen-off);
 #     unlocking during the session ends it (you're back).
-#   laptop (XPS): inhibit sleep + handle-lid-switch, so nothing suspends and
+#   laptop: inhibit sleep + handle-lid-switch, so nothing suspends and
 #     closing the lid on battery keeps
 #     it running like on AC (omarchy-lid: lock + screen off + quiet mode); no
-#     lock on start; survives unlocks (lid close/open cycles); ends on battery
-#     at 20 %, and if the lid is closed on battery then, suspends.
+#     lock on start; survives unlocks (lid close/open cycles). It does NOT end
+#     at a battery level: it can't be started on battery at/below 5 %
+#     ("battery too low"; on AC any level is fine), and the low-battery
+#     hibernate (github.com/roehrbacher/omarchy-low-battery-hibernate) is the
+#     safety net: near empty it ends the session and hibernates, also with the
+#     lid closed. When the time is up with the lid closed on battery, it suspends.
 # Optional overrides (nothing shipped) in ~/.config/omarchy/insomnia.conf,
 # sourced bash after the mode defaults:
 #   INSOMNIA_MODE=laptop|desktop         force the mode (read by omarchy-machine-kind)
@@ -27,10 +31,12 @@
 # Idle is never inhibited: the screen still blanks and locks on the normal idle
 # timers (timon.idle). Omarchy's coffee toggle is the "never blank or lock" switch.
 #   INSOMNIA_LOCK_ON_START=0             lock + screen off on start (1/0)
-#   INSOMNIA_FLOOR=20                    end on battery at/below this % (empty: never)
+#   INSOMNIA_FLOOR=20                    end on battery at/below this % (default empty: never)
+#   INSOMNIA_MIN_START=5                 refuse to start on battery at/below this %
+#                                        (laptop default 5, empty: always allow)
 #   INSOMNIA_END_ON_UNLOCK=0             end when the lock screen is unlocked during
-#                                        the session (default 1: waking the PC and
-#                                        unlocking means Timon is back)
+#                                        the session (desktop default 1: waking the PC
+#                                        and unlocking means you are back)
 #   INSOMNIA_DESC="..."                  one line shown in notifications
 #   INSOMNIA_TOOLTIP="..."               the bar icon's short tooltip (like the coffee's "Stay Awake")
 #   insomnia_on_end() { ...; }           called after the session ended, $1 = reason
@@ -42,15 +48,18 @@
 #   omarchy-insomnia status [--json]
 #   omarchy-insomnia menu                               picker (bar widget)
 #   omarchy-insomnia check-floor <percent> <battery|ac> dry-run of the floor rule
+#   omarchy-insomnia check-start <percent> <battery|ac> dry-run of the start rule
 #
 # Testing: INSOMNIA_FAKE_BATTERY="<percent> <battery|ac>" (or "@/file", re-read
 # every check) fakes the battery, INSOMNIA_FAKE_LOCK="@/file" (containing
 # true/false) fakes the lock state, and INSOMNIA_DRY_RUN=1 tells the end hook to
 # only log what it would do (both passed into the unit by `start`).
+# INSOMNIA_UNIT=<name>.service runs a session under another unit name (tests),
+# and with INSOMNIA_DRY_RUN the caller's PATH is passed in too (stubs).
 set -u
 
-UNIT=omarchy-insomnia.service
-RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omarchy-insomnia"
+UNIT=${INSOMNIA_UNIT:-omarchy-insomnia.service}
+RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/${UNIT%.service}"
 SELF=$(readlink -f "$0")
 CONF="$HOME/.config/omarchy/insomnia.conf"
 
@@ -63,7 +72,8 @@ lid_closed() {
 if [[ $INSOMNIA_MODE == laptop ]]; then
   INSOMNIA_INHIBIT="sleep:handle-lid-switch"
   INSOMNIA_LOCK_ON_START=0
-  INSOMNIA_FLOOR=20
+  INSOMNIA_FLOOR=""
+  INSOMNIA_MIN_START=5
   INSOMNIA_END_ON_UNLOCK=0
   INSOMNIA_DESC="Closing the lid keeps the laptop running, also on battery"
   INSOMNIA_TOOLTIP="Stay awake with lid closed"
@@ -85,6 +95,7 @@ else
   INSOMNIA_INHIBIT="sleep"
   INSOMNIA_LOCK_ON_START=1
   INSOMNIA_FLOOR=""
+  INSOMNIA_MIN_START=""
   INSOMNIA_END_ON_UNLOCK=1
   INSOMNIA_DESC="No suspend or hibernate; screen locked and off"
   INSOMNIA_TOOLTIP="Lock Omarchy and turn off screen"
@@ -117,6 +128,9 @@ lock_state() {
 
 # Exit 0 when the session must end because of the battery floor.
 below_floor() { [[ -n $INSOMNIA_FLOOR && $2 == battery ]] && (( $1 <= INSOMNIA_FLOOR )); }
+
+# Exit 0 when a session must not start: on battery at/below INSOMNIA_MIN_START.
+too_low_to_start() { [[ -n ${INSOMNIA_MIN_START:-} && $2 == battery ]] && (( $1 <= INSOMNIA_MIN_START )); }
 
 active() { systemctl --user is-active --quiet "$UNIT"; }
 
@@ -152,6 +166,11 @@ start() {
   local mins
   mins=$(to_minutes "${1:-1h}") || { echo "Unknown duration: $1" >&2; exit 1; }
   read -r pct src < <(battery_reading)
+  if too_low_to_start "$pct" "$src"; then
+    notify -u critical "Insomnia not started" "Battery too low (${pct}%). Plug in to use Insomnia."
+    echo "Battery too low: ${pct}% on battery (needs more than ${INSOMNIA_MIN_START}%, or AC)" >&2
+    exit 1
+  fi
   if below_floor "$pct" "$src"; then
     notify "Insomnia not started" "Battery is at ${pct}%, the floor is ${INSOMNIA_FLOOR}%."
     echo "Battery ${pct}% is at/below the ${INSOMNIA_FLOOR}% floor" >&2
@@ -166,9 +185,10 @@ start() {
   fi
   systemctl --user reset-failed "$UNIT" >/dev/null 2>&1
   local envs=() v
-  for v in INSOMNIA_FAKE_BATTERY INSOMNIA_FAKE_LOCK INSOMNIA_DRY_RUN INSOMNIA_FLOOR_OVERRIDE; do
+  for v in INSOMNIA_FAKE_BATTERY INSOMNIA_FAKE_LOCK INSOMNIA_DRY_RUN INSOMNIA_FLOOR_OVERRIDE INSOMNIA_UNIT; do
     [[ -n ${!v:-} ]] && envs+=(-E "$v=${!v}")
   done
+  [[ -n ${INSOMNIA_DRY_RUN:-} ]] && envs+=(-E "PATH=$PATH")
   systemd-run --user --quiet --collect --unit="$UNIT" \
     --description="Insomnia: keep this machine awake and reachable" \
     "${envs[@]}" -p ExecStopPost="$SELF _ended" \
@@ -209,14 +229,14 @@ json_str() { local s=${1//\\/\\\\}; printf '"%s"' "${s//\"/\\\"}"; }
 
 status() {
   if [[ ${1:-} == --json ]]; then
-    local floor=${INSOMNIA_FLOOR:-null}
+    local floor=${INSOMNIA_FLOOR:-null} minstart=${INSOMNIA_MIN_START:-null}
     if active; then
       local end left=-1; end=$(end_epoch)
       (( end != 0 )) && left=$(( end - $(date +%s) ))
       (( left < -1 )) && left=0
-      printf '{"active":true,"mode":"%s","end":%s,"left":%s,"text":"%s","floor":%s,"desc":%s,"tooltip":%s}\n' "$INSOMNIA_MODE" "$end" "$left" "$( (( end == 0 )) && echo "∞" || fmt_left "$left")" "$floor" "$(json_str "$INSOMNIA_DESC")" "$(json_str "$INSOMNIA_TOOLTIP")"
+      printf '{"active":true,"mode":"%s","end":%s,"left":%s,"text":"%s","floor":%s,"minStart":%s,"desc":%s,"tooltip":%s}\n' "$INSOMNIA_MODE" "$end" "$left" "$( (( end == 0 )) && echo "∞" || fmt_left "$left")" "$floor" "$minstart" "$(json_str "$INSOMNIA_DESC")" "$(json_str "$INSOMNIA_TOOLTIP")"
     else
-      printf '{"active":false,"mode":"%s","floor":%s,"desc":%s,"tooltip":%s}\n' "$INSOMNIA_MODE" "$floor" "$(json_str "$INSOMNIA_DESC")" "$(json_str "$INSOMNIA_TOOLTIP")"
+      printf '{"active":false,"mode":"%s","floor":%s,"minStart":%s,"desc":%s,"tooltip":%s}\n' "$INSOMNIA_MODE" "$floor" "$minstart" "$(json_str "$INSOMNIA_DESC")" "$(json_str "$INSOMNIA_TOOLTIP")"
     fi
   else
     status_line
@@ -300,7 +320,9 @@ menu) menu ;;
 toggle) if active; then stop; else start "${2:-1h}"; fi ;;
 check-floor)
   if below_floor "${2:?percent}" "${3:?battery|ac}"; then echo "end session (${2}% on $3, floor ${INSOMNIA_FLOOR:-none})"; else echo "keep session (${2}% on $3, floor ${INSOMNIA_FLOOR:-none})"; fi ;;
+check-start)
+  if too_low_to_start "${2:?percent}" "${3:?battery|ac}"; then echo "refuse (${2}% on $3, min ${INSOMNIA_MIN_START:-none})"; else echo "allow (${2}% on $3, min ${INSOMNIA_MIN_START:-none})"; fi ;;
 _hold) hold ;;
 _ended) ended ;;
-*) sed -n '2,45p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
+*) sed -n '2,58p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

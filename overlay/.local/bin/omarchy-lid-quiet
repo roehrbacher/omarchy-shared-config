@@ -1,6 +1,6 @@
 #!/bin/bash
-# Managed by omarchy-shared-config (laptop part of Insomnia; does nothing on
-# a desktop, see omarchy-machine-kind).
+# Part of omarchy-insomnia (github.com/roehrbacher/omarchy-insomnia). Laptop part; does nothing on
+# a desktop, see omarchy-machine-kind.
 #
 # "Quiet mode" while a laptop lid is closed and the machine keeps running
 # (on AC, or on battery inside an Insomnia session, see omarchy-insomnia):
@@ -117,7 +117,7 @@ run_unit() {
     if lid_closed; then open_count=0; else open_count=$((open_count + 1)); fi
     (( open_count >= 2 )) && exit 0
     # Keep power-saver while the lid stays closed. Omarchy re-applies its
-    # AC/battery profile when the power source changes, and the Dell firmware
+    # AC/battery profile when the power source changes, and some laptop
     # firmware can switch the platform profile on lid events (power-profiles-daemon
     # follows it), so re-check every pass instead of only on a source change.
     if [[ $(source_name) != "$src" ]]; then

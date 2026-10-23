@@ -293,7 +293,12 @@ default menu (the menu would otherwise blank them).
 - Insert is unbound again (it used to run the screen-off script; Insomnia
   replaces it)
 
-**Insomnia** – one more indicator in the bar's indicators group
+**Insomnia** – vendored copy of my own repo
+[omarchy-insomnia](https://github.com/roehrbacher/omarchy-insomnia) (private;
+copy of `cd81ac4`: `.local/bin/omarchy-{insomnia,machine-kind,indicators-build,lid,lid-quiet,screen-off}`,
+`.local/share/omarchy-config/indicators/`, the rebuild hook and
+`omarchy-lid-quiet-thaw.service`; tests: `bash tests/insomnia.test.sh` there).
+Update: change it there, copy the files here. One more indicator in the bar's indicators group
 (`timon.indicators`, see above; script `.local/bin/omarchy-insomnia`). Being a
 real member, the group handles it exactly like the coffee: while off it only
 appears on hover, in its slot directly left of the coffee; while a session runs
@@ -322,8 +327,12 @@ can force `INSOMNIA_MODE=laptop|desktop` or override any `INSOMNIA_*` value.
 - **Laptop** (the XPS): inhibits `sleep` and `handle-lid-switch` (polkit allows
   that for the active session, no sudo), so nothing suspends and closing the lid
   keeps it running **also on battery**. No lock on start (keep working, close the lid when done), unlocking
-  doesn't end it (one session spans several close/open cycles), and it ends on
-  battery at **20 %**; if the lid is closed on battery then, it suspends.
+  doesn't end it (one session spans several close/open cycles). It no longer
+  ends at a battery level: on battery at **5 % or less** it refuses to start
+  ("Battery too low"; on AC any level is fine), and the XPS's low-battery
+  hibernate (`timon.battery`, 4 %) is the safety net: it ends the session and
+  hibernates, also with the lid closed. When the time is up with the lid closed
+  on battery, it suspends.
   Tooltip "Stay awake with lid closed". The laptop parts, all no-ops on a
   desktop:
   - **Lid** – `hypr/shared-bindings.lua` binds the lid switch to

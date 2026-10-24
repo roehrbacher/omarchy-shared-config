@@ -295,7 +295,7 @@ default menu (the menu would otherwise blank them).
 
 **Insomnia** – vendored copy of my own repo
 [omarchy-insomnia](https://github.com/roehrbacher/omarchy-insomnia) (private;
-copy of `9ec0113`: `.local/bin/omarchy-{insomnia,machine-kind,indicators-build,lid,lid-quiet,screen-off}`,
+copy of `dcd4592`: `.local/bin/omarchy-{insomnia,machine-kind,indicators-build,lid,lid-quiet,screen-off}`,
 `.local/share/omarchy-config/indicators/`, the rebuild hook and
 `omarchy-lid-quiet-thaw.service`; tests: `bash tests/insomnia.test.sh` there).
 Update: change it there, copy the files here. One more indicator in the bar's indicators group
@@ -303,8 +303,8 @@ Update: change it there, copy the files here. One more indicator in the bar's in
 real member, the group handles it exactly like the coffee: while off it only
 appears on hover, in its slot directly left of the coffee; while a session runs
 it moves into the active block next to the clock, lit, with the countdown.
-Click it and pick 30 min, 1 h, 2 h, 4 h or *Until turned off*; click again to
-stop or extend, right click stops. A session is the transient user unit
+Left click turns it on until turned off (click again to stop); right click
+opens the picker (30 min, 1 h, 2 h, 4 h, *Until turned off*, or stop/extend). A session is the transient user unit
 `omarchy-insomnia.service` holding a `systemd-inhibit` block lock; state lives
 in `$XDG_RUNTIME_DIR`, so nothing survives a reboot, and it works regardless of
 the coffee toggle. CLI: `omarchy-insomnia start 2h|on`, `extend 1h`, `stop`,
@@ -318,12 +318,10 @@ configured per machine; an optional, unshipped `~/.config/omarchy/insomnia.conf`
 can force `INSOMNIA_MODE=laptop|desktop` or override any `INSOMNIA_*` value.
 
 - **Desktop** (the PC): inhibits `sleep`, so nothing suspends or
-  hibernates; starting a session locks and turns the displays off
-  (`.local/bin/omarchy-screen-off`, Omarchy's lock + DPMS off; any key or mouse
-  move wakes them at the lock screen, they blank again 5 s after the last
-  input); unlocking during the session ends it (you're back; checked every 5 s
-  via `omarchy-shell lock isLocked`). Tooltip "Lock Omarchy and turn off
-  screen".
+  hibernates; you keep working: no lock or screen-off on start, and unlocking
+  doesn't end it. Omarchy's screensaver, lock and display-off timers run as
+  usual (Omarchy's idle service never suspends; the coffee toggle stays the
+  independent "never lock" switch). Tooltip "Never suspend".
 - **Laptop** (the XPS): inhibits `sleep` and `handle-lid-switch` (polkit allows
   that for the active session, no sudo), so nothing suspends and closing the lid
   keeps it running **also on battery**. No lock on start (keep working, close the lid when done), unlocking

@@ -12,9 +12,10 @@
 #
 # What a session does depends on the machine (omarchy-machine-kind: battery +
 # lid = laptop, else desktop):
-#   desktop: inhibit sleep, so nothing suspends or hibernates;
-#     starting a session locks and turns the displays off (omarchy-screen-off);
-#     unlocking during the session ends it (you're back).
+#   desktop: inhibit sleep, so nothing suspends or hibernates; you keep
+#     working: no lock and no screen-off on start, unlocking doesn't end it.
+#     Omarchy's screensaver, lock and display-off timers stay as they are
+#     (they never suspend; the coffee toggle is still the "never lock" switch).
 #   laptop: inhibit sleep + handle-lid-switch, so nothing suspends and
 #     closing the lid on battery keeps
 #     it running like on AC (omarchy-lid: lock + screen off + quiet mode); no
@@ -38,8 +39,8 @@
 #                                        (laptop default: the hibernate level, see
 #                                        above; empty: always allow)
 #   INSOMNIA_END_ON_UNLOCK=0             end when the lock screen is unlocked during
-#                                        the session (desktop default 1: waking the PC
-#                                        and unlocking means you are back)
+#                                        the session (default 0; set 1 to end the session
+#                                        when you unlock, i.e. you are back)
 #   INSOMNIA_DESC="..."                  one line shown in notifications
 #   INSOMNIA_TOOLTIP="..."               the bar icon's short tooltip (like the coffee's "Stay Awake")
 #   insomnia_on_end() { ...; }           called after the session ended, $1 = reason
@@ -104,12 +105,12 @@ if [[ $INSOMNIA_MODE == laptop ]]; then
   }
 else
   INSOMNIA_INHIBIT="sleep"
-  INSOMNIA_LOCK_ON_START=1
+  INSOMNIA_LOCK_ON_START=0
   INSOMNIA_FLOOR=""
   INSOMNIA_MIN_START=""
-  INSOMNIA_END_ON_UNLOCK=1
-  INSOMNIA_DESC="No suspend or hibernate; screen locked and off"
-  INSOMNIA_TOOLTIP="Lock Omarchy and turn off screen"
+  INSOMNIA_END_ON_UNLOCK=0
+  INSOMNIA_DESC="No suspend or hibernate; screensaver and lock as usual"
+  INSOMNIA_TOOLTIP="Never suspend"
   insomnia_on_end() { :; }
 fi
 # shellcheck source=/dev/null

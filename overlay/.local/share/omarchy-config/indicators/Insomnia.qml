@@ -8,7 +8,8 @@ import qs.Ui
 // itself places it: in the inactive row, in list order just before the coffee
 // (StayAwake), only revealed on hover; while a session runs it moves into the
 // active block next to the clock with the countdown beside it.
-// Left click opens the picker (or stop/extend while on), right click stops.
+// Left click toggles Insomnia (on until turned off / off); right click opens
+// the picker (durations, or stop/extend while on).
 Item {
   id: root
 
@@ -30,15 +31,16 @@ Item {
   implicitWidth: row.implicitWidth
   implicitHeight: row.implicitHeight
 
-  readonly property string activeTip: root.countdown === "∞" ? "Stop Insomnia"
-    : root.countdown !== "" ? "Stop Insomnia (" + root.countdown + " left)" : "Stop Insomnia"
+  readonly property string activeTip: (root.countdown !== "" && root.countdown !== "∞"
+    ? "Insomnia on (" + root.countdown + " left)" : "Insomnia on") + ": click to stop, right click for options"
+  readonly property string inactiveTip: root.tip + ": click to turn on, right click for options"
 
   function poll() { if (!statusProc.running) statusProc.running = true }
 
   function click(b) {
     if (root.bar) root.bar.run(b === Qt.RightButton
-      ? (root.active ? "omarchy-insomnia stop" : "")
-      : "omarchy-insomnia menu")
+      ? "omarchy-insomnia menu"
+      : (root.active ? "omarchy-insomnia stop" : "omarchy-insomnia start on"))
     refreshSoon.restart()
   }
 
@@ -95,7 +97,7 @@ Item {
       activeOverride: root.activeOverride
       active: root.active
       activeTooltipText: root.activeTip
-      inactiveTooltipText: root.tip
+      inactiveTooltipText: root.inactiveTip
       iconComponent: Component {
         Item {
           EyeIcon {

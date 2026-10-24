@@ -441,7 +441,13 @@ Panel {
   // until "connect", so off stays off.
   property bool wiredPending: false
   property bool wiredTarget: false
-  readonly property bool wiredWanted: wiredPending ? wiredTarget : !!(wiredDevice && wiredDevice.connected)
+  // A link that is still activating (e.g. waiting for DHCP) counts as "on":
+  // NetworkManager keeps retrying it, so the switch must offer "off" and send
+  // "disconnect" -- reading only .connected showed it off and re-connected.
+  readonly property bool wiredActive: !!wiredDevice && (wiredDevice.connected
+    || wiredDevice.state === ConnectionState.Connecting
+    || wiredDevice.state === ConnectionState.Connected)
+  readonly property bool wiredWanted: wiredPending ? wiredTarget : wiredActive
   function toggleWired() {
     if (!wiredDevice || wiredProc.running) return
     wiredTarget = !wiredWanted

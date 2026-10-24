@@ -53,12 +53,17 @@ o.bind("SUPER + SHIFT + B", "Grok Bot", { launch = "grok-bot", focus = "^grok-bo
 -- Telegram on SUPER + SHIFT + T: focuses the open window, or starts it.
 o.bind("SUPER + SHIFT + T", "Telegram", { launch = "Telegram", focus = "^org.telegram.desktop$" })
 
--- Messengers on easy keys (Super+Shift+G / Super+Shift+Alt+G still work too).
+-- Messengers on easy keys (Super+Shift+Alt+G still opens WhatsApp too).
 -- Replaces stock SUPER+SHIFT+W (was: Omawrite) and SUPER+SHIFT+S (was: Google Maps).
 hl.unbind("SUPER + SHIFT + W")
 o.bind("SUPER + SHIFT + W", "WhatsApp", { webapp = "https://web.whatsapp.com/", focus = true })
 hl.unbind("SUPER + SHIFT + S")
 o.bind("SUPER + SHIFT + S", "Signal", { omarchy = "signal" })
+
+-- Steam on SUPER + SHIFT + G ("G" for gaming): focuses the open Steam window,
+-- or starts it. Replaces stock Signal on this key (Signal is on SUPER + SHIFT + S).
+hl.unbind("SUPER + SHIFT + G")
+o.bind("SUPER + SHIFT + G", "Steam", { launch = "steam", focus = "^steam$" })
 
 -- Clipboard history (timon.clipboard, GNOME Clipboard History style).
 -- Open it with Alt+V or the stock SUPER + CTRL + V ("Clipboard manager"),

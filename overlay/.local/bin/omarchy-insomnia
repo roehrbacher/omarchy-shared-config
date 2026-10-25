@@ -22,7 +22,7 @@
 #     lock on start; survives unlocks (lid close/open cycles). It does NOT end
 #     at a battery level: it can't be started on battery at/below the
 #     low-battery hibernate level (HIBERNATE_PERCENT in
-#     ~/.config/omarchy/low-battery-hibernate.conf, default 5 %; "battery too
+#     ~/.config/omarchy/low-battery-hibernate.conf, default 8 %; "battery too
 #     low"; on AC any level is fine), and the low-battery
 #     hibernate (github.com/roehrbacher/omarchy-low-battery-hibernate) is the
 #     safety net: near empty it ends the session and hibernates, also with the
@@ -49,6 +49,8 @@
 #   omarchy-insomnia start <30m|1h|2h|4h|on|MINUTES>   start (or replace)
 #   omarchy-insomnia extend <30m|1h|...>                add time
 #   omarchy-insomnia stop
+#   omarchy-insomnia click            bar left click: stop if on, else start
+#                                     (laptop: 1 h, desktop: until turned off)
 #   omarchy-insomnia status [--json]
 #   omarchy-insomnia menu                               picker (bar widget)
 #   omarchy-insomnia check-floor <percent> <battery|ac> dry-run of the floor rule
@@ -70,11 +72,11 @@ CONF="$HOME/.config/omarchy/insomnia.conf"
 INSOMNIA_MODE=$(omarchy-machine-kind 2>/dev/null || echo desktop)
 
 # The low-battery hibernate level, same rule as the battery plugin
-# (BatteryModel.parseTriggerPercent): HIBERNATE_PERCENT=1..50, otherwise 5.
+# (BatteryModel.parseTriggerPercent): HIBERNATE_PERCENT=1..50, otherwise 8.
 hibernate_percent() {
   local f=${LOW_BATTERY_HIBERNATE_CONF:-$HOME/.config/omarchy/low-battery-hibernate.conf} v
   v=$(sed -n "s/^[[:space:]]*HIBERNATE_PERCENT[[:space:]]*=[[:space:]]*[\"']\{0,1\}\([0-9]\{1,\}\)[\"']\{0,1\}[[:space:]]*\(#.*\)\{0,1\}$/\1/p" "$f" 2>/dev/null | head -1)
-  if [[ $v =~ ^[0-9]+$ ]] && (( 10#$v >= 1 && 10#$v <= 50 )); then echo $((10#$v)); else echo 5; fi
+  if [[ $v =~ ^[0-9]+$ ]] && (( 10#$v >= 1 && 10#$v <= 50 )); then echo $((10#$v)); else echo 8; fi
 }
 
 lid_closed() {
@@ -329,6 +331,7 @@ extend) extend "${2:-1h}" ;;
 stop) stop ;;
 status) status "${2:-}" ;;
 menu) menu ;;
+click) if active; then stop; elif [[ $INSOMNIA_MODE == laptop ]]; then start 1h; else start on; fi ;;
 toggle) if active; then stop; else start "${2:-1h}"; fi ;;
 check-floor)
   if below_floor "${2:?percent}" "${3:?battery|ac}"; then echo "end session (${2}% on $3, floor ${INSOMNIA_FLOOR:-none})"; else echo "keep session (${2}% on $3, floor ${INSOMNIA_FLOOR:-none})"; fi ;;
@@ -336,5 +339,5 @@ check-start)
   if too_low_to_start "${2:?percent}" "${3:?battery|ac}"; then echo "refuse (${2}% on $3, min ${INSOMNIA_MIN_START:-none})"; else echo "allow (${2}% on $3, min ${INSOMNIA_MIN_START:-none})"; fi ;;
 _hold) hold ;;
 _ended) ended ;;
-*) sed -n '2,61p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
+*) sed -n '2,63p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

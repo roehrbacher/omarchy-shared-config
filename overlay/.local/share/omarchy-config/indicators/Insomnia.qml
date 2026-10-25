@@ -8,8 +8,8 @@ import qs.Ui
 // itself places it: in the inactive row, in list order just before the coffee
 // (StayAwake), only revealed on hover; while a session runs it moves into the
 // active block next to the clock with the countdown beside it.
-// Left click toggles Insomnia (on for 1 h, ends on its own / off); right click
-// opens the picker (other durations incl. until turned off, or stop/extend while on).
+// Left click toggles Insomnia (omarchy-insomnia click: laptop on for 1 h, ends on
+// its own; desktop on until turned off / off); right click opens the picker.
 Item {
   id: root
 
@@ -24,6 +24,7 @@ Item {
   property bool active: false
   property string countdown: ""
   property string tip: "Insomnia"
+  property string mode: ""
 
   // Same rule as BarIndicator's own visibility. Not button.visible: that is
   // the child's effective visibility, which would latch false with root.
@@ -33,14 +34,14 @@ Item {
 
   readonly property string activeTip: (root.countdown !== "" && root.countdown !== "∞"
     ? "Insomnia on (" + root.countdown + " left)" : "Insomnia on") + ": click to stop, right click for options"
-  readonly property string inactiveTip: root.tip + ": click for 1 h, right click for options"
+  readonly property string inactiveTip: root.tip + (root.mode === "laptop" ? ": click for 1 h" : ": click to turn on") + ", right click for options"
 
   function poll() { if (!statusProc.running) statusProc.running = true }
 
   function click(b) {
     if (root.bar) root.bar.run(b === Qt.RightButton
       ? "omarchy-insomnia menu"
-      : (root.active ? "omarchy-insomnia stop" : "omarchy-insomnia start 1h"))
+      : "omarchy-insomnia click")
     refreshSoon.restart()
   }
 
@@ -54,6 +55,7 @@ Item {
           root.active = s.active === true
           root.countdown = s.active ? String(s.text || "") : ""
           if (s.tooltip) root.tip = String(s.tooltip)
+          if (s.mode) root.mode = String(s.mode)
         } catch (e) {
           root.active = false
           root.countdown = ""

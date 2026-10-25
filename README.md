@@ -295,7 +295,7 @@ default menu (the menu would otherwise blank them).
 
 **Insomnia** – vendored copy of my own repo
 [omarchy-insomnia](https://github.com/roehrbacher/omarchy-insomnia) (private;
-copy of `7b9ae3e`: `.local/bin/omarchy-{insomnia,machine-kind,indicators-build,lid,lid-quiet,screen-off}`,
+copy of `2d2918a`: `.local/bin/omarchy-{insomnia,machine-kind,indicators-build,lid,lid-quiet,screen-off}`,
 `.local/share/omarchy-config/indicators/`, the rebuild hook and
 `omarchy-lid-quiet-thaw.service`; tests: `bash tests/insomnia.test.sh` there).
 Update: change it there, copy the files here. One more indicator in the bar's indicators group
@@ -303,7 +303,7 @@ Update: change it there, copy the files here. One more indicator in the bar's in
 real member, the group handles it exactly like the coffee: while off it only
 appears on hover, in its slot directly left of the coffee; while a session runs
 it moves into the active block next to the clock, lit, with the countdown.
-Left click turns it on for 1 h, it ends on its own (click again to stop early); "until turned off" is in the picker; right click
+Left click turns it on: laptop for 1 h (ends on its own), desktop until turned off; click again to stop. Right click
 opens the picker (30 min, 1 h, 2 h, 4 h, *Until turned off*, or stop/extend). A session is the transient user unit
 `omarchy-insomnia.service` holding a `systemd-inhibit` block lock; state lives
 in `$XDG_RUNTIME_DIR`, so nothing survives a reboot, and it works regardless of
@@ -326,7 +326,7 @@ can force `INSOMNIA_MODE=laptop|desktop` or override any `INSOMNIA_*` value.
   that for the active session, no sudo), so nothing suspends and closing the lid
   keeps it running **also on battery**. No lock on start (keep working, close the lid when done), unlocking
   doesn't end it (one session spans several close/open cycles). It no longer
-  ends at a battery level: on battery at or below the low-battery hibernate level (`HIBERNATE_PERCENT` in `~/.config/omarchy/low-battery-hibernate.conf`, default **5 %**, the same value `timon.battery` uses) it refuses to start
+  ends at a battery level: on battery at or below the low-battery hibernate level (`HIBERNATE_PERCENT` in `~/.config/omarchy/low-battery-hibernate.conf`, default **8 %**, the same value `timon.battery` uses) it refuses to start
   ("Battery too low"; on AC any level is fine), and the XPS's low-battery
   hibernate (`timon.battery`) is the safety net: it ends the session and
   hibernates, also with the lid closed. When the time is up with the lid closed

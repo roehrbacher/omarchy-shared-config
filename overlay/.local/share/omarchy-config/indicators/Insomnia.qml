@@ -8,8 +8,8 @@ import qs.Ui
 // itself places it: in the inactive row, in list order just before the coffee
 // (StayAwake), only revealed on hover; while a session runs it moves into the
 // active block next to the clock with the countdown beside it.
-// Left click toggles Insomnia (on until turned off / off); right click opens
-// the picker (durations, or stop/extend while on).
+// Left click toggles Insomnia (on for 1 h, ends on its own / off); right click
+// opens the picker (other durations incl. until turned off, or stop/extend while on).
 Item {
   id: root
 
@@ -33,14 +33,14 @@ Item {
 
   readonly property string activeTip: (root.countdown !== "" && root.countdown !== "∞"
     ? "Insomnia on (" + root.countdown + " left)" : "Insomnia on") + ": click to stop, right click for options"
-  readonly property string inactiveTip: root.tip + ": click to turn on, right click for options"
+  readonly property string inactiveTip: root.tip + ": click for 1 h, right click for options"
 
   function poll() { if (!statusProc.running) statusProc.running = true }
 
   function click(b) {
     if (root.bar) root.bar.run(b === Qt.RightButton
       ? "omarchy-insomnia menu"
-      : (root.active ? "omarchy-insomnia stop" : "omarchy-insomnia start on"))
+      : (root.active ? "omarchy-insomnia stop" : "omarchy-insomnia start 1h"))
     refreshSoon.restart()
   }
 

@@ -295,7 +295,7 @@ default menu (the menu would otherwise blank them).
 
 **Insomnia** – vendored copy of my own repo
 [omarchy-insomnia](https://github.com/roehrbacher/omarchy-insomnia) (private;
-copy of `dcd4592`: `.local/bin/omarchy-{insomnia,machine-kind,indicators-build,lid,lid-quiet,screen-off}`,
+copy of `7b9ae3e`: `.local/bin/omarchy-{insomnia,machine-kind,indicators-build,lid,lid-quiet,screen-off}`,
 `.local/share/omarchy-config/indicators/`, the rebuild hook and
 `omarchy-lid-quiet-thaw.service`; tests: `bash tests/insomnia.test.sh` there).
 Update: change it there, copy the files here. One more indicator in the bar's indicators group
@@ -303,7 +303,7 @@ Update: change it there, copy the files here. One more indicator in the bar's in
 real member, the group handles it exactly like the coffee: while off it only
 appears on hover, in its slot directly left of the coffee; while a session runs
 it moves into the active block next to the clock, lit, with the countdown.
-Left click turns it on until turned off (click again to stop); right click
+Left click turns it on for 1 h, it ends on its own (click again to stop early); "until turned off" is in the picker; right click
 opens the picker (30 min, 1 h, 2 h, 4 h, *Until turned off*, or stop/extend). A session is the transient user unit
 `omarchy-insomnia.service` holding a `systemd-inhibit` block lock; state lives
 in `$XDG_RUNTIME_DIR`, so nothing survives a reboot, and it works regardless of

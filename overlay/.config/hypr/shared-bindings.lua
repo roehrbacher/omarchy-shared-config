@@ -65,6 +65,10 @@ o.bind("SUPER + SHIFT + S", "Signal", { omarchy = "signal" })
 hl.unbind("SUPER + SHIFT + G")
 o.bind("SUPER + SHIFT + G", "Steam", { launch = "steam", focus = "^steam$" })
 
+-- Grok usage popup (timon.grok-usage's own IPC; the bar widget must be on the bar).
+-- New key, free in stock Omarchy, nothing replaced.
+o.bind("SUPER + SHIFT + U", "Grok usage", "omarchy-shell -q timon.grok-usage toggle")
+
 -- Clipboard history (timon.clipboard, GNOME Clipboard History style).
 -- Open it with Alt+V or the stock SUPER + CTRL + V ("Clipboard manager"),
 -- which calls omarchy.clipboard; the shell routes that to this clone.

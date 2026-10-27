@@ -68,6 +68,11 @@ UNIT=${INSOMNIA_UNIT:-omarchy-insomnia.service}
 RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/${UNIT%.service}"
 SELF=$(readlink -f "$0")
 CONF="$HOME/.config/omarchy/insomnia.conf"
+# Change stamp for the bar icon: rewritten on every start/stop/extend/end, so
+# the icon (a FileView watching this file) re-reads the state at once instead
+# of polling. Outside RUN_DIR because that is removed when a session ends.
+STATE_FILE="${RUN_DIR}.state"
+changed() { date +%s%N >"$STATE_FILE" 2>/dev/null || true; }
 
 INSOMNIA_MODE=$(omarchy-machine-kind 2>/dev/null || echo desktop)
 
@@ -194,6 +199,7 @@ start() {
   if (( mins == 0 )); then echo 0 >"$RUN_DIR/end"; else echo $(( $(date +%s) + mins * 60 )) >"$RUN_DIR/end"; fi
   rm -f "$RUN_DIR/reason"
   if active; then
+    changed
     notify "Insomnia" "Now $(human "$mins")."
     return 0
   fi
@@ -208,7 +214,8 @@ start() {
     "${envs[@]}" -p ExecStopPost="$SELF _ended" \
     systemd-inhibit --what="$INSOMNIA_INHIBIT" --mode=block \
     --who="Insomnia" --why="Keep running and reachable (omarchy-insomnia)" \
-    "$SELF" _hold || { rm -f "$RUN_DIR/end"; exit 1; }
+    "$SELF" _hold || { rm -f "$RUN_DIR/end"; changed; exit 1; }
+  changed
   notify "Insomnia on" "$INSOMNIA_DESC, $(human "$mins")."
   lock_and_blank
 }
@@ -223,6 +230,7 @@ extend() {
     (( end < $(date +%s) )) && end=$(date +%s)
     echo $(( end + mins * 60 )) >"$RUN_DIR/end"
   fi
+  changed
   notify "Insomnia extended" "$(status_line)"
 }
 
@@ -231,6 +239,7 @@ stop() {
   mkdir -p "$RUN_DIR"
   echo stopped >"$RUN_DIR/reason"
   systemctl --user stop "$UNIT"
+  changed
 }
 
 status_line() {
@@ -243,14 +252,15 @@ json_str() { local s=${1//\\/\\\\}; printf '"%s"' "${s//\"/\\\"}"; }
 
 status() {
   if [[ ${1:-} == --json ]]; then
+    [[ -e $STATE_FILE ]] || changed
     local floor=${INSOMNIA_FLOOR:-null} minstart=${INSOMNIA_MIN_START:-null}
     if active; then
       local end left=-1; end=$(end_epoch)
       (( end != 0 )) && left=$(( end - $(date +%s) ))
       (( left < -1 )) && left=0
-      printf '{"active":true,"mode":"%s","end":%s,"left":%s,"text":"%s","floor":%s,"minStart":%s,"desc":%s,"tooltip":%s}\n' "$INSOMNIA_MODE" "$end" "$left" "$( (( end == 0 )) && echo "∞" || fmt_left "$left")" "$floor" "$minstart" "$(json_str "$INSOMNIA_DESC")" "$(json_str "$INSOMNIA_TOOLTIP")"
+      printf '{"active":true,"mode":"%s","end":%s,"left":%s,"text":"%s","floor":%s,"minStart":%s,"desc":%s,"tooltip":%s,"stateFile":%s}\n' "$INSOMNIA_MODE" "$end" "$left" "$( (( end == 0 )) && echo "∞" || fmt_left "$left")" "$floor" "$minstart" "$(json_str "$INSOMNIA_DESC")" "$(json_str "$INSOMNIA_TOOLTIP")" "$(json_str "$STATE_FILE")"
     else
-      printf '{"active":false,"mode":"%s","floor":%s,"minStart":%s,"desc":%s,"tooltip":%s}\n' "$INSOMNIA_MODE" "$floor" "$minstart" "$(json_str "$INSOMNIA_DESC")" "$(json_str "$INSOMNIA_TOOLTIP")"
+      printf '{"active":false,"mode":"%s","floor":%s,"minStart":%s,"desc":%s,"tooltip":%s,"stateFile":%s}\n' "$INSOMNIA_MODE" "$floor" "$minstart" "$(json_str "$INSOMNIA_DESC")" "$(json_str "$INSOMNIA_TOOLTIP")" "$(json_str "$STATE_FILE")"
     fi
   else
     status_line
@@ -293,6 +303,7 @@ ended() {
   local reason
   reason=$(cat "$RUN_DIR/reason" 2>/dev/null)
   rm -rf "$RUN_DIR"
+  changed
   # No reason = the unit was torn down by logout/shutdown: do nothing more.
   [[ -n $reason ]] || return 0
   case $reason in

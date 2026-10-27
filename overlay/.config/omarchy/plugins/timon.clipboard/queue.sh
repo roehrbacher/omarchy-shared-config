@@ -5,7 +5,8 @@
 #   queue.sh start     items as a JSON array on stdin ({type:text,text} or
 #                      {type:image,path,mime}); arms the queue
 #   queue.sh next      Ctrl+V while armed: paste item k, then k+1 is next
-#   queue.sh cancel    stop (popup button, watchdog); "cancel esc" also passes Esc on
+#   queue.sh cancel    stop (popup button, watchdog); "cancel esc" also passes Esc on,
+#                      "cancel quiet" (1.21.0: a new pick in the popup) shows nothing
 #   queue.sh status    print {"pos","count"} or nothing
 #
 # How: while a queue is armed, Ctrl+V and Esc are bound at runtime with
@@ -41,10 +42,11 @@ key() { hypr dispatch "hl.dsp.send_key_state({ mods = \"$1\", key = \"$2\", stat
 notify() {
   # One notification, replaced in place for every step.
   local id
-  [[ ${QUEUE_DRY:-0} == 1 ]] && { echo "notify $*"; return; }
+  [[ ${QUEUE_DRY:-0} == 1 ]] && { echo "notify ${3:-Paste queue}|$1"; return; }
   id=$(jq -r '.notify // 0' "$Q" 2>/dev/null || echo 0)
   # 1.20.0: Omarchy's notifier with a numbered-list glyph (large icon slot).
-  id=$(timeout 3 omarchy-notification-send --app-name Clipboard -g "󰉻" -p -r "${id:-0}" -t "${2:-6000}" "Paste queue" "$1" 2>/dev/null 9>&-) || return 0
+  # $3: title (default "Paste queue").
+  id=$(timeout 3 omarchy-notification-send --app-name Clipboard -g "󰉻" -p -r "${id:-0}" -t "${2:-6000}" "${3:-Paste queue}" "$1" 2>/dev/null 9>&-) || return 0
   [[ -s $Q && $id =~ ^[0-9]+$ ]] && jq --argjson id "$id" '.notify = $id' "$Q" >"$Q.tmp" && mv "$Q.tmp" "$Q"
 }
 bind_keys() {
@@ -86,7 +88,7 @@ start)
   [[ $n -gt 0 ]] || { rm -f "$Q"; exit 1; }
   jq -n --argjson items "$items" --arg id "$$-$(date +%s%N)" '{items: $items, pos: 0, id: $id}' >"$Q" || exit 1
   bind_keys
-  notify "Queue ready: $n items. Ctrl+V pastes 1 of $n. Esc cancels." 10000
+  notify "Paste 1 of $n. Esc cancels." 10000 "Paste queue ready:"
   [[ ${QUEUE_DRY:-0} == 1 ]] || setsid -f "$me" watchdog "$(jq -r .id "$Q")" </dev/null >/dev/null 2>&1 9>&-
   ;;
 next)
@@ -108,7 +110,7 @@ next)
   ;;
 cancel)
   flock -w 5 9 || exit 1
-  if [[ -s $Q ]]; then notify "Cancelled after $(pos) of $(count)." 3000; fi
+  if [[ -s $Q && ${2:-} != quiet ]]; then notify "Cancelled after $(pos) of $(count)." 3000; fi
   finish
   # Esc was ours only while the queue ran: hand this press on to the window.
   [[ ${2:-} == esc ]] && { key "" Escape down; key "" Escape up; }

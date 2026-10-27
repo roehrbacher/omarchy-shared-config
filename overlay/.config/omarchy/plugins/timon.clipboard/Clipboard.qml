@@ -131,6 +131,16 @@ Item {
     queueProc.payload = JSON.stringify(items)
     queueProc.running = true
   }
+  // 1.21.0: any normal pick or row action while a queue is armed (or rows
+  // are Ctrl-selected) forgets that queue silently and does the new thing.
+  function dropQueue() {
+    root.queueKeys = []
+    if (root.queueRunning) {
+      root.queueRunning = null
+      root.runningKeys = []
+      Quickshell.execDetached([root.queueScript, "cancel", "quiet"])
+    }
+  }
   function queueButtonClicked() {
     if (root.queueKeys.length === 0 && root.queueRunning) Quickshell.execDetached([root.queueScript, "cancel"])
   }
@@ -326,12 +336,8 @@ Item {
     root.privateMode = value
     root.writeState()
     root.syncFlux()
-    if (notify) {
-      root.notify(value ? "󰗹" : "󰅌",
-        value ? "Clipboard incognito on" : "Clipboard incognito off",
-        value ? "New copies are not saved." + (root.fluxPresent ? " Flux sync paused." : "")
-              : "Copies are saved to history again." + (fluxWasPaused ? " Flux sync resumed." : ""), 2500)
-    }
+    // 1.21.0: no incognito on/off notification (the popup and the bar icon
+    // already show it); `notify` is kept for the callers' signature.
   }
 
   function writeState() {
@@ -449,6 +455,7 @@ Item {
     if (index < 0 || index >= displayModel.count) return
     var r = displayModel.get(index)
     root.reselectKey = root.rowKey(r)
+    root.dropQueue()
     Quickshell.execDetached([root.helper, "copy", String(r.historyIndex)])
   }
 
@@ -927,6 +934,7 @@ Item {
   function runOnIndex(index, action) {
     if (index < 0 || index >= displayModel.count) return
     var row = displayModel.get(index)
+    root.dropQueue()
     root.opened = false
     Quickshell.execDetached([root.helper, action, String(row.historyIndex)])
   }
@@ -949,6 +957,7 @@ Item {
     if (!r.linkTarget) return
     // Colour swatch: copy the code again (nothing to open).
     if (r.linkKind === "color") { root.copyIndex(index); return }
+    root.dropQueue()
     root.close()
     if (r.linkKind === "maps") {
       var url = ClipboardHistory.mapsUrl(r.linkTarget)
@@ -963,6 +972,7 @@ Item {
     if (index < 0 || index >= displayModel.count) return
     var r = displayModel.get(index)
     if (!r.copyText) return
+    root.dropQueue()
     root.copyText(r.copyText)
     root.close()
     root.notify(r.copyWifi ? "󰌾" : "󰐲", r.copyTip.replace(/^Copy/, "Copied"), "Paste it with Ctrl+V.", 2500)
@@ -971,9 +981,10 @@ Item {
     if (index < 0 || index >= displayModel.count) return
     var r = displayModel.get(index)
     if (!r.ocrText) return
+    root.dropQueue()
     root.copyText(r.ocrText)
     root.close()
-    root.notify("󱄽", r.ocrTip.replace(/^Copy/, "Copied"), "Paste it with Ctrl+V.", 2500)
+    root.notify("󰆏", r.ocrTip.replace(/^Copy/, "Copied"), "Paste it with Ctrl+V.", 2500)
   }
   function openIndex(index) { root.runOnIndex(index, "open") }
   // Settings: copy one language's pacman command (the user runs it).
@@ -1889,7 +1900,7 @@ Item {
                   width: infoColumn.width
                   wrapMode: Text.WordWrap
                   textFormat: Text.PlainText
-                  text: "Add a language: click it to copy its install command. Open a terminal (Super+Enter), paste with Ctrl+Shift+V, press Enter and type your password. Then reopen this popup.\nWhy no install button: installing system packages needs your sudo password, and this plugin never runs root commands or downloads anything on its own, for safety."
+                  text: "Add a language: click it to copy its install command.\nWhy no install button: installing system packages needs your sudo password, and this plugin never runs root commands or downloads anything on its own, for safety."
                   color: root.dimText
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -2467,9 +2478,11 @@ Item {
                 visible: label !== ""
                 anchors.left: parent.left
                 width: Math.min(queueLabel.implicitWidth + Style.space(16), Math.max(0, incognitoSwitch.x - Style.space(8)))
-                height: root.footerRowHeight
-                radius: root.cornerRadius
-                color: info ? "transparent" : (queueMouse.containsMouse ? Util.alpha(root.accent, 0.28) : Util.alpha(root.accent, 0.16))
+                // 1.21.0: the info line is a pill in the queue badges' accent.
+                height: info ? Math.round(Style.font.body * 1.6) : root.footerRowHeight
+                anchors.verticalCenter: parent.verticalCenter
+                radius: info ? height / 2 : root.cornerRadius
+                color: info ? root.accent : (queueMouse.containsMouse ? Util.alpha(root.accent, 0.28) : Util.alpha(root.accent, 0.16))
 
                 Text {
                   id: queueLabel
@@ -2479,7 +2492,8 @@ Item {
                   text: queueButton.label
                   width: Math.min(implicitWidth, queueButton.width - Style.space(16))
                   elide: Text.ElideRight
-                  color: queueButton.info ? root.dimText : root.foreground
+                  color: queueButton.info ? root.background : root.foreground
+                  font.bold: queueButton.info
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
                 }

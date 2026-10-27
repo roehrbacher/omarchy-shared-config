@@ -208,6 +208,7 @@ Panel {
       image: String(entry.image || ""),
       preview: String(entry.preview || ""),
       file: String(entry.file || ""),
+      link: String(entry.link || ""),
       glyph: String(entry.glyph || ""),
       urgency: Number(entry.urgency || 0),
       timestamp: Number(entry.timestamp || 0),
@@ -249,14 +250,22 @@ Panel {
   // shell command, chosen by whoever sent it, and anything on this machine can
   // send one. Keeping that command and running it later is an attacker's
   // command waiting for a click, which is worth nothing next to the one thing
-  // people actually want back: the picture. So what the store keeps is at most
-  // an absolute path to an image, and that is opened by argument rather than
-  // through a shell, so a hostile path is a file that fails to open instead of
-  // a command that runs.
+  // people actually want back: the picture, or the page. So what the store
+  // keeps is at most an absolute path to an image or an http(s) address, and
+  // that is opened by argument rather than through a shell, so a hostile path
+  // is a file that fails to open instead of a command that runs.
   function activate(row) {
     if (!row || clickAction === "Nothing") return
     if (clickAction === "Auto" && row.file !== "") {
       Quickshell.execDetached(["xdg-open", row.file])
+      root.close()
+      return
+    }
+    // The page the action would have opened, taken out of it the same way.
+    // Checked again here: http(s) only, no control characters, one argument,
+    // never through a shell.
+    if (clickAction === "Auto" && /^https?:\/\/[^\s\x00-\x1f\x7f"'<>]+$/i.test(row.link)) {
+      Quickshell.execDetached(["xdg-open", row.link])
       root.close()
       return
     }

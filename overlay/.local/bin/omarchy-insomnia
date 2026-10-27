@@ -51,6 +51,8 @@
 #   omarchy-insomnia stop
 #   omarchy-insomnia click            bar left click: stop if on, else start
 #                                     (laptop: 1 h, desktop: until turned off)
+#   omarchy-insomnia set <on|off>     what the bar icon sends: the state it now
+#                                     shows (on = like click; no-op if already)
 #   omarchy-insomnia status [--json]
 #   omarchy-insomnia menu                               picker (bar widget)
 #   omarchy-insomnia check-floor <percent> <battery|ac> dry-run of the floor rule
@@ -73,6 +75,10 @@ CONF="$HOME/.config/omarchy/insomnia.conf"
 # of polling. Outside RUN_DIR because that is removed when a session ends.
 STATE_FILE="${RUN_DIR}.state"
 changed() { date +%s%N >"$STATE_FILE" 2>/dev/null || true; }
+# Changes are serialized (rapid clicks queue up in order) and `status` waits
+# for a change in flight, so the icon never reads a half-done start/stop.
+LOCK_FILE="${RUN_DIR}.lock"
+lock() { exec 9>>"$LOCK_FILE" && flock "$@" 9; }
 
 INSOMNIA_MODE=$(omarchy-machine-kind 2>/dev/null || echo desktop)
 
@@ -337,6 +343,18 @@ menu() {
 }
 
 case "${1:-}" in
+start | extend | stop | click | set | toggle | menu) lock -x -w 30 || true ;;
+status) lock -s -w 3 || true ;;
+esac
+
+case "${1:-}" in
+set)
+  trap changed EXIT   # even a refused start ends the icon's wait
+  case "${2:-}" in
+  on) if active; then changed; elif [[ $INSOMNIA_MODE == laptop ]]; then start 1h; else start on; fi ;;
+  off) if active; then stop; else changed; fi ;;
+  *) echo "usage: omarchy-insomnia set <on|off>" >&2; exit 1 ;;
+  esac ;;
 start) start "${2:-1h}" ;;
 extend) extend "${2:-1h}" ;;
 stop) stop ;;
@@ -350,5 +368,5 @@ check-start)
   if too_low_to_start "${2:?percent}" "${3:?battery|ac}"; then echo "refuse (${2}% on $3, min ${INSOMNIA_MIN_START:-none})"; else echo "allow (${2}% on $3, min ${INSOMNIA_MIN_START:-none})"; fi ;;
 _hold) hold ;;
 _ended) ended ;;
-*) sed -n '2,63p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
+*) sed -n '2,66p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

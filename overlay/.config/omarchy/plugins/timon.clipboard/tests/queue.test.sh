@@ -14,7 +14,7 @@ check() { if [[ $2 == "$3" ]]; then echo "ok   $1"; else echo "FAIL $1: got '$2'
 out=$(printf '%s' '[{"type":"text","text":"one"},{"type":"text","text":"two"},{"type":"text","text":"three"}]' | "$here/queue.sh" start)
 check "start binds Ctrl+V" "$(grep -c 'hl.bind("CTRL + V"' <<<"$out")" 1
 check "start binds Esc" "$(grep -c 'hl.bind("Escape"' <<<"$out")" 1
-check "start notification" "$(grep -o 'Queue ready: 3 items. Ctrl+V pastes 1 of 3. Esc cancels.' <<<"$out")" "Queue ready: 3 items. Ctrl+V pastes 1 of 3. Esc cancels."
+check "start notification (1.21.0 text)" "$(grep '^notify' <<<"$out")" "notify Paste queue ready:|Paste 1 of 3. Esc cancels."
 check "queue file is 0600" "$(stat -c %a "$Q")" 600
 check "status" "$("$here/queue.sh" status)" '{"pos":0,"count":3}'
 out=$("$here/queue.sh" next)
@@ -39,6 +39,14 @@ check "Esc cancels" "$(grep -o 'Cancelled after 1 of 2' <<<"$out")" "Cancelled a
 check "Esc unbinds before passing Esc on" "$(grep -nE 'unbind|Escape", state' <<<"$out" | head -1 | grep -c unbind)" 1
 check "Esc is passed on to the window" "$(grep -c 'key = "Escape", state' <<<"$out")" 2
 check "cancel: queue file gone" "$([[ -e $Q ]] && echo yes || echo no)" no
+
+# 1.21.0: a new pick in the popup drops the queue silently.
+printf '%s' '[{"type":"text","text":"a"},{"type":"text","text":"b"}]' | "$here/queue.sh" start >/dev/null
+out=$("$here/queue.sh" cancel quiet)
+check "quiet cancel: no notification" "$(grep -c '^notify' <<<"$out")" 0
+check "quiet cancel: unbinds Ctrl+V and Esc" "$(grep -c 'hl.unbind' <<<"$out")" 2
+check "quiet cancel: Esc not sent on" "$(grep -c 'key = "Escape", state' <<<"$out")" 0
+check "quiet cancel: queue file gone" "$([[ -e $Q ]] && echo yes || echo no)" no
 
 out=$(printf '%s' '[{"type":"bogus"},{"type":"text","text":""}]' | "$here/queue.sh" start; echo "rc=$?")
 check "nothing valid: not armed" "$(grep -c 'hl.bind' <<<"$out")" 0

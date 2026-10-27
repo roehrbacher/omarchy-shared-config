@@ -174,7 +174,7 @@ copy_image() {
 # machine can send one. Keeping that action and running it later is handing an
 # attacker a command that fires whenever somebody clicks a row, so it is never
 # kept. What is kept is at most an absolute path to an image, taken out of the
-# action and opened by argument rather than by shell.
+# action and opened by argument rather than by shell, and the web address below.
 #
 # Two shapes arrive here. Omarchy now sends the action as `omarchy-exec-argv`,
 # a JSON vector whose elements are already discrete arguments, so a candidate
@@ -202,6 +202,26 @@ preview_source() {
   printf '%s' "$action" | grep -oiE "(file://)?/[^\"' ]*\.(jpe?g|png|webp|gif)" | head -n 1
 }
 
+# The web page the action would have opened, if it opened one. Same rule as the
+# picture: the command is discarded and only the address is kept, as data. It
+# has to be http(s), so a click can bring a page up in the browser but never
+# hand a file:// or some other scheme to whatever handles it, and it carries no
+# whitespace, quotes or control characters.
+link_source() {
+  local action=$1
+
+  if [[ $action == \[* ]]; then
+    printf '%s' "$action" | jq -r --arg re '^https?://[^\s\x00-\x1f\x7f"'"'"'<>]+$' '
+      if type == "array" then
+        .[] | select(type == "string") | select(test($re; "i"))
+      else empty end
+    ' 2>/dev/null | head -n 1
+    return
+  fi
+
+  printf '%s' "$action" | grep -oiE "https?://[^[:space:][:cntrl:]\"'<>]+" | head -n 1
+}
+
 # Take one of the service's JSON files into the archive, and print the entry
 # that was added.
 #
@@ -216,7 +236,7 @@ preview_source() {
 # replay the whole archive at both of them.
 ingest_file() {
   local file=$1 announce_existing=${2:-0}
-  local key entry app_icon image_src exec_src icon_copy image_copy file_src preview_copy
+  local key entry app_icon image_src exec_src icon_copy image_copy file_src link_src preview_copy
   key=$(basename -- "$file"); key=${key%.json}
   [[ -n $key ]] || return 0
   if is_dismissed "$key"; then
@@ -258,6 +278,7 @@ ingest_file() {
   # reaches the archive.
   file_src=$(preview_source "$exec_src")
   file_src=${file_src#file://}
+  link_src=$(link_source "$exec_src")
 
   preview_copy=""
   if (( previews )) && [[ -n $file_src ]]; then
@@ -270,6 +291,7 @@ ingest_file() {
     --arg image "$image_copy" \
     --arg preview "$preview_copy" \
     --arg file "$file_src" \
+    --arg link "$link_src" \
     '{
        key: $key,
        app: (.app // ""),
@@ -279,6 +301,7 @@ ingest_file() {
        image: $image,
        preview: $preview,
        file: $file,
+       link: $link,
        glyph: (.glyph // ""),
        urgency: (.urgency // 1),
        timestamp: (.timestamp // 0)
@@ -425,19 +448,30 @@ cmd_watch() {
   cmd_sync
 
   command -v inotifywait >/dev/null 2>&1 || die "inotifywait is not installed"
+  # util-linux, and it is already here on anything running systemd, but say so
+  # rather than watch fail on a missing word later.
+  command -v setpriv >/dev/null 2>&1 || die "setpriv is not installed"
 
   # close_write catches a popup being written, moved_to catches it being
   # archived. The same notification arrives twice that way and the second one
   # is dropped by the key check, which is cheaper than trying to be clever
   # about which of the two events to listen for.
-  # Read through a descriptor rather than a pipeline, so the watcher has a pid
-  # this script can kill. Piped into a `while` loop it would be orphaned every
-  # time the shell reloads its plugins, and a day of reloads is a day of stray
-  # inotifywait processes.
-  exec 3< <(inotifywait -m -q -e close_write -e moved_to --format '%w%f' \
-    "$src_dir" "$src_history" 2>/dev/null)
-  watcher=$!
-  trap 'kill "$watcher" 2>/dev/null' EXIT INT TERM
+  # Read through a descriptor rather than a pipeline, so the watcher is a child
+  # of this script rather than of a pipeline that outlives it.
+  # `setpriv --pdeathsig TERM` is what ends it. The kernel has the watcher
+  # marked to take a TERM the moment this process is gone, however it goes,
+  # and that is the only version of the promise that covers a SIGKILL.
+  # Omarchy takes this script's process tree down when it reloads plugins, and
+  # a reload landing mid-ingest escalates to SIGKILL, which outranks every trap
+  # a shell could have been left holding. The watcher used to survive that:
+  # it kept its watch, got adopted by systemd --user, and sat on a pipe nothing
+  # would write to again until the next notification arrived and SIGPIPEd it
+  # down. Ten days of reloads collected 163 of them, holding 350MB between
+  # them, so nothing here tracks pids to clean up with. One mechanism in the
+  # kernel, and no recorded pid that can outlive the process it was recorded
+  # for and aim a kill at whatever later inherited the number.
+  exec 3< <(setpriv --pdeathsig TERM inotifywait -m -q -e close_write \
+    -e moved_to --format '%w%f' "$src_dir" "$src_history" 2>/dev/null)
 
   while IFS= read -r file <&3; do
     [[ $file == *.json ]] || continue

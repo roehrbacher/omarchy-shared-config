@@ -109,6 +109,15 @@ fixed-width bar icon slot, so switching icons never shifts its neighbours.
 Left click opens / closes the history, right click toggles incognito, and it
 turns into the incognito icon (󰗹) while incognito is on. It has no hover tooltip.
 
+## 1.21.0 notes
+
+- The "Paste queue: N items in order" line sits on a pill in the same accent colour as the numbered queue circles (text in the circles' number colour).
+- Queue notification: title "Paste queue ready:", body "Paste 1 of N. Esc cancels."
+- A paste queue is forgotten silently as soon as you do anything else in the popup: a normal pick (click, Enter, Alt+N, Shift/Alt+Enter) or a row button (text from screenshot, QR text / Wi-Fi password, open link, Markdown / plain text, send). Ctrl-selected rows are dropped too, so a button never starts a queue. Selecting 2+ rows and closing still starts a new queue.
+- OCR settings help is two lines: what a click does, and why there is no install button.
+- "Copied text from screenshot" uses the copy icon (󰆏).
+- No incognito on/off notifications any more: the popup and the bar icon show it.
+
 ## 1.20.0 notes
 
 - Paste queue info line is now just "Paste queue: N items in order" (the old "· Ctrl+V pastes them one by one" got cut off; the "Queue ready" notification still says it).
@@ -204,6 +213,8 @@ QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/tst_search
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests/tst_kinetic.qml      # wheel step, touchpad 1:1, momentum after lift-off
 bash tests/capture.test.sh     # capture: incognito, password hint, size caps, 0600/0700, import, prune
 bash tests/flux-pause.test.sh  # Flux pause/resume with a stub systemctl (never touches the real fluxd)
+bash tests/queue.test.sh       # paste queue (stub hyprctl / wl-copy / notifier), incl. quiet cancel
+bash tests/geometry/run-v121.sh # 1.21.0 offscreen: queue pill, queue dropped on pick/buttons, notifications, OCR help
 ```
 
 See `TESTING.md` for the last manual run.

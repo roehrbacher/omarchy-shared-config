@@ -88,8 +88,8 @@ ShellRoot {
     clip.infoOpen = true; t5.start()
   }
   function settings() {
-    var h = all("clipOcrHeading"), c = all("clipOcrCmd")
-    console.log("QUE ocr heading '" + h[0].text + "' fits=" + (h[0].implicitWidth <= h[0].width) + " cmd='" + c[0].text + "' installed=" + clip.ocrInfo.installed.join(",") + " used=" + clip.ocrInfo.used)
+    var h = all("clipOcrHeading"), c = all("clipOcrLang")   // 1.20.0: one row per language
+    console.log("QUE ocr heading '" + h[0].text + "' fits=" + (h[0].implicitWidth <= h[0].width) + " languages=" + c.length + " installed=" + clip.ocrInfo.installed.join(",") + " used=" + clip.ocrInfo.used)
     Qt.quit()
   }
 }

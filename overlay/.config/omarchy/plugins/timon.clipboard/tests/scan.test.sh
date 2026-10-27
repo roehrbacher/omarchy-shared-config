@@ -39,4 +39,40 @@ l() { PATH="$fb:$PATH" "$here/../scan.sh" --langs | jq -r "$1"; }
 [[ $(OMARCHY_OCR_LANGS=deu l .used) == deu ]] && ok "langs: OMARCHY_OCR_LANGS=deu" || bad "env deu"
 [[ $(OMARCHY_OCR_LANGS=deu+spa l .used) == deu ]] && ok "langs: not-installed spa skipped, nothing downloaded" || bad "env deu+spa"
 [[ $(OMARCHY_OCR_LANGS=spa l .used) == "eng+deu+fra" ]] && ok "langs: nothing usable in env -> installed ones" || bad "env spa"
+# 1.20.0: an app screenshot with a QR code, icons next to the labels and an
+# icon row under the code (what gave "£ Dynamic QR Code", '[=] "h'!'' etc.):
+# only the labels come out. Plus a light and a dark theme, one without a QR
+# code, and normal text with punctuation, numbers and a one-letter word.
+NF=$(fc-match -f '%{file}' 'JetBrainsMono Nerd Font' 2>/dev/null); SF=$(fc-match -f '%{file}' 'sans' 2>/dev/null)
+if [[ $NF == *Nerd* ]]; then
+  card() { # <out> <bg> <card> <fg> <dim> <qr:yes|no>
+    local G1 G2 G3 G4 G5 G6 q=()
+    G1=$(printf '\U000F0432'); G2=$(printf '\U000F0128'); G3=$(printf '\U000F0004'); G4=$(printf '\U000F034E'); G5=$(printf '\U000F018F'); G6=$(printf '\U000F01DA')
+    qrencode -o "$tmp/qrc.png" -s 4 -m 1 'WIFI:T:WPA;S:ExampleNet-Guest-5G;P:not-a-real-pass-1234567890;H:false;;'
+    [[ $6 == yes ]] && q=("$tmp/qrc.png" -geometry +60+150 -composite)
+    magick -size 1000x620 xc:"$2" -fill "$3" -draw 'roundrectangle 20,20 980,600 18,18' \
+      -font "$NF" -fill '#5b5bd6' -pointsize 40 -annotate +50+95 "$G1" -font "$SF" -fill "$4" -pointsize 36 -annotate +110+92 'Dynamic QR Code' \
+      "${q[@]}" -font "$NF" -fill "$4" -pointsize 30 -annotate +80+520 "$G5   $G6" \
+      -font "$NF" -fill "$5" -pointsize 34 -annotate +430+215 "$G2" -font "$SF" -fill "$4" -pointsize 30 -annotate +490+212 'Total scans' \
+      -font "$NF" -fill "$5" -pointsize 34 -annotate +430+315 "$G3" -font "$SF" -fill "$4" -pointsize 30 -annotate +490+312 'Unique scans' \
+      -font "$NF" -fill "$5" -pointsize 34 -annotate +430+415 "$G4" -font "$SF" -fill "$4" -pointsize 30 -annotate +490+412 'Top location' -resize 70% "$d/$1"
+  }
+  exp=$'Dynamic QR Code\nTotal scans\nUnique scans\nTop location'
+  card qrcard.png '#f6f7fb' white '#222' '#888' yes
+  card qrdark.png '#11111b' '#1e1e2e' '#cdd6f4' '#7f849c' yes
+  card noqr.png '#f6f7fb' white '#222' '#888' no
+  for f in qrcard qrdark noqr; do
+    out=$("$here/../scan.sh" "$d/$f.png"); got=$(jq -r .ocr <<<"$out")
+    [[ $got == "$exp" ]] && ok "ocr $f: labels only, no icon/QR junk" || bad "ocr $f: got $(jq -c .ocr <<<"$out")"
+  done
+  [[ $(jq -r .qr <<<"$("$here/../scan.sh" "$d/qrcard.png")") == WIFI:* ]] && ok "qrcard: QR still read" || bad "qrcard: QR lost"
+  magick -size 1200x260 xc:white -font "$SF" -fill black -pointsize 34 -annotate +30+70 'Order #4711 shipped on 23.10.2026, total 12,50 EUR.' \
+    -annotate +30+140 "Don't forget: e-mail me at 9:30 (100% sure)!" -annotate +30+210 'A short line' "$d/para.png"
+  exp=$'Order #4711 shipped on 23.10.2026, total 12,50 EUR.\nDon\'t forget: e-mail me at 9:30 (100% sure)!\nA short line'
+  got=$(jq -r .ocr <<<"$("$here/../scan.sh" "$d/para.png")")
+  [[ $got == "$exp" ]] && ok "ocr plain text: punctuation, numbers, one-letter word kept" || bad "ocr para: $got"
+  ls "${XDG_RUNTIME_DIR:-/tmp}"/timon-clipboard-scan.* >/dev/null 2>&1 && bad "masked temp file left behind" || ok "masked temp file removed"
+else
+  echo "skip: 1.20.0 OCR cards need JetBrainsMono Nerd Font"
+fi
 exit $fail

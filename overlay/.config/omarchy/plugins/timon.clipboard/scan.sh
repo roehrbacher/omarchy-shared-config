@@ -54,9 +54,29 @@ if [[ -z $qr ]] && command -v zbarimg >/dev/null; then
 elif ! command -v ZXingReader >/dev/null; then
   complete=false
 fi
+# OCR (1.20.0): the QR code itself is painted over first (ZXing gives its
+# corners), so its modules can't turn into junk lines; then tesseract's
+# word confidences drop low-confidence words, icons read as symbols next to
+# labels and symbol-only lines (ocr-clean.awk). The masked copy is a private
+# temp file, removed right away.
+qr_box() {
+  command -v ZXingReader >/dev/null && command -v magick >/dev/null || return 1
+  timeout 15s nice -n 19 ZXingReader -single -formats QRCode "$1" 2>/dev/null | awk '
+    /^Position:/ { x0 = y0 = 1e9; x1 = y1 = -1
+      for (i = 2; i <= NF; i++) { split($i, p, "x"); if (p[1] < x0) x0 = p[1]; if (p[1] > x1) x1 = p[1]; if (p[2] < y0) y0 = p[2]; if (p[2] > y1) y1 = p[2] }
+      m = int((x1 - x0) * 0.08) + 4
+      x0 -= m; y0 -= m; x1 += m; y1 += m; if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0
+      printf "%d,%d %d,%d\n", x0, y0, x1, y1; exit }'
+}
 if command -v tesseract >/dev/null; then
   langs=$(ocr_langs); [[ -n $langs ]] || langs=eng
-  ocr=$(OMP_THREAD_LIMIT=1 timeout 30s nice -n 19 tesseract "$img" - -l "$langs" 2>/dev/null | head -c 8192)
+  src=$img masked=""
+  if [[ -n $qr ]] && box=$(qr_box "$img") && [[ -n $box ]]; then
+    masked=$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/timon-clipboard-scan.XXXXXX.png") && trap 'rm -f "$masked"' EXIT
+    if timeout 15s nice -n 19 magick "$img" -fill white -draw "rectangle $box" "$masked" 2>/dev/null; then src=$masked; fi
+  fi
+  ocr=$(OMP_THREAD_LIMIT=1 timeout 30s nice -n 19 tesseract "$src" - -l "$langs" tsv 2>/dev/null | awk -f "$(dirname "$(readlink -f "$0")")/ocr-clean.awk" | head -c 8192)
+  [[ -n $masked ]] && rm -f "$masked"
 else
   complete=false
 fi

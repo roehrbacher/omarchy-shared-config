@@ -43,7 +43,8 @@ notify() {
   local id
   [[ ${QUEUE_DRY:-0} == 1 ]] && { echo "notify $*"; return; }
   id=$(jq -r '.notify // 0' "$Q" 2>/dev/null || echo 0)
-  id=$(timeout 3 notify-send -a Clipboard -p -r "${id:-0}" -t "${2:-6000}" "Paste queue" "$1" 2>/dev/null 9>&-) || return 0
+  # 1.20.0: Omarchy's notifier with a numbered-list glyph (large icon slot).
+  id=$(timeout 3 omarchy-notification-send --app-name Clipboard -g "󰉻" -p -r "${id:-0}" -t "${2:-6000}" "Paste queue" "$1" 2>/dev/null 9>&-) || return 0
   [[ -s $Q && $id =~ ^[0-9]+$ ]] && jq --argjson id "$id" '.notify = $id' "$Q" >"$Q.tmp" && mv "$Q.tmp" "$Q"
 }
 bind_keys() {

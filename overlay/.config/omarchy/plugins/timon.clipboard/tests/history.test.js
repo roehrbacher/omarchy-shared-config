@@ -493,7 +493,7 @@ console.log("filters/ocr: ok")}
   assert.deepStrictEqual([H.queueNumber(q, "b"), H.queueNumber(q, "c"), H.queueNumber(q, "a")], [1, 2, 0], "ctrl+click again removes, rest move up")
   assert.deepStrictEqual(H.queueItems([{ type: "text", text: "t", html: "<b>t</b>", app: "x", at: 1 }, { type: "image", path: "/p.png", mime: "image/png", ocr: "o" }, null]),
     [{ type: "text", text: "t" }, { type: "image", path: "/p.png", mime: "image/png" }], "queue items carry only what is pasted")
-  assert.strictEqual(H.queueButtonLabel(3, null), "Paste queue: 3 items in order · Ctrl+V pastes them one by one", "1.19.0: info line, no start button"); assert.strictEqual(H.queueButtonLabel(1, null), "", "1 selected: no queue")
+  assert.strictEqual(H.queueButtonLabel(3, null), "Paste queue: 3 items in order", "1.20.0: short info line (fits, no ...)"); assert.strictEqual(H.queueButtonLabel(1, null), "", "1 selected: no queue")
   assert.strictEqual(H.queueButtonLabel(0, { pos: 1, count: 5 }), "Pasting 2 of 5 · Cancel")
   assert.strictEqual(H.queueButtonLabel(0, null), "")
   const K = H.KEY || { Escape: 0x01000000, Return: 0x01000004 }
@@ -519,7 +519,8 @@ console.log("filters/ocr: ok")}
   assert.strictEqual(H.imageTextActions({ type: "image", path: "/s", ocr: "x", screenshot: true }).ocrTip, "Copy text from screenshot")
   assert.strictEqual(H.imageTextActions({ type: "image", path: "/s", ocr: "x" }).ocrTip, "Copy text from image")
   assert.strictEqual(H.needsScan({ type: "image", path: "/a", scanned: true }), true, "zbar-only scans are redone")
-  assert.strictEqual(H.needsScan(H.normalizeEntry({ type: "image", path: "/a", scanned: true, scanv: 2 })), false)
+  assert.strictEqual(H.needsScan(H.normalizeEntry({ type: "image", path: "/a", scanned: true, scanv: 3 })), false)
+  assert.strictEqual(H.needsScan(H.normalizeEntry({ type: "image", path: "/a", scanned: true, scanv: 2 })), true, "1.20.0: v2 scans redone once (QR mask, junk filter)")
   assert.strictEqual(H.clickActionOf("copy"), "copy"); assert.strictEqual(H.clickActionOf(undefined), "paste")
   // 2 pinned + 4 history rows; drag history row 4 up: pinned at slot 1, back down: home again
   assert.deepStrictEqual(H.dragPlan(1, 2, 6, false, 4), { index: 1, pinned: true })
@@ -552,3 +553,19 @@ console.log("filters/ocr: ok")}
 }
 assert.strictEqual(H.ocrInstallCommand(["eng"]), "sudo pacman -S tesseract-data-deu")
 assert.strictEqual(H.ocrInstallCommand(["eng", "deu"]), "sudo pacman -S tesseract-data-fra")
+
+// 1.20.0: OCR language list and the empty-clipboard fill.
+{
+  const rows = H.ocrLanguageRows(["eng", "deu"])
+  assert.strictEqual(rows.length, 16, "16 popular languages")
+  assert.deepStrictEqual(rows.map(r => r.code), ["eng","deu","fra","spa","ita","por","nld","pol","ces","tur","rus","ukr","chi_sim","jpn","kor","ara"], "Arch package codes")
+  assert.strictEqual(rows[1].cmd, "sudo pacman -S tesseract-data-deu", "exact pacman command")
+  assert.strictEqual(rows[12].cmd, "sudo pacman -S tesseract-data-chi_sim", "Chinese simplified = chi_sim")
+  assert.ok(rows[0].installed && rows[1].installed && !rows[2].installed, "installed ones marked")
+  const now = Date.now()
+  const hist = [{ type: "text", text: "newest", at: now }, { type: "text", text: "pin top", pinned: true, at: now - 5 }, { type: "text", text: "pin 2", pinned: true, at: now - 9 }]
+  assert.strictEqual(H.firstPinnedIndex(hist), 1, "top pinned row's history index")
+  assert.strictEqual(H.firstPinnedIndex([{ type: "text", text: "a", at: now }]), -1, "no pinned item: nothing")
+  assert.strictEqual(H.firstPinnedIndex([]), -1, "empty history: nothing")
+  console.log("ok 1.20.0 OCR language rows + first pinned")
+}

@@ -109,6 +109,14 @@ fixed-width bar icon slot, so switching icons never shifts its neighbours.
 Left click opens / closes the history, right click toggles incognito, and it
 turns into the incognito icon (󰗹) while incognito is on. It has no hover tooltip.
 
+## 1.20.0 notes
+
+- Paste queue info line is now just "Paste queue: N items in order" (the old "· Ctrl+V pastes them one by one" got cut off; the "Queue ready" notification still says it).
+- OCR on screenshots: the QR code area (corners from ZXing) is painted over before tesseract runs, and tesseract's word confidences drop junk: symbols read from icons next to labels, low-confidence non-words and symbol-only lines (`ocr-clean.awk`). Older image scans are redone once.
+- Notifications use `omarchy-notification-send` with a glyph and a body line, so they get the same large icon as Omarchy's own: Wi-Fi password (lock), QR code text (QR), text from screenshot/image (text recognition), incognito on/off, install command (terminal), paste queue (numbered list).
+- Opening the popup while the clipboard is empty puts the top pinned item on the clipboard (copy only, never pasted; nothing happens without a pinned item; a password-manager copy doesn't count as empty).
+- Settings: "Languages for text recognition (OCR)" lists 16 popular languages; installed ones are marked, a click copies `sudo pacman -S tesseract-data-<code>`. No install button on purpose: installing system packages needs your sudo password, and the plugin never runs root commands or downloads anything itself.
+
 ## 1.19.0 notes
 
 - Paste queue starts by itself: select 2+ items with Ctrl+click or Ctrl+Space and close the popup. Notification: "Queue ready: N items. Ctrl+V pastes 1 of N. Esc cancels." One Ctrl+clicked item is a normal pick. Reopening during a queue shows progress, badges and Cancel. A new 2+ selection replaces a running queue.

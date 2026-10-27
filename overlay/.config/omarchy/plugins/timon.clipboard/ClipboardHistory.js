@@ -298,7 +298,7 @@ function matchesFilters(entry, q, now) {
 // gets the open button; any other QR content (Wi-Fi, vCard, plain text) is
 // copied by the copy-text button; otherwise the text read from the image.
 // { link: {kind,target}|null, copy: text, copyTip }.
-var SCAN_VERSION = 2
+var SCAN_VERSION = 3  // 3 (1.20.0): QR masked before OCR, junk lines dropped: rescan once
 function needsScan(entry) {
   return !!entry && entry.type === "image" && !(entry.scanned && entry.scanv === SCAN_VERSION)
 }
@@ -550,6 +550,31 @@ function ocrInstallCommand(installed) {
   return "sudo pacman -S tesseract-data-<code>"
 }
 
+// 1.20.0: popular OCR languages for the settings list. Codes are the Arch
+// package suffixes (extra/tesseract-data-<code>, checked with pacman -Si).
+var OCR_LANGUAGES = [
+  { code: "eng", name: "English" }, { code: "deu", name: "German" },
+  { code: "fra", name: "French" }, { code: "spa", name: "Spanish" },
+  { code: "ita", name: "Italian" }, { code: "por", name: "Portuguese" },
+  { code: "nld", name: "Dutch" }, { code: "pol", name: "Polish" },
+  { code: "ces", name: "Czech" }, { code: "tur", name: "Turkish" },
+  { code: "rus", name: "Russian" }, { code: "ukr", name: "Ukrainian" },
+  { code: "chi_sim", name: "Chinese (simplified)" }, { code: "jpn", name: "Japanese" },
+  { code: "kor", name: "Korean" }, { code: "ara", name: "Arabic" }
+]
+// 1.20.0: history index of the top pinned entry (what the Pinned section
+// shows first), or -1. Used to fill an empty clipboard when the popup opens.
+function firstPinnedIndex(history) {
+  var rows = displayRows(history, "", 200)
+  return rows.length && rows[0].pinned === true ? rows[0].index : -1
+}
+function ocrLanguageRows(installed) {
+  var have = installed || []
+  return OCR_LANGUAGES.map(function(l) {
+    return { code: l.code, name: l.name, installed: have.indexOf(l.code) >= 0, cmd: "sudo pacman -S tesseract-data-" + l.code }
+  })
+}
+
 // ---- click action (1.18.0) ------------------------------------------------
 // "paste": select, paste and close (default). "copy": put it on the
 // clipboard, popup stays open.
@@ -611,7 +636,7 @@ function queueItems(entries) {
 // 1.19.0: no start button any more (2+ selected rows start the queue when
 // the popup closes); the footer only shows a running queue.
 function queueButtonLabel(selected, running) {
-  if (selected >= 2) return "Paste queue: " + selected + " items in order · Ctrl+V pastes them one by one"
+  if (selected >= 2) return "Paste queue: " + selected + " items in order"
   if (running && running.count > 0) return "Pasting " + Math.min(running.pos + 1, running.count) + " of " + running.count + " · Cancel"
   return ""
 }
@@ -1167,6 +1192,9 @@ if (typeof module !== "undefined") {
     queueButtonLabel: queueButtonLabel,
     queueOnPick: queueOnPick,
     ocrInstallCommand: ocrInstallCommand,
+    ocrLanguageRows: ocrLanguageRows,
+    OCR_LANGUAGES: OCR_LANGUAGES,
+    firstPinnedIndex: firstPinnedIndex,
     queueItemKeys: queueItemKeys,
     clipKeyOf: clipKeyOf,
     unpinToTop: unpinToTop,

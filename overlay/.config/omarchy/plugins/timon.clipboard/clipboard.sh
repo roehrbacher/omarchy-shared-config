@@ -70,7 +70,11 @@ paste | copy)
   wtype -M shift -k Insert -m shift 2>/dev/null || true
   ;;
 current)
-  types=$(timeout 2s wl-paste --list-types 2>/dev/null) || exit 0
+  # 1.20.0: "empty" when nothing is on the clipboard at all (the popup then
+  # puts the top pinned item there); a timeout prints nothing (unknown).
+  types=$(timeout 2s wl-paste --list-types 2>/dev/null); rc=$?
+  (( rc == 124 || rc == 127 )) && exit 0
+  [[ -z ${types//[[:space:]]/} ]] && { echo empty; exit 0; }
   grep -qx 'x-kde-passwordManagerHint' <<<"$types" && exit 0
   mime=""  # same order as capture.sh, so the hash matches the stored file
   for m in image/png image/jpeg image/webp image/gif image/bmp image/tiff; do grep -qx "$m" <<<"$types" && { mime=$m; break; }; done

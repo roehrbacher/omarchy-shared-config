@@ -313,6 +313,13 @@ Item {
     return JSON.stringify({ private: root.privateMode, incognito: root.privateMode, fluxPaused: root.fluxPaused, open: root.opened, entries: root.history.length, shown: displayModel.count })
   }
 
+  // 1.20.0: every notification goes through omarchy-notification-send with a
+  // glyph (the omarchy-glyph hint) and a body line, so it gets the same large
+  // icon as Omarchy's own notifications (a summary-only toast shrinks it).
+  function notify(glyph, summary, body, ms) {
+    Quickshell.execDetached(["omarchy-notification-send", "--app-name", "Clipboard", "-g", glyph, "-t", String(ms || 2500), summary, body || ""])
+  }
+
   // ---- incognito (private) mode -------------------------------------------
   function setPrivate(value, notify) {
     var fluxWasPaused = root.fluxPaused
@@ -320,10 +327,10 @@ Item {
     root.writeState()
     root.syncFlux()
     if (notify) {
-      Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "2500",
+      root.notify(value ? "󰗹" : "󰅌",
         value ? "Clipboard incognito on" : "Clipboard incognito off",
         value ? "New copies are not saved." + (root.fluxPresent ? " Flux sync paused." : "")
-              : "Copies are saved to history again." + (fluxWasPaused ? " Flux sync resumed." : "")])
+              : "Copies are saved to history again." + (fluxWasPaused ? " Flux sync resumed." : ""), 2500)
     }
   }
 
@@ -958,7 +965,7 @@ Item {
     if (!r.copyText) return
     root.copyText(r.copyText)
     root.close()
-    Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "2000", r.copyTip.replace(/^Copy/, "Copied")])
+    root.notify(r.copyWifi ? "󰌾" : "󰐲", r.copyTip.replace(/^Copy/, "Copied"), "Paste it with Ctrl+V.", 2500)
   }
   function copyOcrText(index) {
     if (index < 0 || index >= displayModel.count) return
@@ -966,9 +973,15 @@ Item {
     if (!r.ocrText) return
     root.copyText(r.ocrText)
     root.close()
-    Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "2000", r.ocrTip.replace(/^Copy/, "Copied")])
+    root.notify("󱄽", r.ocrTip.replace(/^Copy/, "Copied"), "Paste it with Ctrl+V.", 2500)
   }
   function openIndex(index) { root.runOnIndex(index, "open") }
+  // Settings: copy one language's pacman command (the user runs it).
+  function copyOcrInstall(lang) {
+    if (!lang || !lang.cmd || lang.installed) return
+    root.copyText(lang.cmd)
+    root.notify("󰆍", "Copied: install " + lang.name + " (OCR)", "Paste it in a terminal with Ctrl+Shift+V, press Enter and type your password. Then reopen the clipboard.", 6000)
+  }
 
   // Actions shown on a selected row, left to right (the extra arguments only
   // make the binding update).
@@ -1124,8 +1137,24 @@ Item {
     command: [root.helper, "current"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.currentClipKey = String(text).trim()
+      onStreamFinished: {
+        var k = String(text).trim()
+        if (k === "empty") { root.currentClipKey = ""; root.fillEmptyClipboard() }
+        else root.currentClipKey = k
+      }
     }
+  }
+
+  // 1.20.0: the clipboard is empty (nothing copied since login, or the app
+  // that owned it closed) and the popup just opened: put the top pinned item
+  // on it, so Ctrl+V works right away. Copy only, never pasted; nothing
+  // happens without a pinned item.
+  function fillEmptyClipboard() {
+    if (!root.opened) return
+    var i = ClipboardHistory.firstPinnedIndex(root.history)
+    if (i < 0) return
+    Quickshell.execDetached([root.helper, "copy", String(i)])
+    root.currentClipKey = ClipboardHistory.clipKeyOf(root.history[i], Qt.md5)
   }
 
   // queue.sh start: the items go over stdin (never argv).
@@ -1829,13 +1858,15 @@ Item {
                   delegate: infoValueRow
                 }
 
-                // 1.19.0: OCR languages. Only installed packs are used,
+                // OCR languages (1.20.0). Only installed packs are used,
                 // nothing is downloaded; OMARCHY_OCR_LANGS picks them, like
-                // Omarchy's own text capture (Super+Ctrl+Print).
+                // Omarchy's own text capture (Super+Ctrl+Print). Popular
+                // packs are listed; a click copies its pacman command.
                 Text {
                   objectName: "clipOcrHeading"
                   width: infoColumn.width
-                  text: "TEXT IN IMAGES (OCR)"
+                  text: "LANGUAGES FOR TEXT RECOGNITION (OCR)"
+                  elide: Text.ElideRight
                   color: root.dimText
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -1853,56 +1884,76 @@ Item {
                   delegate: infoValueRow
                 }
 
-                // Click copies the install command (run it in a terminal).
-                Rectangle {
-                  objectName: "clipOcrInstall"
+                Text {
+                  objectName: "clipOcrHelp"
                   width: infoColumn.width
-                  height: root.rowHeight
-                  radius: root.cornerRadius
-                  color: ocrCmdMouse.containsMouse ? Util.alpha(root.foreground, 0.08) : "transparent"
-                  readonly property string cmd: ClipboardHistory.ocrInstallCommand(root.ocrInfo.installed)
+                  wrapMode: Text.WordWrap
+                  textFormat: Text.PlainText
+                  text: "Add a language: click it to copy its install command. Open a terminal (Super+Enter), paste with Ctrl+Shift+V, press Enter and type your password. Then reopen this popup.\nWhy no install button: installing system packages needs your sudo password, and this plugin never runs root commands or downloads anything on its own, for safety."
+                  color: root.dimText
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  topPadding: Style.space(6)
+                  bottomPadding: Style.space(4)
+                  leftPadding: Style.space(10)
+                  rightPadding: Style.space(10)
+                }
 
-                  Text {
-                    anchors.left: parent.left
-                    anchors.leftMargin: Style.space(10)
-                    anchors.right: ocrCmdText.left
-                    anchors.rightMargin: Style.space(10)
-                    anchors.verticalCenter: parent.verticalCenter
-                    textFormat: Text.PlainText
-                    text: "󰆏  Add a language (click copies)"
-                    color: root.foreground
-                    elide: Text.ElideRight
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.body
-                  }
+                // One row per popular language; installed ones are marked
+                // and not clickable.
+                Repeater {
+                  model: ClipboardHistory.ocrLanguageRows(root.ocrInfo.installed)
+                  delegate: Rectangle {
+                    required property var modelData
+                    objectName: "clipOcrLang"
+                    readonly property string code: modelData.code
+                    readonly property string cmd: modelData.cmd
+                    readonly property bool installed: modelData.installed
+                    width: infoColumn.width
+                    height: root.rowHeight
+                    radius: root.cornerRadius
+                    color: !installed && langMouse.containsMouse ? Util.alpha(root.foreground, 0.08) : "transparent"
 
-                  Text {
-                    id: ocrCmdText
-                    objectName: "clipOcrCmd"
-                    anchors.right: parent.right
-                    anchors.rightMargin: Style.space(10)
-                    anchors.verticalCenter: parent.verticalCenter
-                    textFormat: Text.PlainText
-                    text: parent.cmd
-                    color: root.dimText
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.body
-                  }
-
-                  MouseArea {
-                    id: ocrCmdMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                      root.copyText(parent.cmd)
-                      Quickshell.execDetached(["notify-send", "-a", "Clipboard", "-t", "3000", "Copied install command", "Run it in a terminal; other packs are tesseract-data-<code> (fra, spa, ita …)."])
+                    Text {
+                      anchors.left: parent.left
+                      anchors.leftMargin: Style.space(10)
+                      anchors.right: langValue.left
+                      anchors.rightMargin: Style.space(10)
+                      anchors.verticalCenter: parent.verticalCenter
+                      textFormat: Text.PlainText
+                      text: (parent.installed ? "󰄬" : "󰐕") + "  " + parent.modelData.name
+                      color: parent.installed ? root.dimText : root.foreground
+                      elide: Text.ElideRight
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
                     }
-                  }
 
-                  PanelToolTip {
-                    visible: ocrCmdMouse.containsMouse
-                    text: "Other languages: tesseract-data-<code>, e.g. fra, spa, ita"
+                    Text {
+                      id: langValue
+                      objectName: "clipOcrLangValue"
+                      anchors.right: parent.right
+                      anchors.rightMargin: Style.space(10)
+                      anchors.verticalCenter: parent.verticalCenter
+                      textFormat: Text.PlainText
+                      text: parent.installed ? "Installed" : parent.cmd
+                      color: root.dimText
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+
+                    MouseArea {
+                      id: langMouse
+                      anchors.fill: parent
+                      enabled: !parent.installed
+                      hoverEnabled: true
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: root.copyOcrInstall(parent.modelData)
+                    }
+
+                    PanelToolTip {
+                      visible: langMouse.containsMouse && !parent.installed
+                      text: "Click to copy: " + parent.cmd
+                    }
                   }
                 }
               }

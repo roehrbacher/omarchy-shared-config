@@ -45,7 +45,7 @@ Panel {
     if (!root.passConfigured) return "No headphones set for this machine"
     if (!root.passOn) return "Hear your own mic in the headphones"
     if (root.passActive) return "On: you hear your mic in the headphones"
-    if (!root.passHeadphones) return "On, works only with the headphones"
+    if (!root.passHeadphones) return "On, works with wired headphones (USB or jack)"
     return "On, starting…"
   }
   Process { id: passStatusProc; command: [root.passTool, "status"]; stdout: StdioCollector { onStreamFinished: root.passApply(text) } }

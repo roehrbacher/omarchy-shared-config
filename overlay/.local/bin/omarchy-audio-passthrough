@@ -69,10 +69,9 @@ status() {
   local en vol sink hp=
   en=$(get ENABLED); en=${en:-1}
   vol=$(get VOLUME); vol=${vol%\%}; vol=${vol:-50}
-  sink=$(get SINK)
-  [[ -n $sink ]] && match_any "$(pactl get-default-sink 2>/dev/null)" "$sink" && hp=1
+  "$(dirname "$(readlink -f "$0")")/omarchy-audio-wired" "$(pactl get-default-sink 2>/dev/null)" && hp=1
   printf '{"enabled":%s,"volume":%s,"active":%s,"headphones":%s,"configured":%s,"service":"%s","source":%s}\n' \
-    "$(b "$([[ $en == 1 ]] && echo 1)")" "$vol" "$(b "$(loop_id)")" "$(b "$hp")" "$(b "$sink")" \
+    "$(b "$([[ $en == 1 ]] && echo 1)")" "$vol" "$(b "$(loop_id)")" "$(b "$hp")" true \
     "$(systemctl --user is-active audio-passthrough 2>/dev/null)" "$(jstr "$(cur_source)")"
 }
 case ${1:-status} in

@@ -1,0 +1,45 @@
+#!/bin/bash
+# Is this output wired headphones / a wired headset? Used by audio passthrough.
+#   omarchy-audio-wired <sink-name>     exit 0 = wired headphones, 1 = not
+#   omarchy-audio-wired --list          every output with its verdict (tests)
+# Generic, no device names needed:
+#   yes  USB audio outputs (USB-C headphones, dongles, DACs like Moondrop/Apple)
+#        and built-in jacks whose active port is Headphones/Headset and plugged in
+#   no   Bluetooth, HDMI/DisplayPort, built-in speakers, virtual sinks, USB
+#        devices that call themselves speakers/monitors
+# Optional overrides in ~/.config/omarchy/audio-passthrough.machine.conf:
+#   SINK="a|b"      always count outputs whose name contains a or b
+#   NOT_SINK="c"    never count outputs whose name contains c
+set -u
+DIR="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy"
+SINK= NOT_SINK=
+# shellcheck source=/dev/null
+[[ -f $DIR/audio-passthrough.machine.conf ]] && source "$DIR/audio-passthrough.machine.conf"
+match_any() { local IFS='|' p; for p in $2; do [[ -n $p && $1 == *"$p"* ]] && return 0; done; return 1; }
+verdict() { # $1 = one sink as JSON
+  jq -r --arg sink "$SINK" --arg not "$NOT_SINK" '
+    def has_any($s; $list): ($list | split("|") | map(select(length > 0)) | any(. as $p | $s | contains($p)));
+    (.properties // {}) as $p
+    | (.ports // []) as $ports
+    | (.active_port // "") as $act
+    | ([$ports[] | select(.name == $act)] | first // {}) as $port
+    | if has_any(.name; $not) then "no override NOT_SINK"
+      elif has_any(.name; $sink) then "yes override SINK"
+      elif ($p["device.api"] // "") == "bluez5" or (.name | startswith("bluez")) then "no bluetooth"
+      elif ($p["device.api"] // "") != "alsa" then "no virtual"
+      elif ($port.type // "") == "HDMI" or (.name | test("hdmi|HDMI|DisplayPort")) then "no hdmi"
+      elif ($p["device.bus"] // "") == "usb" then
+        (if (($p["device.form_factor"] // "") | test("speaker|computer|tv|monitor")) or ($port.type // "") == "Speaker" then "no usb-speaker" else "yes usb" end)
+      elif (($port.type // "") | test("Headphones|Headset")) then
+        (if ($port.availability // "") == "not available" then "no jack-unplugged" else "yes jack" end)
+      else "no speaker" end' <<<"$1"
+}
+# AUDIO_WIRED_JSON=<file>: read the outputs from a file instead (tests)
+if [[ -n ${AUDIO_WIRED_JSON:-} ]]; then all=$(cat "$AUDIO_WIRED_JSON"); else all=$(pactl -f json list sinks 2>/dev/null) || exit 1; fi
+if [[ ${1:-} == --list ]]; then
+  jq -c '.[]' <<<"$all" | while IFS= read -r s; do printf '%-90s %s\n' "$(jq -r .name <<<"$s")" "$(verdict "$s")"; done
+  exit 0
+fi
+s=$(jq -c --arg n "${1:?sink name}" '.[] | select(.name == $n)' <<<"$all")
+[[ -n $s ]] || exit 1
+[[ $(verdict "$s") == yes* ]]

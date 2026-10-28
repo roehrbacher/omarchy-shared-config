@@ -1,6 +1,6 @@
 #!/bin/bash
 # timon.clipboard paste queue (1.17.0). Ctrl+click rows in the popup, then
-# "Paste N in order": every Ctrl+V pastes the next item.
+# "Paste N in order": every Super+V or Ctrl+V pastes the next item.
 #
 #   queue.sh start     items as a JSON array on stdin ({type:text,text} or
 #                      {type:image,path,mime}); arms the queue
@@ -49,12 +49,21 @@ notify() {
   id=$(timeout 3 omarchy-notification-send --app-name Clipboard -g "󰉻" -p -r "${id:-0}" -t "${2:-6000}" "${3:-Paste queue}" "$1" 2>/dev/null 9>&-) || return 0
   [[ -s $Q && $id =~ ^[0-9]+$ ]] && jq --argjson id "$id" '.notify = $id' "$Q" >"$Q.tmp" && mv "$Q.tmp" "$Q"
 }
+# 1.22.0: Super+V (Omarchy's universal paste) pastes the next item too. Its
+# stock bind is swapped out while the queue runs and put back afterwards with
+# the same behaviour as default/hypr/bindings/clipboard.lua (terminal:
+# Shift+Insert, else Ctrl+V, sent as key state with explicit mods).
+UNIVERSAL_PASTE='hl.bind("SUPER + V", function() local w = hl.get_active_window(); local term = false; if w then for _, t in ipairs(w.tags or {}) do if t:gsub("%*$", "") == "terminal" then term = true end end end; local m = term and "SHIFT" or "CTRL"; local k = term and "Insert" or "V"; hl.dispatch(hl.dsp.send_key_state({ mods = m, key = k, state = "down" })); hl.timer(function() hl.dispatch(hl.dsp.send_key_state({ mods = m, key = k, state = "up" })) end, { timeout = 50, type = "oneshot" }) end, { description = "Universal paste" })'
 bind_keys() {
   hypr eval "hl.bind(\"CTRL + V\", hl.dsp.exec_cmd(\"setsid -f $me next\"), { description = \"Clipboard paste queue: next\" })"
+  hypr eval 'hl.unbind("SUPER + V")'
+  hypr eval "hl.bind(\"SUPER + V\", hl.dsp.exec_cmd(\"setsid -f $me next\"), { description = \"Clipboard paste queue: next\" })"
   hypr eval "hl.bind(\"Escape\", hl.dsp.exec_cmd(\"setsid -f $me cancel esc\"), { description = \"Clipboard paste queue: cancel\" })"
 }
 unbind_keys() {
   hypr eval 'hl.unbind("CTRL + V")'
+  hypr eval 'hl.unbind("SUPER + V")'
+  hypr eval "$UNIVERSAL_PASTE"
   hypr eval 'hl.unbind("Escape")'
 }
 count() { jq -r '.items | length' "$Q" 2>/dev/null || echo 0; }
@@ -105,7 +114,7 @@ next)
     finish
   else
     jq --argjson k "$k" '.pos = $k' "$Q" >"$Q.tmp" && mv "$Q.tmp" "$Q"
-    notify "Pasted $k of $n. Ctrl+V pastes $((k + 1)) next. Esc cancels."
+    notify "Pasted $k of $n. Super+V pastes $((k + 1)) next. Esc cancels."
   fi
   ;;
 cancel)

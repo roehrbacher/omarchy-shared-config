@@ -31,7 +31,7 @@ In the popup:
 | Shift+Enter | copy only (select it without pasting) |
 | Alt+Enter | open (URL in browser, text in editor, image in editor) |
 | Ctrl+click / Ctrl+Space | add the row to the paste queue (numbered 1, 2, 3 …); again takes it out |
-| Ctrl+click / Ctrl+Space 2+ items, then close the popup (Enter, click, Esc twice or click outside) | start the paste queue: every Ctrl+V pastes the next item, Esc cancels |
+| Ctrl+click / Ctrl+Space 2+ items, then close the popup (Enter, click, Esc twice or click outside) | start the paste queue: every Super+V (or Ctrl+V) pastes the next item, Esc cancels |
 | Alt+1…9 | paste the Nth item from the top, pinned items first (pastes when you let go of Alt) |
 | → / ← (search cursor at the end) | move between the selected row's actions (phone, trash, pin); Enter presses the focused one; Esc, ↑ or ↓ go back to the row |
 | Ctrl+P (or the pin icon) | pin / unpin (Ctrl+F works too) |
@@ -108,6 +108,11 @@ right section, before the audio icon). It uses the standard
 fixed-width bar icon slot, so switching icons never shifts its neighbours.
 Left click opens / closes the history, right click toggles incognito, and it
 turns into the incognito icon (󰗹) while incognito is on. It has no hover tooltip.
+
+## 1.22.0 notes
+
+- Paste queue works with Super+V (Omarchy's universal paste) as well as Ctrl+V. While a queue runs, the stock Super+V bind is swapped for "paste next"; when the queue ends (done, Esc, a new pick, the watchdog) Super+V gets Omarchy's universal paste back (same behaviour: Shift+Insert in terminals, Ctrl+V elsewhere). A Hyprland config reload also restores it.
+- Notifications say Super+V: "Pasted 1 of 4. Super+V pastes 2 next. Esc cancels.", and "Paste it with Super+V." after copying a QR / Wi-Fi / screenshot text.
 
 ## 1.21.0 notes
 

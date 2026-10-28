@@ -92,7 +92,7 @@ Item {
   // ---- paste queue (1.17.0) ------------------------------------------------
   // Ctrl+click (or Ctrl+Space) rows: they get 1, 2, 3 badges in click order.
   // "Paste N in order" (footer button or Ctrl+Enter) hands them to queue.sh,
-  // closes the popup, and every Ctrl+V then pastes the next one. Keys are
+  // closes the popup, and every Super+V / Ctrl+V then pastes the next one. Keys are
   // row keys (type + path + text), so a new copy while the popup is open
   // does not shift the selection. Cleared when the popup closes.
   property var queueKeys: []
@@ -975,7 +975,7 @@ Item {
     root.dropQueue()
     root.copyText(r.copyText)
     root.close()
-    root.notify(r.copyWifi ? "󰌾" : "󰐲", r.copyTip.replace(/^Copy/, "Copied"), "Paste it with Ctrl+V.", 2500)
+    root.notify(r.copyWifi ? "󰌾" : "󰐲", r.copyTip.replace(/^Copy/, "Copied"), "Paste it with Super+V.", 2500)
   }
   function copyOcrText(index) {
     if (index < 0 || index >= displayModel.count) return
@@ -984,7 +984,7 @@ Item {
     root.dropQueue()
     root.copyText(r.ocrText)
     root.close()
-    root.notify("󰆏", r.ocrTip.replace(/^Copy/, "Copied"), "Paste it with Ctrl+V.", 2500)
+    root.notify("󰆏", r.ocrTip.replace(/^Copy/, "Copied"), "Paste it with Super+V.", 2500)
   }
   function openIndex(index) { root.runOnIndex(index, "open") }
   // Settings: copy one language's pacman command (the user runs it).

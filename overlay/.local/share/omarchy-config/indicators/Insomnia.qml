@@ -39,6 +39,17 @@ Item {
   // flip; the change ends with a state file write, which clears pending.
   property int clickGen: 0
   property bool pending: false
+  // Instant for every copy: the clicked copy writes what it now shows here
+  // ({on, t}) at once; all copies watch it and flip in the same frame, so
+  // the other row never waits for the start/stop to finish.
+  readonly property string wantFile: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/omarchy-insomnia.want"
+
+  function adopt(on) {
+    root.pending = true
+    pendingTimer.restart()
+    root.active = on
+    root.countdown = on && root.mode === "laptop" ? "1:00" : ""
+  }
 
   // Same rule as BarIndicator's own visibility. Not button.visible: that is
   // the child's effective visibility, which would latch false with root.
@@ -76,10 +87,8 @@ Item {
     // serializes the changes and rewrites the state file after each one.
     var on = !button.effectiveActive
     root.clickGen++
-    root.pending = true
-    pendingTimer.restart()
-    root.active = on
-    root.countdown = on && root.mode === "laptop" ? "1:00" : ""
+    wantView.setText(JSON.stringify({ on: on, t: Date.now() }) + "\n")
+    root.adopt(on)
     Quickshell.execDetached(["omarchy-insomnia", "set", on ? "on" : "off"])
   }
 
@@ -111,6 +120,21 @@ Item {
     } catch (e) {
       root.active = false
       root.countdown = ""
+    }
+  }
+
+  FileView {
+    id: wantView
+    path: root.wantFile
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try {
+        var w = JSON.parse(String(text() || "").trim())
+        // Only fresh clicks (not the leftover file read at startup).
+        if (Date.now() - Number(w.t) < 3000 && (w.on === true) !== root.active) root.adopt(w.on === true)
+      } catch (e) {}
     }
   }
 

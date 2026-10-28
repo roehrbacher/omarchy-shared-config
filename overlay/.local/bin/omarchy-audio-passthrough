@@ -1,5 +1,5 @@
 #!/bin/bash
-# Control audio passthrough (used by the timon.audio-passthrough bar widget).
+# Control audio passthrough (used by the Mic pass-through section of the timon.audio popup).
 #   status          print JSON: enabled, volume, active, headphones, configured
 #   on | off        write ENABLED and restart audio-passthrough.service
 #   volume <0-150>  set the live passthrough volume and save it

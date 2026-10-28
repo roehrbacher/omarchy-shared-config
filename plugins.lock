@@ -2,4 +2,4 @@
 # (no .git, so `omarchy plugin update` cannot move them). Update only after
 # reviewing the upstream diff from the commit below.
 # id                              upstream repo                                          reviewed commit                            reviewed    notes
-jankeesvw.notification-center     https://github.com/jankeesvw/omarchy-notification-center 1784e198596c2c5933dd99836321db5e2eafd117   2026-10-16  unmodified
+jankeesvw.notification-center     https://github.com/jankeesvw/omarchy-notification-center 87235f1c1334ec3fa9c20aa7a97b0a732267326c   2026-10-27  unmodified

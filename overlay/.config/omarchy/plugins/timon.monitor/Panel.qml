@@ -54,7 +54,9 @@ Panel {
     if (m === "not running") return "Service not running"
     return "Waiting (" + m + ")" + lux
   }
-  Process { id: autoStatusProc; command: [root.autoTool, "status"]; stdout: StdioCollector { onStreamFinished: root.autoApply(text) } }
+  // Only where auto brightness is installed (the XPS): elsewhere nothing is
+  // started, so the PC logs no "failed to start" warning.
+  Process { id: autoStatusProc; command: ["sh", "-c", 'test -x "$1" && exec "$1" status', "sh", root.autoTool]; stdout: StdioCollector { onStreamFinished: root.autoApply(text) } }
   Process { id: autoActionProc; stdout: StdioCollector { onStreamFinished: root.autoApply(text) } }
   Timer {
     // Once at start (to learn whether the service exists), then only while open.
@@ -85,7 +87,9 @@ Panel {
       if (display && display.focused)
         return Model.availableScales(scalePresets, display.width, display.height)
     }
-    return scalePresets
+    // At startup this can run before scalePresets is set; never hand out
+    // undefined (it logged "Cannot read property 'length'" on every start).
+    return scalePresets || []
   }
   property string focusSection: "scale"
   property int selectedIndex: 0
@@ -121,7 +125,7 @@ Panel {
   function sectionCount(section) {
     if (section === "brightness") return 0  // only the slider sentinel at -1
     if (section === "textsize") return 0    // slider sentinel at -1, like brightness
-    if (section === "scale") return scaleValues.length
+    if (section === "scale") return (scaleValues || []).length
     if (section === "monitors") return displays.length
     return 0
   }

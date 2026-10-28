@@ -13,6 +13,8 @@ check() { if [[ $2 == "$3" ]]; then echo "ok   $1"; else echo "FAIL $1: got '$2'
 
 out=$(printf '%s' '[{"type":"text","text":"one"},{"type":"text","text":"two"},{"type":"text","text":"three"}]' | "$here/queue.sh" start)
 check "start binds Ctrl+V" "$(grep -c 'hl.bind("CTRL + V"' <<<"$out")" 1
+check "start binds Super+V to next (1.22.0)" "$(grep -c 'hl.bind("SUPER + V", hl.dsp.exec_cmd("setsid -f .*queue.sh next")' <<<"$out")" 1
+check "start swaps out the stock Super+V first" "$(grep -nE 'unbind\("SUPER \+ V"\)|bind\("SUPER \+ V", hl.dsp' <<<"$out" | head -1 | grep -c unbind)" 1
 check "start binds Esc" "$(grep -c 'hl.bind("Escape"' <<<"$out")" 1
 check "start notification (1.21.0 text)" "$(grep '^notify' <<<"$out")" "notify Paste queue ready:|Paste 1 of 3. Esc cancels."
 check "queue file is 0600" "$(stat -c %a "$Q")" 600
@@ -26,11 +28,12 @@ check "2nd Ctrl+V copies item 2" "$(cat "$tmp/clip")" two
 out=$("$here/queue.sh" next)
 check "3rd Ctrl+V copies item 3" "$(cat "$tmp/clip")" three
 check "after the last: done" "$(grep -o 'Pasted 3 of 3. Done.' <<<"$out")" "Pasted 3 of 3. Done."
-check "after the last: unbinds" "$(grep -c 'hl.unbind' <<<"$out")" 2
+check "after the last: unbinds" "$(grep -c 'hl.unbind' <<<"$out")" 3
+check "after the last: universal paste back on Super+V" "$(grep -c 'hl.bind("SUPER + V", function() .*send_key_state.*"Universal paste"' <<<"$out")" 1
 check "after the last: queue file gone" "$([[ -e $Q ]] && echo yes || echo no)" no
 check "status empty" "$("$here/queue.sh" status)" ""
 out=$("$here/queue.sh" next)
-check "Ctrl+V with no queue only unbinds" "$(grep -c 'send_key_state' <<<"$out")" 0
+check "Ctrl+V with no queue only unbinds (no key sent)" "$(grep -c '^hyprctl dispatch' <<<"$out")" 0
 
 printf '%s' '[{"type":"text","text":"a"},{"type":"text","text":"b"}]' | "$here/queue.sh" start >/dev/null
 "$here/queue.sh" next >/dev/null
@@ -44,7 +47,8 @@ check "cancel: queue file gone" "$([[ -e $Q ]] && echo yes || echo no)" no
 printf '%s' '[{"type":"text","text":"a"},{"type":"text","text":"b"}]' | "$here/queue.sh" start >/dev/null
 out=$("$here/queue.sh" cancel quiet)
 check "quiet cancel: no notification" "$(grep -c '^notify' <<<"$out")" 0
-check "quiet cancel: unbinds Ctrl+V and Esc" "$(grep -c 'hl.unbind' <<<"$out")" 2
+check "quiet cancel: unbinds Ctrl+V, Super+V and Esc" "$(grep -c 'hl.unbind' <<<"$out")" 3
+check "quiet cancel: universal paste restored" "$(grep -c '"Universal paste"' <<<"$out")" 1
 check "quiet cancel: Esc not sent on" "$(grep -c 'key = "Escape", state' <<<"$out")" 0
 check "quiet cancel: queue file gone" "$([[ -e $Q ]] && echo yes || echo no)" no
 

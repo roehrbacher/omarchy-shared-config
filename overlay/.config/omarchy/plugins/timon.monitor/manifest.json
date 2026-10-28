@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "timon.monitor",
   "name": "My Display",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "Omarchy",
   "description": "Brightness, auto brightness (if installed), text size and scale",
   "kinds": [

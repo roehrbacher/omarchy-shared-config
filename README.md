@@ -461,18 +461,20 @@ never shows it.
 Default agent (set by hand), stock Omarchy hooks/branding/menu, monitor scale on
 the XPS, idle timings (stock 150 s / 300 s), passwords and app sessions.
 
-## Audio passthrough
+## Mic pass-through (audio passthrough)
 
 `audio-passthrough.service` (`audio-passthrough-watch`) plays your mic into the
 headphones with a `pw-loopback` (two plain streams, mixer name "Audio
 passthrough"), only while the headphone sink is the default output. The
 headphones come from `~/.config/omarchy/audio-passthrough.machine.conf`
 (`SINK=`, set by a machine repo); without it, or with them missing, it stays
-idle. The mic is always the system default input and follows it live. On/off and level: the `timon.audio-passthrough` bar
-widget or `omarchy-audio-passthrough on|off|volume N`, saved to
-`~/.config/omarchy/audio-passthrough.conf`. The widget's INPUT list (or
-`omarchy-audio-passthrough sources` / `source <node-name>`) sets the system
-default mic, exactly like the stock audio panel.
+idle. The mic is always the system default input and follows it live. On/off and level:
+the **Mic pass-through** section of the audio popup (`timon.audio`, our clone of
+the stock audio panel: switch, slider 0-150 % and a click-to-type number), or
+`omarchy-audio-passthrough on|off|volume N`, saved to
+`~/.config/omarchy/audio-passthrough.conf`. The mic is picked in the popup's
+INPUT list, like with the stock panel. (Until 2026-10-28 this was a separate
+`timon.audio-passthrough` bar widget; install.sh removes it.)
 
 ## Packages
 

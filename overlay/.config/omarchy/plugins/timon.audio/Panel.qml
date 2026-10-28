@@ -14,6 +14,59 @@ Panel {
   ipcTarget: "omarchy.audio"
 
   readonly property var sink: Pipewire.defaultAudioSink
+
+  // ---- Mic pass-through (timon): hear your own mic in the headphones ----
+  // Was the separate timon.audio-passthrough widget. Same backend
+  // (~/.local/bin/omarchy-audio-passthrough, audio-passthrough.conf ENABLED /
+  // VOLUME, per-machine devices in audio-passthrough.machine.conf).
+  readonly property string passTool: Quickshell.env("HOME") + "/.local/bin/omarchy-audio-passthrough"
+  property bool passAvailable: false
+  property bool passOn: false
+  property real passVolume: 50
+  property bool passActive: false
+  property bool passHeadphones: false
+  property bool passConfigured: true
+  property int passEditing: 0
+  property bool passDragging: false
+  property real passPending: -1
+  function passApply(text) {
+    try { var d = JSON.parse(text) } catch (e) { return }
+    root.passAvailable = true
+    root.passOn = !!d.enabled
+    if (!root.passDragging && root.passPending < 0 && root.passEditing === 0) root.passVolume = Number(d.volume) || 0
+    root.passActive = !!d.active
+    root.passHeadphones = !!d.headphones
+    root.passConfigured = d.configured !== false
+  }
+  function passRun(args) { passActionProc.command = [root.passTool].concat(args); passActionProc.running = true }
+  function passSetOn(on) { root.passOn = on; root.passRun([on ? "on" : "off"]) }
+  function passQueueVolume(v) { root.passVolume = Math.round(v); root.passPending = root.passVolume; passVolumeTimer.restart() }
+  function passStatusLine() {
+    if (!root.passConfigured) return "No headphones set for this machine"
+    if (!root.passOn) return "Hear your own mic in the headphones"
+    if (root.passActive) return "On: you hear your mic in the headphones"
+    if (!root.passHeadphones) return "On, works only with the headphones"
+    return "On, starting…"
+  }
+  Process { id: passStatusProc; command: [root.passTool, "status"]; stdout: StdioCollector { onStreamFinished: root.passApply(text) } }
+  Process { id: passActionProc; stdout: StdioCollector { onStreamFinished: root.passApply(text) } }
+  Timer {
+    id: passVolumeTimer
+    interval: 150
+    onTriggered: {
+      if (root.passPending < 0) return
+      if (passActionProc.running) { restart(); return }
+      var v = root.passPending; root.passPending = -1
+      root.passRun(["volume", String(v)])
+    }
+  }
+  Timer {
+    interval: 2000
+    repeat: true
+    running: root.opened
+    triggeredOnStart: true
+    onTriggered: if (!passStatusProc.running && !passActionProc.running && !root.passDragging && root.passEditing === 0) passStatusProc.running = true
+  }
   readonly property var source: Pipewire.defaultAudioSource
   readonly property var nodes: Pipewire.nodes ? Pipewire.nodes.values : []
   readonly property var mprisPlayers: Mpris.players ? Mpris.players.values : []
@@ -731,6 +784,7 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      blocked: root.passEditing > 0
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
         if (dy !== 0) root.moveCursor(dy)
@@ -1038,6 +1092,94 @@ Panel {
                 width: panelColumn.width
                 node: modelData
                 rowIndex: index
+              }
+            }
+          }
+
+          // ---- Mic pass-through (timon) ----
+          PanelSeparator {
+            visible: root.passAvailable
+            foreground: root.bar.foreground
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(6)
+            visible: root.passAvailable
+
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(passHeader.implicitHeight, passSwitch.implicitHeight)
+
+              PanelSectionHeader {
+                id: passHeader
+                text: "MIC PASS-THROUGH"
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              ToggleSwitch {
+                id: passSwitch
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(6)
+                anchors.verticalCenter: parent.verticalCenter
+                checked: root.passOn
+                busy: passActionProc.running
+                foreground: root.bar.foreground
+                onToggled: root.passSetOn(!root.passOn)
+              }
+            }
+
+            Text {
+              width: parent.width
+              textFormat: Text.PlainText
+              text: root.passStatusLine()
+              color: Qt.darker(root.bar.foreground, 1.4)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+              leftPadding: Style.space(6)
+            }
+
+            Item {
+              width: parent.width
+              visible: root.passOn
+              implicitHeight: Math.max(passSlider.implicitHeight, passNumber.implicitHeight)
+
+              PanelSlider {
+                id: passSlider
+                bar: root.bar
+                anchors.left: parent.left
+                anchors.right: passNumber.left
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                minimum: 0
+                maximum: 150
+                step: 5
+                integer: true
+                value: root.passVolume
+                onDraggingChanged: root.passDragging = dragging
+                onMoved: function(v) { root.passQueueVolume(v) }
+                onReleased: function(v) { root.passQueueVolume(v) }
+              }
+
+              EditableNumber {
+                id: passNumber
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(6)
+                anchors.verticalCenter: parent.verticalCenter
+                value: root.passVolume
+                minimum: 0
+                maximum: 150
+                decimals: 0
+                suffix: "%"
+                color: Qt.darker(root.bar.foreground, 1.4)
+                editColor: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                onEditingChanged: root.passEditing += editing ? 1 : -1
+                onCommitted: function(next) { root.passQueueVolume(next) }
               }
             }
           }

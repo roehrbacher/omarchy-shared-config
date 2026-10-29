@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "timon.overview",
+  "name": "Workspace Overview",
+  "version": "0.1.0",
+  "author": "Timon Röhrbacher",
+  "description": "GNOME-style overview of every workspace with its windows. Click a window to focus it, a workspace to switch, drag a window to move it.",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Overview.qml"
+  }
+}

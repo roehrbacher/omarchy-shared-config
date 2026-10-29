@@ -99,3 +99,7 @@ hl.unbind("SUPER + mouse_down")
 hl.unbind("SUPER + mouse_up")
 o.bind("SUPER + mouse_down", "Scroll active workspace forward", "setsid -f omarchy-workspace-scroll next")
 o.bind("SUPER + mouse_up", "Scroll active workspace backward", "setsid -f omarchy-workspace-scroll prev")
+
+-- Workspace overview (timon.overview, github.com/roehrbacher/omarchy-overview)
+-- on Super+^ (physical key left of 1 = code:49, any layout). Toggles.
+o.bind("SUPER + code:49", "Workspace overview", "omarchy-shell shell toggle timon.overview")

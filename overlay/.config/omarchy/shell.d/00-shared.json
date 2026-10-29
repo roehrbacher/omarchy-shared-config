@@ -17,6 +17,9 @@
     },
     {
       "id": "timon.clipboard"
+    },
+    {
+      "id": "timon.overview"
     }
   ],
   "disabledPlugins": [

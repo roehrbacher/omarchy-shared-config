@@ -55,6 +55,9 @@
 #                                     shows (on = like click; no-op if already)
 #   omarchy-insomnia status [--json]
 #   omarchy-insomnia menu                               picker (bar widget)
+#   omarchy-insomnia lock-off         keep (or turn) Insomnia on, then lock and
+#                                     turn the screens off (omarchy-screen-off;
+#                                     any key or mouse move wakes them)
 #   omarchy-insomnia check-floor <percent> <battery|ac> dry-run of the floor rule
 #   omarchy-insomnia check-start <percent> <battery|ac> dry-run of the start rule
 #
@@ -321,12 +324,24 @@ ended() {
   insomnia_on_end "$reason"
 }
 
+# Insomnia stays (or is set) on, then lock + screens off. Same absolute
+# "set on" rule as the bar icon; the start's own lock-on-start is skipped so
+# the lock runs once.
+lock_off() {
+  if ! active; then
+    if [[ $INSOMNIA_MODE == laptop ]]; then INSOMNIA_LOCK_ON_START=0 start 1h; else INSOMNIA_LOCK_ON_START=0 start on; fi
+    active || { echo "Insomnia did not start, not locking" >&2; return 1; }
+  fi
+  if [[ -n ${INSOMNIA_DRY_RUN:-} ]]; then echo "dry-run: would lock + turn the screen off"; return 0; fi
+  setsid -f omarchy-screen-off >/dev/null 2>&1 </dev/null
+}
+
 menu() {
   local opts=() choice
   if active; then
-    opts+=("󰈉	Stop	$(status_line)" "󰐕	+30 min" "󰐕	+1 h" "󰐕	+2 h" "󰐕	Until turned off")
+    opts+=("󰈉	Stop	$(status_line)" "󰐕	+30 min" "󰐕	+1 h" "󰐕	+2 h" "󰐕	Until turned off" "󰌾	Lock and turn screen off")
   else
-    opts+=("󰔛	30 min" "󰔛	1 h" "󰔛	2 h" "󰔛	4 h" "󰔟	Until turned off")
+    opts+=("󰔛	30 min" "󰔛	1 h" "󰔛	2 h" "󰔛	4 h" "󰔟	Until turned off" "󰌾	Turn on Insomnia, lock and turn screen off")
   fi
   choice=$(omarchy-menu-select "Insomnia" "${opts[@]}") || exit 0
   case "${choice%%	*}" in
@@ -339,11 +354,12 @@ menu() {
   "2 h") start 2h ;;
   "4 h") start 4h ;;
   "Until turned off") if active; then extend on; else start on; fi ;;
+  "Lock and turn screen off" | "Turn on Insomnia, lock and turn screen off") lock_off ;;
   esac
 }
 
 case "${1:-}" in
-start | extend | stop | click | set | toggle | menu) lock -x -w 30 || true ;;
+start | extend | stop | click | set | toggle | menu | lock-off) lock -x -w 30 || true ;;
 status) lock -s -w 3 || true ;;
 esac
 
@@ -360,6 +376,7 @@ extend) extend "${2:-1h}" ;;
 stop) stop ;;
 status) status "${2:-}" ;;
 menu) menu ;;
+lock-off) trap changed EXIT; lock_off ;;
 click) if active; then stop; elif [[ $INSOMNIA_MODE == laptop ]]; then start 1h; else start on; fi ;;
 toggle) if active; then stop; else start "${2:-1h}"; fi ;;
 check-floor)

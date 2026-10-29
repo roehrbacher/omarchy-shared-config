@@ -99,6 +99,10 @@ modifier_release_timeout_ms = 750
 # command = "ollama run llama3.2:1b 'Clean up this dictation. Fix grammar, remove filler words. Output only the cleaned text:'"
 # timeout_ms = 30000  # 30 second timeout (generous for LLM)
 
+[output.post_process]
+command = "~/.local/bin/voxtype-cleanup"
+timeout_ms = 10000
+
 [output.notification]
 # Show notification when recording starts (hotkey pressed)
 on_recording_start = false

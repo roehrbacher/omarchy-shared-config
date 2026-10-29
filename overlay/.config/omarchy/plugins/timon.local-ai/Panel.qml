@@ -6,7 +6,7 @@ import qs.Ui
 
 // Local AI: skull and crossbones in the bar while one of your own models
 // (a llama.cpp systemd user service) is running. Click for a panel with one
-// switch per model. Models come from ~/.config/omarchy/local-ai.json (plus
+// switch per model; right-click loads/unloads the running or first model. Models come from ~/.config/omarchy/local-ai.json (plus
 // auto-discovered llama-*.service units); local-ai.py does the systemctl work.
 // Downloaded .gguf files that no model unit uses yet are listed below them
 // (read only), so a new download shows up before it is set up to run.
@@ -123,6 +123,11 @@ Panel {
     setModel(m.unit, !wanted(m))
   }
 
+  // Model a right-click acts on: the one loading or running, else the first
+  // listed (the default). Same toggle path as the popup switch.
+  readonly property var quickModel: loadingModel || runningModel || (models.length > 0 ? models[0] : null)
+  function quickToggle() { toggleModel(quickModel) }
+
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -182,6 +187,7 @@ Panel {
     function refresh(): string { root.refresh(); return "ok" }
     function start(unit: string): string { root.setModel(unit, true); return "ok" }
     function stop(unit: string): string { root.setModel(unit, false); return "ok" }
+    function quickToggle(): string { root.quickToggle(); return root.quickModel ? root.quickModel.unit : "none" }
     function status(): string {
       return JSON.stringify({ active: root.anyActive, loading: root.loading, summary: root.summary,
                               exclusive: root.exclusive, models: root.models, files: root.files, pending: root.pending,
@@ -199,6 +205,7 @@ Panel {
     tooltipText: root.summary
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.MiddleButton) root.refresh()
+      else if (buttonCode === Qt.RightButton) root.quickToggle()
       else root.toggle()
     }
   }

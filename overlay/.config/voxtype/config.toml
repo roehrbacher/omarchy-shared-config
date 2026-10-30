@@ -74,20 +74,26 @@ initial_prompt = "Omarchy, OmaCalc, Hyprland, Grok, Grok Bot, Grok Build, Voxtyp
 # threads = 4
 
 [output]
-# Primary output mode: "type" or "clipboard"
-# - type: Simulates keyboard input at cursor position (requires ydotool)
-# - clipboard: Copies text to clipboard (requires wl-copy)
-mode = "type"
+# Output mode: "paste" puts the text on the clipboard and sends ONE paste
+# keystroke, instead of typing letter by letter (typed letters fired
+# shortcuts when Super/Shift still counted as held, Oct 30).
+mode = "paste"
+# Shift+Insert pastes in terminals and in GUI apps alike (Ctrl+V does not
+# paste in terminals).
+paste_keys = "shift+insert"
+# Put the previous clipboard contents back after pasting.
+restore_clipboard = true
+restore_clipboard_delay_ms = 300
 
-# Fall back to clipboard if typing fails
+# Fall back to clipboard if pasting fails
 fallback_to_clipboard = true
 
-# Delay between typed characters in milliseconds
-# 0 = fastest possible, increase if characters are dropped
 type_delay_ms = 1
-# Wait until the push-to-talk key's modifiers are released before typing.
+# Wait until Ctrl, Alt, Shift and Super are released before pasting. If they
+# are still held after the timeout, Voxtype sends no keystroke at all: the
+# text is only copied to the clipboard and a notification says so.
 wait_for_modifier_release = true
-modifier_release_timeout_ms = 750
+modifier_release_timeout_ms = 3000
 
 # Post-processing command (optional)
 # Pipe transcribed text through an external command for cleanup before output.

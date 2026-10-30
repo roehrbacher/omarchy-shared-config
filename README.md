@@ -158,7 +158,7 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
   copy of 96f9ae6): GNOME-style workspace overview, every workspace side by side with live
   previews, on Super+A (XPS: three-finger swipe up, finger-synced).
 - `timon.clipboard` 1.5.0 ("Nice Clipboard History") – **my own plugin** (private repo
-  github.com/roehrbacher/omarchy-clipboard, copy of 6d73d4c; details, keys and
+  github.com/roehrbacher/Nice-Clipboard ("Nice Clipboard"), copy of 7170e42; details, keys and
   tests in its `README.md`). Clipboard history with the UX of GNOME Clipboard
   History, built on and replacing Omarchy's stock clipboard manager as a clone
   (`omarchy.clipboard` is in `disabledPlugins`, so only one watcher runs and

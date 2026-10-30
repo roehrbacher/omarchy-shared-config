@@ -3,7 +3,7 @@
 //
 // Based on Omarchy's stock clipboard plugin (shell/plugins/clipboard), plus
 // pinned entries, regex search and a limit that only counts unpinned entries,
-// modelled on GNOME Clipboard History.
+// for Nice Clipboard.
 
 function normalizeEntry(value) {
   if (typeof value === "string")

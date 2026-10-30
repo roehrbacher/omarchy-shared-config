@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "timon.clipboard",
-  "name": "Nice Clipboard History",
-  "version": "1.22.0",
+  "name": "Nice Clipboard",
+  "version": "1.23.0",
   "author": "Timon Röhrbacher (based on Omarchy's clipboard manager)",
   "license": "MIT",
-  "description": "Clipboard history with pinned items, incognito mode and regex search, modelled on GNOME Clipboard History",
+  "description": "Clipboard history for Omarchy with pinned items, paste queue, incognito, OCR, QR codes and Flux phone sync",
   "kinds": [
     "overlay",
     "bar-widget"
@@ -16,7 +16,7 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Nice Clipboard History",
+    "displayName": "Nice Clipboard",
     "description": "Open clipboard history; shows when incognito is on",
     "category": "Utilities",
     "allowMultiple": false,

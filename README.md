@@ -154,8 +154,9 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
 
 - `jankeesvw.notification-center` 1.2.0 – bell with your notification history
   (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 1784e19)
-- `timon.overview` 0.1.0 – **my own plugin** (private repo github.com/roehrbacher/omarchy-overview,
-  copy of c65296b): GNOME-style workspace overview on Super+^ (XPS: three-finger swipe up).
+- `timon.overview` 0.2.0 – **my own plugin** (private repo github.com/roehrbacher/omarchy-overview,
+  copy of 96f9ae6): GNOME-style workspace overview, every workspace side by side with live
+  previews, on Super+A (XPS: three-finger swipe up, finger-synced).
 - `timon.clipboard` 1.5.0 ("Nice Clipboard History") – **my own plugin** (private repo
   github.com/roehrbacher/omarchy-clipboard, copy of 6d73d4c; details, keys and
   tests in its `README.md`). Clipboard history with the UX of GNOME Clipboard

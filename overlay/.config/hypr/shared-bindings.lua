@@ -95,6 +95,5 @@ o.bind("SUPER + F", "Full screen", "omarchy-fullscreen-smart")
 -- workspaces only, empty ones skipped) are used as-is.
 
 -- Workspace overview (timon.overview, github.com/roehrbacher/omarchy-overview)
--- on Super+^ (German dead circumflex / US caret, key left of 1). Toggles.
-o.bind("SUPER + dead_circumflex", "Workspace overview", "omarchy-shell shell toggle timon.overview")
-o.bind("SUPER + asciicircum", "Workspace overview", "omarchy-shell shell toggle timon.overview")
+-- on Super+A (Super+Ctrl+A audio, Super+Shift+A ChatGPT, Super+Shift+Alt+A Grok stay). Toggles.
+o.bind("SUPER + A", "Workspace overview", "omarchy-shell shell toggle timon.overview")

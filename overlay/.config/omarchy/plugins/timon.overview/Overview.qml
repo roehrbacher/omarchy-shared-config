@@ -8,7 +8,11 @@ import qs.Commons as Commons
 
 // Workspace overview overlay. Summon: omarchy-shell shell toggle timon.overview
 // Read-only snapshot of Hyprland (hyprctl -j) on every open; actions go
-// through hyprctl dispatch. Nothing runs while it is closed.
+// through hyprctl dispatch.
+// Finger sync: the touchpad gesture (hypr show-desktop.lua) writes one line
+// "<open|close> <track|commit|cancel> <0..1>" to $XDG_RUNTIME_DIR/timon-overview-gesture
+// on every gesture update; this overlay follows it 1:1 (inotify, no process per
+// update). Keys and clicks animate the same progress instead.
 Item {
   id: root
 
@@ -19,18 +23,52 @@ Item {
   property var monitor: ({ x: 0, y: 0, w: 1920, h: 1080 })
   property string monitorName: ""
   property int activeId: -1
+  property real progress: 0          // 0 = desktop, 1 = overview
+  property bool tracking: false      // fingers on the touchpad drive progress
+  property bool closing: false
+  property bool loading: false
+  property real gestureP: 0
+  property int anchorIndex: 0
+  readonly property string gesturePath: Quickshell.env("TIMON_OVERVIEW_GESTURE")
+    || ((Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/timon-overview-gesture")   // env: tests only
+
+  NumberAnimation {
+    id: anim
+    target: root; property: "progress"
+    easing.type: Easing.OutCubic
+    property var done: null
+    onFinished: { var f = done; done = null; if (f) f() }
+  }
+  function animateTo(to, done) {
+    anim.stop()
+    anim.done = done || null
+    anim.from = root.progress; anim.to = to
+    anim.duration = Math.round(80 + 220 * Math.abs(to - root.progress))
+    anim.start()
+  }
 
   function open(payloadJson) {
-    if (root.opened) return
+    if (root.opened || root.loading) return
+    var gesture = false
+    try { gesture = JSON.parse(payloadJson || "{}").gesture === true } catch (e) {}
+    root.tracking = gesture || root.tracking
+    root.loading = true
     Hyprland.refreshToplevels()
     snapshot.running = true
   }
-  function close() { root.opened = false }
-  function dismiss() {
-    root.opened = false
-    if (root.shell && typeof root.shell.hide === "function")
-      root.shell.hide((root.manifest && root.manifest.id) || "timon.overview")
+  // Animate out (zooming into the anchor tile), then tell the shell.
+  function close() {
+    if (!root.opened || root.closing) return
+    root.closing = true
+    root.tracking = false
+    root.animateTo(0, function() {
+      root.opened = false
+      root.closing = false
+      if (root.shell && typeof root.shell.hide === "function")
+        root.shell.hide((root.manifest && root.manifest.id) || "timon.overview")
+    })
   }
+  function dismiss() { root.close() }
   function toggle() { if (root.opened) root.dismiss(); else root.open("{}") }
 
   function iconFor(cls) {
@@ -52,11 +90,11 @@ Item {
 
   function load(raw) {
     var d
-    try { d = JSON.parse(raw) } catch (e) { console.warn("timon.overview: bad hyprctl json", e); return }
+    try { d = JSON.parse(raw) } catch (e) { console.warn("timon.overview: bad hyprctl json", e); root.loading = false; return }
     var mon = null
     for (var i = 0; i < d.m.length; i++) if (d.m[i].focused) mon = d.m[i]
     if (!mon) mon = d.m[0]
-    if (!mon) return
+    if (!mon) { root.loading = false; return }
     var s = mon.scale || 1
     var rotated = mon.transform % 2 === 1
     root.monitorName = mon.name
@@ -84,8 +122,59 @@ Item {
     }
     root.workspaces = out
     view.selectedIndex = Math.max(0, ids.indexOf(root.activeId))
-    root.opened = true
-    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    root.anchorIndex = Math.max(0, ids.indexOf(root.activeId))
+    if (!root.opened) {
+      root.loading = false
+      root.progress = 0
+      root.opened = true
+      if (root.tracking) root.progress = root.gestureP
+      else root.animateTo(1)
+      Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    }
+  }
+
+  property string lastGesture: ""
+  function onGesture(line) {
+    line = String(line || "").trim()
+    if (line === root.lastGesture) return
+    root.lastGesture = line
+    var f = line.split(/\s+/)
+    if (f.length < 3) return
+    var dir = f[0], state = f[1], p = Math.max(0, Math.min(1, Number(f[2]) || 0))
+    if (dir === "open") {
+      if (state === "track") {
+        root.gestureP = p
+        if (!root.opened && !root.loading) { root.tracking = true; root.open("{\"gesture\":true}") }
+        else if (root.opened && !root.closing) { root.tracking = true; anim.stop(); root.progress = p }
+      } else if (state === "commit") {
+        root.tracking = false
+        if (root.opened && !root.closing) root.animateTo(1)
+      } else if (state === "cancel") {
+        root.tracking = false
+        if (root.opened) root.close()
+        else root.loading = false
+      }
+    } else if (dir === "close" && root.opened && !root.closing) {
+      if (state === "track") { root.tracking = true; anim.stop(); root.progress = 1 - p }
+      else if (state === "commit") root.close()
+      else if (state === "cancel") { root.tracking = false; root.animateTo(1) }
+    }
+  }
+
+  FileView {
+    id: gestureFile
+    path: root.gesturePath
+    watchChanges: true
+    blockLoading: true
+    printErrors: false
+    onFileChanged: { reload(); root.onGesture(text()) }
+  }
+  // inotify can drop a change that lands right after a reload; while fingers
+  // are down, also re-read every 50 ms so a final commit/cancel is never missed.
+  Timer {
+    interval: 50; repeat: true
+    running: root.tracking || root.loading
+    onTriggered: { gestureFile.reload(); root.onGesture(gestureFile.text()) }
   }
 
   function dispatch(lua) { Quickshell.execDetached(["hyprctl", "dispatch", lua]) }
@@ -115,10 +204,9 @@ Item {
     OverviewView {
       id: view
       anchors.fill: parent
-      opacity: root.opened ? 1 : 0
-      scale: root.opened ? 1 : 1.04
-      Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-      Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      progress: root.progress
+      anchorIndex: root.anchorIndex
+      live: root.opened
 
       workspaces: root.workspaces
       monitor: root.monitor
@@ -133,8 +221,8 @@ Item {
       radius: Style.cornerRadius
 
       onDismissRequested: root.dismiss()
-      onFocusWindow: function(address) { root.dismiss(); root.dispatch("hl.dsp.focus({ window = " + root.q("address:" + address) + " })") }
-      onSwitchWorkspace: function(id) { root.dismiss(); root.dispatch("hl.dsp.focus({ workspace = " + root.q(id) + " })") }
+      onFocusWindow: function(address, tileIndex) { root.anchorIndex = tileIndex; root.dismiss(); root.dispatch("hl.dsp.focus({ window = " + root.q("address:" + address) + " })") }
+      onSwitchWorkspace: function(id, tileIndex) { root.anchorIndex = tileIndex; root.dismiss(); root.dispatch("hl.dsp.focus({ workspace = " + root.q(id) + " })") }
       onMoveWindow: function(address, wsId) {
         root.dispatch("hl.dsp.window.move({ workspace = " + root.q(wsId) + ", follow = false, window = " + root.q("address:" + address) + " })")
         refreshTimer.restart()
@@ -154,9 +242,11 @@ Item {
         else if (event.key === Qt.Key_Left || event.key === Qt.Key_Backtab) view.selectedIndex = (view.selectedIndex - 1 + n) % Math.max(1, n)
         else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && n > 0) {
           var id = root.workspaces[view.selectedIndex].id
+          root.anchorIndex = view.selectedIndex
           root.dismiss(); root.dispatch("hl.dsp.focus({ workspace = " + root.q(id) + " })")
         } else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
           var target = event.key - Qt.Key_0
+          for (var t = 0; t < n; t++) if (root.workspaces[t].id === target) root.anchorIndex = t
           root.dismiss(); root.dispatch("hl.dsp.focus({ workspace = " + root.q(target) + " })")
         } else return
         event.accepted = true

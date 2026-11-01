@@ -44,11 +44,13 @@ o.bind("SUPER + SHIFT + E", "Email", { webapp = "https://mail.proton.me" })
 -- YouTube web app is not used.
 hl.unbind("SUPER + SHIFT + Y")
 
--- Grok Bot desktop app on SUPER + SHIFT + B: focuses the open window, or starts
--- it. Window class is "grok-bot" on both machines. Replaces stock Browser on
--- this key; the browser stays on stock SUPER + SHIFT + RETURN.
+-- Grok Bot desktop app on SUPER + B: focuses the open window, or starts it.
+-- Window class is "grok-bot" on both machines. Bitwarden on SUPER + SHIFT + B
+-- (replaces stock Browser there; the browser stays on SUPER + SHIFT + RETURN).
+hl.unbind("SUPER + B")
+o.bind("SUPER + B", "Grok Bot", { launch = "grok-bot", focus = "^grok-bot$" })
 hl.unbind("SUPER + SHIFT + B")
-o.bind("SUPER + SHIFT + B", "Grok Bot", { launch = "grok-bot", focus = "^grok-bot$" })
+o.bind("SUPER + SHIFT + B", "Bitwarden", { launch = "bitwarden-desktop", focus = "^Bitwarden$" })
 
 -- Telegram on SUPER + SHIFT + T: focuses the open window, or starts it.
 o.bind("SUPER + SHIFT + T", "Telegram", { launch = "Telegram", focus = "^org.telegram.desktop$" })

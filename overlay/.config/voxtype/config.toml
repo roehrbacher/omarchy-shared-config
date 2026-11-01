@@ -105,6 +105,12 @@ modifier_release_timeout_ms = 3000
 # command = "ollama run llama3.2:1b 'Clean up this dictation. Fix grammar, remove filler words. Output only the cleaned text:'"
 # timeout_ms = 30000  # 30 second timeout (generous for LLM)
 
+[output.post_process]
+# Strip "Thank you." / "Thanks for watching!" that Whisper invents on the
+# trailing silence of a clip (logged to ~/.local/state/voxtype/stripped.log).
+command = "@HOME@/.local/bin/voxtype-strip-hallucinations"
+timeout_ms = 2000
+
 [output.notification]
 # Show notification when recording starts (hotkey pressed)
 on_recording_start = false

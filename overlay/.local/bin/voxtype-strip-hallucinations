@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Voxtype post-process: drop the phrases Whisper invents on trailing silence
+# ("Thank you.", "Thanks for watching!", ZDF subtitle credits) when they come
+# after real speech. A dictation that is only "Thank you." is left alone.
+# Removed tails are logged to ~/.local/state/voxtype/stripped.log.
+in=$(cat)
+out=$(printf '%s' "$in" | perl -0777 -pe '
+  my $p = qr/(?:thank\s+you(?:\s+(?:so\s+much|for\s+watching))?|thanks\s+for\s+watching|please\s+subscribe|vielen\s+dank(?:\s+f(?:ü|ue)rs\s+zuschauen)?|danke\s+f(?:ü|ue)rs\s+zuschauen|untertitel\s+(?:im\s+auftrag\s+des\s+zdf|von\s+stephanie\s+geiges)[^.!?]*)[.!?]*/i;
+  1 while s/(\S[.!?,])\s+$p\s*$/$1/;
+')
+if [[ $out != "$in" ]]; then
+  d=${XDG_STATE_HOME:-$HOME/.local/state}/voxtype; mkdir -p "$d"
+  printf '%s stripped: %s\n' "$(date -Is)" "${in:${#out}}" >>"$d/stripped.log"
+fi
+printf '%s' "$out"

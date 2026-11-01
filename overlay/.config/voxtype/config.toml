@@ -15,7 +15,7 @@ state_file = "auto"
 engine = "whisper"
 
 [hotkey]
-# Hyprland owns the hotkey (PC: Context Menu, XPS: Copilot key, hold to talk).
+# Hyprland owns the hotkey (Super+D toggles recording on both machines).
 # Keep the evdev listener off so the two paths cannot double-fire.
 enabled = false
 

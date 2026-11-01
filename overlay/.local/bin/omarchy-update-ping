@@ -8,10 +8,19 @@
 #                                (silent no-op if the env file is missing)
 #   omarchy-update-ping --setup  ask for URL + key, write the env file, test it
 #   omarchy-update-ping --test   send a ping with version "test" and report
+#   omarchy-update-ping --dry-run [VERSION]
+#                                say whether a ping would be sent; sends nothing
+# Only pings when the version differs from the last one sent, stored in
+# $HOME/.local/state/omarchy-update-webhook/last-version.
 # Undo: delete the env file, or the hook post-update.d/update-ping.
 set -u
 ENV_DIR="$HOME/.config/omarchy-local"
 ENV_FILE="$ENV_DIR/update-ping.env"
+STATE_DIR="$HOME/.local/state/omarchy-update-webhook"
+STATE_FILE="$STATE_DIR/last-version"
+
+current_version() { omarchy-version 2>/dev/null || echo unknown; }
+last_version() { cat "$STATE_FILE" 2>/dev/null || true; }
 
 host_name() {
   case "$("$HOME/.local/bin/omarchy-machine-kind" 2>/dev/null)" in
@@ -39,9 +48,24 @@ send() {
 case "${1:-}" in
 "")
   load_env || exit 0
-  version=$(omarchy-version 2>/dev/null || echo unknown)
-  (send "$version" >/dev/null 2>&1 &)
+  version=$(current_version)
+  [[ $version == unknown ]] && exit 0
+  mkdir -p "$STATE_DIR"
+  (
+    # one ping per version, even if several post-update runs overlap
+    exec 9>"$STATE_DIR/lock"
+    flock -n 9 || exit 0
+    [[ $(last_version) == "$version" ]] && exit 0
+    send "$version" && printf '%s\n' "$version" >"$STATE_FILE"
+  ) >/dev/null 2>&1 &
   exit 0
+  ;;
+--dry-run)
+  version=${2:-$(current_version)}
+  last=$(last_version)
+  if [[ $version == unknown ]]; then echo "skip: version unknown"
+  elif [[ $last == "$version" ]]; then echo "skip: $version already sent"
+  else echo "would send: $version (last sent: ${last:-none})"; fi
   ;;
 --test)
   load_env || { echo "No $ENV_FILE yet. Run: omarchy-update-ping --setup" >&2; exit 1; }
@@ -57,5 +81,5 @@ case "${1:-}" in
   echo "Saved $ENV_FILE"
   exec "$0" --test
   ;;
-*) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+*) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

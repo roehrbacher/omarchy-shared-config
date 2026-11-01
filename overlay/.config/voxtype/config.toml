@@ -15,7 +15,7 @@ state_file = "auto"
 engine = "whisper"
 
 [hotkey]
-# Hyprland owns the hotkey (Super+D toggles recording on both machines).
+# Hyprland owns the hotkey (hold Super+D to talk on both machines).
 # Keep the evdev listener off so the two paths cannot double-fire.
 enabled = false
 
@@ -81,9 +81,13 @@ mode = "paste"
 # Shift+Insert pastes in terminals and in GUI apps alike (Ctrl+V does not
 # paste in terminals).
 paste_keys = "shift+insert"
-# Put the previous clipboard contents back after pasting.
-restore_clipboard = true
-restore_clipboard_delay_ms = 300
+# Put the previous clipboard contents back after pasting. Voxtype's own
+# restore_clipboard re-offers only the first clipboard type (often text/html),
+# so Ctrl+V of plain text failed afterwards; voxtype-clipboard-keep saves
+# before and restores 0.4 s after the paste instead.
+restore_clipboard = false
+pre_output_command = "@HOME@/.local/bin/voxtype-clipboard-keep save"
+post_output_command = "@HOME@/.local/bin/voxtype-clipboard-keep restore"
 
 # Fall back to clipboard if pasting fails
 fallback_to_clipboard = true

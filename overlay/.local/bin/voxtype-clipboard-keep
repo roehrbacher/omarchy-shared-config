@@ -1,0 +1,52 @@
+#!/bin/bash
+# Managed by omarchy-shared-config. Puts the clipboard back after a Voxtype
+# dictation is pasted (Voxtype's output.pre/post_output_command).
+#   voxtype-clipboard-keep save      before the paste: remember the clipboard
+#   voxtype-clipboard-keep restore   after the paste: put it back (in the
+#                                    background, after a short delay)
+# Voxtype's own restore_clipboard re-offers only the FIRST type it saw (e.g.
+# text/html from a browser), so apps asking for plain text got nothing. This
+# saves text as text (wl-copy offers every text type again) and images as
+# their image type. Password-manager copies come back marked sensitive, so
+# clipboard history still skips them. The saved copy is user-only in
+# $XDG_RUNTIME_DIR (RAM) and is deleted right after the restore.
+set -u
+umask 077
+dir="${XDG_RUNTIME_DIR:-/tmp}/voxtype-clipboard-keep"
+delay="${VOXTYPE_CLIPBOARD_KEEP_DELAY:-0.4}"
+
+save() {
+  rm -rf "$dir"; mkdir -p "$dir"
+  local types; types=$(wl-paste --list-types 2>/dev/null) || return 0
+  [[ -n $types ]] || return 0
+  grep -qx 'x-kde-passwordManagerHint' <<<"$types" && : >"$dir/sensitive"
+  if grep -qE '^(text/plain|UTF8_STRING|STRING|TEXT)' <<<"$types"; then
+    wl-paste --no-newline --type text >"$dir/data" 2>/dev/null && echo text >"$dir/kind"
+  else
+    local img; img=$(grep -m1 '^image/' <<<"$types")
+    if [[ -n $img ]]; then
+      wl-paste --type "$img" >"$dir/data" 2>/dev/null && printf '%s\n' "$img" >"$dir/kind"
+    else
+      local t; t=$(head -n1 <<<"$types")
+      wl-paste --type "$t" >"$dir/data" 2>/dev/null && printf '%s\n' "$t" >"$dir/kind"
+    fi
+  fi
+}
+
+restore_now() {
+  [[ -s $dir/kind ]] || { rm -rf "$dir"; return 0; }
+  local kind args=()
+  kind=$(<"$dir/kind")
+  [[ -e $dir/sensitive ]] && args+=(--sensitive)
+  [[ $kind == text ]] || args+=(--type "$kind")
+  wl-copy "${args[@]}" <"$dir/data"
+  rm -rf "$dir"
+}
+
+case ${1:-} in
+  save) save ;;
+  restore) setsid -f bash -c 'sleep "$1"; exec "$2" restore-now' _ "$delay" "$0" >/dev/null 2>&1 ;;
+  restore-now) restore_now ;;
+  *) sed -n '2,12p' "$0"; exit 2 ;;
+esac
+exit 0

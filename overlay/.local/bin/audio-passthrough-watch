@@ -7,8 +7,9 @@
 #   ~/.config/omarchy/audio-passthrough.machine.conf   SINK=
 #   (part of the device name; several alternatives separated by '|',
 #    quoted: SINK="name_a|name_b")
-# The mic is always the system default input; changing the default (stock
-# audio panel, this widget, wpctl) restarts the loopback on the new mic.
+# The mic: SOURCE= in audio-passthrough.conf (a node name, set by the Mic
+# Passthrough widget). Empty, or that mic is unplugged: the system default
+# input, followed live (changing it restarts the loopback on the new mic).
 # Your settings (written by the bar widget / omarchy-audio-passthrough):
 #   ~/.config/omarchy/audio-passthrough.conf           ENABLED=, VOLUME=, LATENCY_MS=
 #   NOTIFY=0 there turns off the switch notification (see notify_switch).
@@ -25,11 +26,11 @@ LOOP_PID=
 load_conf() {
   ENABLED=1; VOLUME=50%; LATENCY_MS=10; NOTIFY=1
   SINK=        # part of the headphone sink name; empty = never active
+  SOURCE=      # mic node name; empty = system default
   # shellcheck source=/dev/null
   [[ -f $DIR/audio-passthrough.machine.conf ]] && source "$DIR/audio-passthrough.machine.conf"
   # shellcheck source=/dev/null
   [[ -f $DIR/audio-passthrough.conf ]] && source "$DIR/audio-passthrough.conf"
-  SOURCE=   # old setting, no longer used: the default mic is followed
 }
 
 # True if $1 contains any of the '|'-separated parts of $2.
@@ -48,7 +49,14 @@ stop() {
   LOOP_PID=
 }
 
-find_source() { pactl get-default-source 2>/dev/null; }
+# The chosen mic if it is plugged in, else the system default.
+find_source() {
+  if [[ -n $SOURCE ]] && pactl list short sources 2>/dev/null | awk '{print $2}' | grep -qxF -- "$SOURCE"; then
+    echo "$SOURCE"
+  else
+    pactl get-default-source 2>/dev/null
+  fi
+}
 
 start() {
   local sink=$1 src id i

@@ -476,13 +476,16 @@ headphones with a `pw-loopback` (two plain streams, mixer name "Audio
 passthrough"), only while the headphone sink is the default output. The
 headphones come from `~/.config/omarchy/audio-passthrough.machine.conf`
 (`SINK=`, set by a machine repo); without it, or with them missing, it stays
-idle. The mic is always the system default input and follows it live. On/off and level:
+idle. The mic: picked in the widget's INPUT list (passthrough only, saved as
+`SOURCE=` in `audio-passthrough.conf`; other apps keep the system default mic).
+"System default" (empty `SOURCE=`, also the fallback while the picked mic is
+unplugged) follows the system default input live. On/off and level:
 the **Mic Passthrough** bar widget (`timon.mic-passthrough`, its own small icon
 next to the audio icon: left click opens a popup with a switch, a 0-150 % slider
 and a click-to-type number; right click turns it on/off), or
 `omarchy-audio-passthrough on|off|volume N`, saved to
-`~/.config/omarchy/audio-passthrough.conf`. The mic is picked in the audio popup's
-INPUT list, like with the stock panel. It sits next to the audio panel instead of
+`~/.config/omarchy/audio-passthrough.conf`; mic: `omarchy-audio-passthrough
+source <name>|default`. It sits next to the audio panel instead of
 inside it, so the audio panel stays as close to stock as possible.
 `install.sh` puts the widget on the bar once, right after `timon.audio`
 (or `omarchy.audio`), via `omarchy-bar-add-once`; remove it from the bar by hand

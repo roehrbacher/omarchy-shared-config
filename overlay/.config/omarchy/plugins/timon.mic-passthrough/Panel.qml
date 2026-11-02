@@ -23,6 +23,10 @@ Panel {
   property int editing: 0
   property bool dragging: false
   property real pending: -1
+  property string sourceSetting: ""   // "" = system default
+  property var sources: []            // [{name, label, current, default}]
+  readonly property color hoverFill: bar ? Style.hoverFillFor(bar.foreground, Color.accent) : "transparent"
+  readonly property color selectedFill: bar ? Style.selectedFillFor(bar.foreground, Color.accent) : "transparent"
 
   function apply(text) {
     try { var d = JSON.parse(text) } catch (e) { return }
@@ -32,6 +36,22 @@ Panel {
     root.active = !!d.active
     root.headphones = !!d.headphones
     root.configured = d.configured !== false
+    root.sourceSetting = String(d.sourceSetting || "")
+  }
+  function applySources(text) {
+    try { var l = JSON.parse(text) } catch (e) { return }
+    if (Array.isArray(l)) root.sources = l
+  }
+  function defaultLabel() {
+    for (var i = 0; i < root.sources.length; i++)
+      if (root.sources[i].default) return "System default (" + root.sources[i].label + ")"
+    return "System default"
+  }
+  // "default" or a mic node name; passthrough only, other apps keep their mic.
+  function pickSource(name) {
+    root.sourceSetting = name === "default" ? "" : name
+    root.run(["source", name])
+    Qt.callLater(function () { if (!sourcesProc.running) sourcesProc.running = true })
   }
   function run(args) { actionProc.command = [root.tool].concat(args); actionProc.running = true }
   function setOn(v) { root.isOn = v; root.run([v ? "on" : "off"]) }
@@ -54,6 +74,7 @@ Panel {
   }
 
   Process { id: statusProc; command: [root.tool, "status"]; stdout: StdioCollector { onStreamFinished: root.apply(text) } }
+  Process { id: sourcesProc; command: [root.tool, "sources"]; stdout: StdioCollector { onStreamFinished: root.applySources(text) } }
   Process { id: actionProc; stdout: StdioCollector { onStreamFinished: root.apply(text) } }
 
   Timer {
@@ -72,7 +93,10 @@ Panel {
     repeat: true
     running: true
     triggeredOnStart: true
-    onTriggered: if (!statusProc.running && !actionProc.running && !root.dragging && root.editing === 0) statusProc.running = true
+    onTriggered: {
+      if (!statusProc.running && !actionProc.running && !root.dragging && root.editing === 0) statusProc.running = true
+      if (root.opened && !sourcesProc.running) sourcesProc.running = true
+    }
   }
 
   BarIconButton {
@@ -186,7 +210,82 @@ Panel {
             onCommitted: function(next) { root.queueVolume(next) }
           }
         }
+
+        PanelSectionHeader {
+          text: "INPUT"
+          foreground: root.bar.foreground
+          fontFamily: root.bar.fontFamily
+          visible: root.sources.length > 0
+        }
+
+        MicRow { name: "default"; label: root.defaultLabel(); glyph: "󰍬"; picked: root.sourceSetting === "" }
+
+        Repeater {
+          model: root.sources
+          delegate: MicRow {
+            required property var modelData
+            name: modelData.name
+            label: modelData.label
+            glyph: "󰍬"
+            picked: root.sourceSetting === modelData.name
+          }
+        }
       }
+    }
+  }
+
+  // One mic choice, styled like the stock audio panel's INPUT rows.
+  component MicRow: CursorSurface {
+    id: micRow
+    property string name: ""
+    property string label: ""
+    property string glyph: ""
+    property bool picked: false
+    width: parent ? parent.width : 0
+    current: picked
+    foreground: root.bar.foreground
+    fill: root.hoverFill
+    currentFill: root.selectedFill
+    implicitHeight: micInner.implicitHeight + Style.spacing.xl
+
+    Row {
+      id: micInner
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(6)
+      anchors.rightMargin: Style.space(6)
+      spacing: Style.space(8)
+
+      Text {
+        textFormat: Text.PlainText
+        text: micRow.glyph
+        color: root.bar.foreground
+        font.family: root.bar.fontFamily
+        font.pixelSize: Style.font.title
+        width: Style.space(22)
+        horizontalAlignment: Text.AlignHCenter
+        anchors.verticalCenter: parent.verticalCenter
+      }
+
+      Text {
+        textFormat: Text.PlainText
+        text: micRow.label
+        color: root.bar.foreground
+        font.family: root.bar.fontFamily
+        font.pixelSize: Style.font.body
+        font.bold: micRow.picked
+        elide: Text.ElideRight
+        width: parent.width - Style.space(30)
+        anchors.verticalCenter: parent.verticalCenter
+      }
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: root.pickSource(micRow.name)
     }
   }
 }

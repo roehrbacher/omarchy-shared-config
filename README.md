@@ -153,7 +153,7 @@ External plugins below are reviewed copies pinned in `plugins.lock` (id, upstrea
 repo, reviewed commit, date); update one only after reviewing the upstream diff. The weekly plugin round also checks `omarchy-xps-config/plugins.lock` (XPS-only plugins).
 
 - `jankeesvw.notification-center` 1.2.0 – bell with your notification history
-  (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 1784e19)
+  (upstream: github.com/jankeesvw/omarchy-notification-center, copy from 64886e9)
 - `timon.overview` 0.2.0 – **my own plugin** (private repo github.com/roehrbacher/omarchy-overview,
   copy of 96f9ae6): GNOME-style workspace overview, every workspace side by side with live
   previews, on Super+A (XPS: three-finger swipe up, finger-synced).

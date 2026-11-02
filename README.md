@@ -241,6 +241,18 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
   here any more: it is the separate `timon.mic-passthrough` widget.
 - `timon.mic-passthrough` – **Mic Passthrough**, own small widget (see "Mic
   pass-through" below).
+- `timon.backlight` – **Backlight**, own widget next to the display icon, on
+  the bar only where auto brightness (`~/.local/bin/omarchy-auto-brightness`,
+  the XPS) or a keyboard backlight (`/sys/class/leds/*kbd_backlight*`) exists.
+  Popup: auto brightness switch, status, minimum/maximum; keyboard backlight
+  level slider (`brightnessctl`) and "turn on automatically in the dark".
+  Right click: auto brightness on/off. Was a section of `timon.monitor` until
+  2026-11-02. **Undo**: `./uninstall.sh`, or delete the plugin folder, add it to
+  `REMOVE_PATHS`, run `./install.sh` and remove the icon from the bar by hand.
+- `timon.monitor` – clone of the stock display panel. Left over after the
+  auto-brightness split: natural-scroll aware wheel on the bar icon
+  (`PhysicalWheel.qml`), the DISPLAYS list placed earlier in the popup, and a
+  guard for a startup log warning (`scalePresets` not set yet).
 - `timon.wired` – **Wired**, own widget next to the stock network icon, on the
   bar only while a LAN cable or USB phone tethering is plugged in (carrier up).
   Popup: one section per wired link (Ethernet / USB tethering, connection name,

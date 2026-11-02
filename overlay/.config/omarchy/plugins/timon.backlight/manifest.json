@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "timon.backlight",
+  "name": "Backlight",
+  "version": "1.0.0",
+  "author": "Timon Röhrbacher",
+  "description": "Auto brightness (light sensor) and keyboard backlight. Only on the bar where one of them exists.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Backlight",
+    "description": "Auto brightness and keyboard backlight, shown only where the hardware exists",
+    "category": "Display",
+    "allowMultiple": false
+  }
+}

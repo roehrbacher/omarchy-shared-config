@@ -67,6 +67,10 @@ o.bind("SUPER + SHIFT + S", "Signal", { omarchy = "signal" })
 hl.unbind("SUPER + SHIFT + G")
 o.bind("SUPER + SHIFT + G", "Steam", { launch = "steam", focus = "^steam$" })
 
+-- Downloads folder on SUPER + SHIFT + D. Replaces stock Docker on this key.
+hl.unbind("SUPER + SHIFT + D")
+o.bind("SUPER + SHIFT + D", "Downloads", { launch = "nautilus --new-window " .. os.getenv("HOME") .. "/Downloads" })
+
 -- Grok usage popup (timon.grok-usage's own IPC; the bar widget must be on the bar).
 -- New key, free in stock Omarchy, nothing replaced.
 o.bind("SUPER + SHIFT + U", "Grok usage", "omarchy-shell -q timon.grok-usage toggle")

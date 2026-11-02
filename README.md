@@ -142,7 +142,7 @@ indicators (stock group + the Insomnia eye; stock behaviour: inactive ones only 
 local, untracked `~/.config/omarchy/shell.d/90-local.json`:
 `{"barSettings": {"omarchy.clock": {"birthYear": 1990}}}`),
 keyboard layout, now playing, updates. Right: tray,
-Tailscale, agents, Grokbar, local AI, audio (`timon.audio`), Bluetooth, network, monitor,
+Tailscale, agents, Grokbar, local AI, audio (`timon.audio`), Mic Passthrough (`timon.mic-passthrough`), Bluetooth, network, monitor,
 battery with percentage, notification center. Now playing (`<title> |
 <artist>`) keeps its place but stays invisible until the pointer is over the
 bar (picked in Omarchy menu > Hover Reveal, see `timon.hover-reveal`). Grokbar shows only the
@@ -235,7 +235,12 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
   it (the PC's sticky-sink picker), otherwise Omarchy's own
   `omarchy-audio-output-set-default`. The default sink is always tracked so a
   Bluetooth default never looks muted. The tunings themselves are per machine
-  and never live in this repo.
+  and never live in this repo. Also: wheel 3 % per notch, natural-scroll aware
+  touchpad scrolling (9 px = 1 %) and a `timon.audio nudge` IPC for the
+  4-finger volume swipe and the now-playing widget. Mic pass-through is NOT in
+  here any more: it is the separate `timon.mic-passthrough` widget.
+- `timon.mic-passthrough` – **Mic Passthrough**, own small widget (see "Mic
+  pass-through" below).
 - `timon.network` – clone of the stock Network panel (Omarchy 4.0.x) plus a
   **LAN** on/off switch next to the Wi-Fi switch, shown only when the machine
   has an Ethernet device (`nmcli device disconnect|connect <iface>`; off also
@@ -472,12 +477,21 @@ passthrough"), only while the headphone sink is the default output. The
 headphones come from `~/.config/omarchy/audio-passthrough.machine.conf`
 (`SINK=`, set by a machine repo); without it, or with them missing, it stays
 idle. The mic is always the system default input and follows it live. On/off and level:
-the **Mic pass-through** section of the audio popup (`timon.audio`, our clone of
-the stock audio panel: switch, slider 0-150 % and a click-to-type number), or
+the **Mic Passthrough** bar widget (`timon.mic-passthrough`, its own small icon
+next to the audio icon: left click opens a popup with a switch, a 0-150 % slider
+and a click-to-type number; right click turns it on/off), or
 `omarchy-audio-passthrough on|off|volume N`, saved to
-`~/.config/omarchy/audio-passthrough.conf`. The mic is picked in the popup's
-INPUT list, like with the stock panel. (Until 2026-10-28 this was a separate
-`timon.audio-passthrough` bar widget; install.sh removes it.)
+`~/.config/omarchy/audio-passthrough.conf`. The mic is picked in the audio popup's
+INPUT list, like with the stock panel. It sits next to the audio panel instead of
+inside it, so the audio panel stays as close to stock as possible.
+`install.sh` puts the widget on the bar once, right after `timon.audio`
+(or `omarchy.audio`), via `omarchy-bar-add-once`; remove it from the bar by hand
+and it stays gone. (History: a separate `timon.audio-passthrough` widget until
+2026-10-28, then a section of the `timon.audio` popup until 2026-11-02;
+install.sh removes the old widget.) **Undo**: delete
+`overlay/.config/omarchy/plugins/timon.mic-passthrough`, add it to
+`REMOVE_PATHS`, run `./install.sh` and remove the icon from the bar by hand
+(or `./uninstall.sh`, which also restores the previous `shell.json`).
 
 ## Packages
 

@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "timon.audio",
   "name": "My Audio",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "Omarchy",
-  "description": "Volume slider, output picker, per-app mixer, mic pass-through",
+  "description": "Volume slider, output picker, per-app mixer",
   "kinds": [
     "bar-widget"
   ],
@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "My Audio",
-    "description": "Volume slider, output picker, per-app mixer, mic pass-through",
+    "description": "Volume slider, output picker, per-app mixer",
     "category": "Audio",
     "allowMultiple": false
   },

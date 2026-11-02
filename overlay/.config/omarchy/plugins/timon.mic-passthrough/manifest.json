@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "timon.mic-passthrough",
+  "name": "Mic Passthrough",
+  "version": "1.0.0",
+  "author": "Timon Röhrbacher",
+  "description": "Hear your own mic in wired headphones: on/off and level",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Mic Passthrough",
+    "description": "Hear your own mic in wired headphones: on/off and level",
+    "category": "Audio",
+    "allowMultiple": false
+  }
+}

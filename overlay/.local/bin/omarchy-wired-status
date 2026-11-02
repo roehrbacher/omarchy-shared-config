@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Print a JSON list of wired links for the timon.wired bar widget.
+
+One entry per Ethernet-type device that has a cable/link (carrier) or that
+NetworkManager is (de)activating: built-in LAN and USB tethering (a phone
+shows up as an Ethernet device, e.g. enp0s20f0u2 / usb0, rndis or cdc_ncm).
+Fields: iface, kind (lan|usb), name (NM connection, "" when off), state
+(connected|connecting|off), ip, prefix, gateway, dns, speed (Mbit/s or 0),
+rx_bytes, tx_bytes, default (carries the default route).
+
+  omarchy-wired-status            the list
+  omarchy-wired-status on|off IF  nmcli device connect|disconnect IF
+                                  (disconnect also stops autoconnect until on)
+"""
+import json, os, re, subprocess, sys
+
+NET = os.environ.get("WIRED_SYSFS", "/sys/class/net")
+
+
+def read(path, default=""):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def nm(*args):
+    try:
+        return subprocess.run(["nmcli", *args], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def default_ifaces():
+    try:
+        out = subprocess.run(["ip", "-j", "route", "show", "default"], capture_output=True, text=True, timeout=3).stdout
+        return {r.get("dev") for r in json.loads(out or "[]")}
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return set()
+
+
+def links():
+    states = {}
+    for line in nm("-t", "-f", "DEVICE,TYPE,STATE", "device").splitlines():
+        parts = line.split(":")
+        if len(parts) >= 3 and parts[1] == "ethernet":
+            states[parts[0]] = parts[2]
+    defaults = default_ifaces()
+    out = []
+    for iface in sorted(os.listdir(NET)) if os.path.isdir(NET) else []:
+        base = f"{NET}/{iface}"
+        if read(f"{base}/type") != "1" or os.path.isdir(f"{base}/wireless") or not os.path.exists(f"{base}/device"):
+            continue
+        st = states.get(iface, "")
+        carrier = read(f"{base}/carrier") == "1"
+        if not carrier and not st.startswith(("connecting", "connected", "deactivating")):
+            continue
+        usb = "/usb" in os.path.realpath(f"{base}/device")
+        info = {}
+        for line in nm("-t", "-f", "GENERAL.CONNECTION,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS", "device", "show", iface).splitlines():
+            k, _, v = line.partition(":")
+            info.setdefault(re.sub(r"\[\d+\]$", "", k), []).append(v)
+        addr = (info.get("IP4.ADDRESS") or [""])[0]
+        ip, _, prefix = addr.partition("/")
+        speed = read(f"{base}/speed", "0")
+        out.append({
+            "iface": iface,
+            "kind": "usb" if usb else "lan",
+            "name": (info.get("GENERAL.CONNECTION") or [""])[0],
+            "state": "connected" if st.startswith("connected") else "connecting" if st.startswith("connecting") else "off",
+            "ip": ip, "prefix": prefix,
+            "gateway": (info.get("IP4.GATEWAY") or [""])[0],
+            "dns": [d for d in info.get("IP4.DNS", []) if d],
+            "speed": int(speed) if speed.lstrip("-").isdigit() and int(speed) > 0 else 0,
+            "rx_bytes": int(read(f"{base}/statistics/rx_bytes", "0") or 0),
+            "tx_bytes": int(read(f"{base}/statistics/tx_bytes", "0") or 0),
+            "default": iface in defaults,
+        })
+    return out
+
+
+def main(argv):
+    if not argv:
+        print(json.dumps(links()))
+        return 0
+    if len(argv) == 2 and argv[0] in ("on", "off") and re.fullmatch(r"[A-Za-z0-9._-]+", argv[1]):
+        if argv[1] not in [l["iface"] for l in links()]:
+            print(f"not a wired link: {argv[1]}", file=sys.stderr)
+            return 1
+        return subprocess.run(["nmcli", "device", "connect" if argv[0] == "on" else "disconnect", argv[1]]).returncode
+    print(__doc__)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

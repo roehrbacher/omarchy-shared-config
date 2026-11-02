@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "timon.wired",
+  "name": "Wired",
+  "version": "1.0.0",
+  "author": "Timon Röhrbacher",
+  "description": "LAN cable and USB phone tethering: details, stats and an on/off switch per link. Only on the bar while a wired link is plugged in.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Wired",
+    "description": "LAN cable and USB phone tethering, shown only while plugged in",
+    "category": "Network",
+    "allowMultiple": false
+  }
+}

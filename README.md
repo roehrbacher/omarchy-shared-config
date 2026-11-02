@@ -142,7 +142,7 @@ indicators (stock group + the Insomnia eye; stock behaviour: inactive ones only 
 local, untracked `~/.config/omarchy/shell.d/90-local.json`:
 `{"barSettings": {"omarchy.clock": {"birthYear": 1990}}}`),
 keyboard layout, now playing, updates. Right: tray,
-Tailscale, agents, Grokbar, local AI, audio (`timon.audio`), Mic Passthrough (`timon.mic-passthrough`), Bluetooth, network, monitor,
+Tailscale, agents, Grokbar, local AI, audio (`timon.audio`), Mic Passthrough (`timon.mic-passthrough`), Bluetooth, network (stock) + Wired (`timon.wired`, only while plugged in), monitor,
 battery with percentage, notification center. Now playing (`<title> |
 <artist>`) keeps its place but stays invisible until the pointer is over the
 bar (picked in Omarchy menu > Hover Reveal, see `timon.hover-reveal`). Grokbar shows only the
@@ -241,12 +241,17 @@ repo, reviewed commit, date); update one only after reviewing the upstream diff.
   here any more: it is the separate `timon.mic-passthrough` widget.
 - `timon.mic-passthrough` – **Mic Passthrough**, own small widget (see "Mic
   pass-through" below).
-- `timon.network` – clone of the stock Network panel (Omarchy 4.0.x) plus a
-  **LAN** on/off switch next to the Wi-Fi switch, shown only when the machine
-  has an Ethernet device (`nmcli device disconnect|connect <iface>`; off also
-  stops autoconnect until switched on). Re-copy `Panel.qml`/`Model.js` from
-  `$OMARCHY_PATH/shell/plugins/panels/network/` and re-apply the `timon:` blocks
-  if the stock panel changes a lot; undo = put `omarchy.network` back in `00-shared.json`.
+- `timon.wired` – **Wired**, own widget next to the stock network icon, on the
+  bar only while a LAN cable or USB phone tethering is plugged in (carrier up).
+  Popup: one section per wired link (Ethernet / USB tethering, connection name,
+  interface, default route) with an on/off switch (`nmcli device
+  connect|disconnect`; off also stops autoconnect until on) and the stock Wi-Fi
+  panel's detail grid: receiving/sending, downloaded/uploaded, IP, gateway,
+  DNS, link speed (click a value to copy). Data: `omarchy-wired-status`.
+  Replaces `timon.network` (stock network panel + a LAN switch, retired
+  2026-11-02: install.sh swaps it back to `omarchy.network` on the bar with
+  `omarchy-bar-retire-clone` and deletes the folder). **Undo**: `./uninstall.sh`
+  (restores the old plugin and `shell.json`).
 - `timon.lock` – stock lock screen that pauses all playing media when it locks.
 - `timon.indicators` – Omarchy's stock indicators group plus the Insomnia eye
   (see *Insomnia* below). Not stored here: `omarchy-indicators-build` clones it

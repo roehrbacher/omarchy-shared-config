@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Swap a retired clone back to the stock plugin in the live shell.json.
+
+  omarchy-bar-retire-clone <clone-id> <stock-id>
+
+Bar entries of <clone-id> become <stock-id> in the same place (their other
+settings kept); <clone-id> is dropped from plugins[] and cloneSourceRestores,
+<stock-id> from disabledPlugins. Nothing else changes. Safe to run again.
+install.sh backs shell.json up first (uninstall.sh restores it).
+"""
+import json, os, sys
+from pathlib import Path
+
+TARGET = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "omarchy/shell.json"
+
+
+def main(argv):
+    if len(argv) != 2:
+        print(__doc__); return 2
+    clone, stock = argv
+    if not TARGET.is_file():
+        return 0
+    text = TARGET.read_text()
+    cfg = json.loads(text)
+    for sec, entries in ((cfg.get("bar") or {}).get("layout") or {}).items():
+        have_stock = any(isinstance(e, dict) and e.get("id") == stock for e in entries or [])
+        new = []
+        for e in entries or []:
+            if isinstance(e, dict) and e.get("id") == clone:
+                if have_stock:
+                    continue
+                e = dict(e, id=stock); have_stock = True
+            new.append(e)
+        cfg["bar"]["layout"][sec] = new
+    if "plugins" in cfg:
+        cfg["plugins"] = [p for p in cfg["plugins"] if not (isinstance(p, dict) and p.get("id") == clone)]
+    for key, drop in (("cloneSourceRestores", clone), ("disabledPlugins", stock)):
+        if key in cfg:
+            cfg[key] = [v for v in cfg[key] if v != drop]
+    if json.loads(text) == cfg:
+        return 0
+    tmp = TARGET.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
+    os.chmod(tmp, 0o600)
+    tmp.replace(TARGET)
+    print(f"Bar: {clone} -> {stock}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

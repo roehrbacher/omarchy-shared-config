@@ -52,14 +52,17 @@ o.bind("SUPER + B", "Grok Bot", { launch = "grok-bot", focus = "^grok-bot$" })
 hl.unbind("SUPER + SHIFT + B")
 o.bind("SUPER + SHIFT + B", "Bitwarden", { launch = "bitwarden-desktop", focus = "^Bitwarden$" })
 
--- Bitwarden Brave extension as its own floating window on SUPER + ALT + B
--- (new key, free in stock Omarchy). omarchy-launch-webapp opens it with
--- brave --app=... in the default browser/profile. Brave names the window
--- class brave-<extension id>__popup_index.html-Default, so match "_" too;
--- the old "-" pattern never matched and the window tiled instead.
+-- Bitwarden Brave extension as its own tiled window on Right Alt + B.
+-- On the German layout Right Alt is AltGr (MOD5), so this only takes
+-- AltGr+B (the “ quote); @, {, [, € etc. keep working and Left Alt+B
+-- is untouched. omarchy-launch-webapp opens it with brave --app=... in the
+-- default profile. Brave names the class brave-<id>__popup_index.html-Default;
+-- stock apps/bitwarden.lua tags chrome-<id>-Default floating, so drop that
+-- tag and tile for every browser variant (the native Bitwarden app rule is
+-- separate and unchanged).
 hl.unbind("SUPER + ALT + B")
-o.bind("SUPER + ALT + B", "Bitwarden (browser extension)", { webapp = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html?uilocation=popout" })
-o.window("^(brave|chrome|chromium)-nngceckbapebfimnlniiiahkandclblb[-_].*$", { float = true, center = true, size = { 420, 640 } })
+o.bind("MOD5 + B", "Bitwarden (browser extension)", { webapp = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html?uilocation=popout" })
+o.window("^(brave|chrome|chromium)-nngceckbapebfimnlniiiahkandclblb[-_].*$", { tag = "-floating-window", tile = true })
 
 -- Telegram on SUPER + SHIFT + T: focuses the open window, or starts it.
 o.bind("SUPER + SHIFT + T", "Telegram", { launch = "Telegram", focus = "^org.telegram.desktop$" })

@@ -52,16 +52,16 @@ o.bind("SUPER + B", "Grok Bot", { launch = "grok-bot", focus = "^grok-bot$" })
 hl.unbind("SUPER + SHIFT + B")
 o.bind("SUPER + SHIFT + B", "Bitwarden", { launch = "bitwarden-desktop", focus = "^Bitwarden$" })
 
--- Bitwarden Brave extension as its own tiled window on Right Alt + B.
--- On the German layout Right Alt is AltGr (MOD5), so this only takes
--- AltGr+B (the “ quote); @, {, [, € etc. keep working and Left Alt+B
--- is untouched. omarchy-launch-webapp opens it with brave --app=... in the
+-- Bitwarden Brave extension as its own tiled window on Left Alt + B.
+-- ALT is Left Alt only; Right Alt on the German layout is AltGr (MOD5) and
+-- stays untouched. This takes Alt+B from apps (readline backward-word in
+-- terminals; Ctrl+Left still does that). omarchy-launch-webapp opens it with brave --app=... in the
 -- default profile. Brave names the class brave-<id>__popup_index.html-Default;
 -- stock apps/bitwarden.lua tags chrome-<id>-Default floating, so drop that
 -- tag and tile for every browser variant (the native Bitwarden app rule is
 -- separate and unchanged).
 hl.unbind("SUPER + ALT + B")
-o.bind("MOD5 + B", "Bitwarden (browser extension)", { webapp = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html?uilocation=popout" })
+o.bind("ALT + B", "Bitwarden (browser extension)", { webapp = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html?uilocation=popout" })
 o.window("^(brave|chrome|chromium)-nngceckbapebfimnlniiiahkandclblb[-_].*$", { tag = "-floating-window", tile = true })
 
 -- Telegram on SUPER + SHIFT + T: focuses the open window, or starts it.

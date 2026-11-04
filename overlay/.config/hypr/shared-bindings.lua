@@ -54,11 +54,12 @@ o.bind("SUPER + SHIFT + B", "Bitwarden", { launch = "bitwarden-desktop", focus =
 
 -- Bitwarden Brave extension as its own floating window on SUPER + ALT + B
 -- (new key, free in stock Omarchy). omarchy-launch-webapp opens it with
--- brave --app=... in the default browser/profile. Stock already tags the
--- extension window floating; this centers it at extension-popup size.
+-- brave --app=... in the default browser/profile. Brave names the window
+-- class brave-<extension id>__popup_index.html-Default, so match "_" too;
+-- the old "-" pattern never matched and the window tiled instead.
 hl.unbind("SUPER + ALT + B")
 o.bind("SUPER + ALT + B", "Bitwarden (browser extension)", { webapp = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html?uilocation=popout" })
-o.window("^(brave|chrome|chromium)-nngceckbapebfimnlniiiahkandclblb-.*$", { float = true, center = true, size = { 420, 640 } })
+o.window("^(brave|chrome|chromium)-nngceckbapebfimnlniiiahkandclblb[-_].*$", { float = true, center = true, size = { 420, 640 } })
 
 -- Telegram on SUPER + SHIFT + T: focuses the open window, or starts it.
 o.bind("SUPER + SHIFT + T", "Telegram", { launch = "Telegram", focus = "^org.telegram.desktop$" })
@@ -96,7 +97,25 @@ o.bind("ALT + V", "Clipboard history", "omarchy-shell shell toggle timon.clipboa
 -- Undo: delete this block.
 local paste_pinned = (os.getenv("HOME") or "") .. "/.config/omarchy/plugins/timon.clipboard/paste-pinned.sh"
 for n = 1, 9 do
-  o.bind("ALT + SHIFT + code:" .. tostring(n + 9), "Paste pinned clipboard item " .. n, "setsid -f " .. paste_pinned .. " " .. n)
+  o.bind("ALT + SHIFT + code:" .. tostring(n + 9), "Paste pinned clipboard item " .. n, "voxtype-ptt cancel; setsid -f " .. paste_pinned .. " " .. n)
+end
+
+-- Voxtype push-to-talk: hold Shift + Left Alt (either order) to talk,
+-- release either key to stop and paste. Starts fire on whichever key goes
+-- down second; stops fire on the release of either key with any mod state,
+-- so a stop always lands. All non-consuming, so Alt/Shift still reach apps
+-- and Alt+Shift+<key> shortcuts keep working (voxtype-ptt cancels taps
+-- under 0.35 s and the pinned-paste binds cancel explicitly).
+-- Replaces the stock F9 / Super+Ctrl+X dictation keys on both machines.
+hl.unbind("F9")
+hl.unbind("SUPER + CTRL + X")
+for _, start in ipairs({ "SHIFT + Alt_L", "SHIFT + ALT + Alt_L", "ALT + Shift_L", "ALT + SHIFT + Shift_L" }) do
+  o.bind(start, "Start dictation (push-to-talk)", "voxtype-ptt start", { repeating = false, non_consuming = true })
+end
+for _, key in ipairs({ "Alt_L", "Shift_L" }) do
+  for _, mods in ipairs({ "", "SHIFT + ", "ALT + ", "SHIFT + ALT + " }) do
+    o.bind(mods .. key, "Stop dictation (push-to-talk)", "voxtype-ptt stop", { release = true, non_consuming = true })
+  end
 end
 o.bind("SUPER + SHIFT + CTRL + V", "Clipboard incognito", "omarchy-shell shell call timon.clipboard toggleIncognito x")
 

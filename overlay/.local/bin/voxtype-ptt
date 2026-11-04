@@ -1,0 +1,27 @@
+#!/bin/bash
+# Push-to-talk helper for the Hyprland Shift+Left Alt binds.
+#   voxtype-ptt start   key down: start recording if idle
+#   voxtype-ptt stop    key up: stop and transcribe; a tap under 0.35 s
+#                       (or Shift+Alt used as part of another shortcut) is
+#                       cancelled instead, so nothing gets pasted
+#   voxtype-ptt cancel  discard the current recording
+# Stop/cancel do nothing while idle, so binding them on many releases is safe.
+f="${XDG_RUNTIME_DIR:-/tmp}/voxtype-ptt.start"
+now() { date +%s%3N; }
+case $1 in
+start)
+  [[ $(voxtype status 2>/dev/null) == idle ]] || exit 0
+  now >"$f"
+  exec voxtype record start ;;
+stop)
+  [[ -f $f ]] || exit 0
+  started=$(<"$f"); rm -f "$f"
+  [[ $(voxtype status 2>/dev/null) == recording ]] || exit 0
+  if (( $(now) - started < 350 )); then exec voxtype record cancel; fi
+  exec voxtype record stop ;;
+cancel)
+  [[ -f $f ]] || exit 0
+  rm -f "$f"
+  exec voxtype record cancel ;;
+*) echo "usage: voxtype-ptt start|stop|cancel" >&2; exit 2 ;;
+esac

@@ -15,7 +15,7 @@ state_file = "auto"
 engine = "whisper"
 
 [hotkey]
-# Hyprland owns the hotkey (hold Super+D to talk on both machines).
+# Hyprland owns the hotkey (hold Shift+Left Alt to talk on both machines).
 # Keep the evdev listener off so the two paths cannot double-fire.
 enabled = false
 

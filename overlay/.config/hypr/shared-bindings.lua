@@ -52,6 +52,14 @@ o.bind("SUPER + B", "Grok Bot", { launch = "grok-bot", focus = "^grok-bot$" })
 hl.unbind("SUPER + SHIFT + B")
 o.bind("SUPER + SHIFT + B", "Bitwarden", { launch = "bitwarden-desktop", focus = "^Bitwarden$" })
 
+-- Bitwarden Brave extension as its own floating window on SUPER + ALT + B
+-- (new key, free in stock Omarchy). omarchy-launch-webapp opens it with
+-- brave --app=... in the default browser/profile. Stock already tags the
+-- extension window floating; this centers it at extension-popup size.
+hl.unbind("SUPER + ALT + B")
+o.bind("SUPER + ALT + B", "Bitwarden (browser extension)", { webapp = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html?uilocation=popout" })
+o.window("^(brave|chrome|chromium)-nngceckbapebfimnlniiiahkandclblb-.*$", { float = true, center = true, size = { 420, 640 } })
+
 -- Telegram on SUPER + SHIFT + T: focuses the open window, or starts it.
 o.bind("SUPER + SHIFT + T", "Telegram", { launch = "Telegram", focus = "^org.telegram.desktop$" })
 

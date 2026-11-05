@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "timon.audio",
   "name": "My Audio",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "author": "Omarchy",
   "description": "Volume slider, output picker, per-app mixer",
   "kinds": [

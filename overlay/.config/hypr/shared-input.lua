@@ -8,13 +8,14 @@ hl.config({
   },
 })
 
--- Per-mouse flat pointer speed. These only apply while that mouse is plugged
--- in, so they are harmless on machines that never see it.
--- `omarchy-pointer set <id> <speed>` (gaming PC repo) rewrites this block.
+-- Install-default per-mouse flat pointer speeds (sensible middle).
+-- Machine repos MAY override these in hypr/machine-input.lua (loaded after
+-- this file). On the gaming PC, `omarchy-pointer set` writes machine-input.lua
+-- only — never this block — so shared sync cannot reset a tuned feel.
 -- pointer-profiles:begin
 hl.device({
   name = "compx-2.4g-receiver-mouse",
-  sensitivity = -0.45,
+  sensitivity = -0.40,
   accel_profile = "flat",
 })
 

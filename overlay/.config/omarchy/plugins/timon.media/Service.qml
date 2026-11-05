@@ -1,11 +1,10 @@
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
-import Quickshell.Wayland
 import Quickshell.Io
 import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
 import "MediaModel.js" as MediaModel
+import qs.Commons
 
 Item {
   id: root
@@ -15,12 +14,6 @@ Item {
   property var playerStartedAt: ({})
   property var pendingTrackOsd: null
   property int playSerial: 0
-  property var hiddenSourceKeys: ({})
-  property int hiddenRevision: 0
-  property bool hiddenLoaded: false
-
-  readonly property string home: Quickshell.env("HOME")
-  readonly property string hiddenSourcesPath: home + "/.local/state/omarchy/timon-media-hidden.json"
 
   readonly property var players: Mpris.players ? Mpris.players.values : []
   readonly property var nodes: Pipewire.nodes ? Pipewire.nodes.values : []
@@ -32,29 +25,11 @@ Item {
     }
     return list
   }
-  readonly property var sourcePlayers: {
-    hiddenSourceKeys
-    hiddenRevision
-    return orderedSourcePlayers()
-  }
-  readonly property var sourceCyclePlayers: {
-    hiddenSourceKeys
-    hiddenRevision
-    return orderedCycleSourcePlayers()
-  }
-  readonly property var activePlayer: {
-    hiddenSourceKeys
-    hiddenRevision
-    return selectActivePlayer()
-  }
-  // Browser players (Brave/Chromium) often publish no track title; fall back
-  // to the site/tab title of the matching browser window (X, YouTube, ...).
-  readonly property var focusedToplevel: ToplevelManager.activeToplevel
-  readonly property string focusedAppId: focusedToplevel ? String(focusedToplevel.appId || "") : ""
-  readonly property string focusedTitle: focusedToplevel ? String(focusedToplevel.title || "") : ""
-  readonly property string windowHint: browserWindowHint(activePlayer)
-  readonly property string title: MediaModel.displayTitle(activePlayer, windowHint)
-  readonly property bool hasMedia: !!(activePlayer && (MediaModel.hasNowPlaying(activePlayer) || title))
+  readonly property var sourcePlayers: orderedSourcePlayers()
+  readonly property var sourceCyclePlayers: orderedCycleSourcePlayers()
+  readonly property var activePlayer: selectActivePlayer()
+  readonly property bool hasMedia: activePlayer !== null && (activePlayer.trackTitle || activePlayer.trackArtist)
+  readonly property string title: activePlayer ? (activePlayer.trackTitle || "") : ""
   readonly property string artist: activePlayer ? (activePlayer.trackArtist || "") : ""
   readonly property string album: activePlayer && activePlayer.trackAlbum ? activePlayer.trackAlbum : ""
   readonly property string artUrl: activePlayer && activePlayer.trackArtUrl ? activePlayer.trackArtUrl : ""
@@ -112,117 +87,6 @@ Item {
     return MediaModel.playerKey(player)
   }
 
-  function browserWindowHint(player) {
-    if (!MediaModel.isBrowserPlayer(player) || (player && player.trackTitle)) return ""
-
-    var focusedPretty = MediaModel.prettySiteLabel(root.focusedAppId, root.focusedTitle)
-    var focusedId = String(root.focusedAppId || "").toLowerCase()
-    if (focusedPretty && (focusedId.indexOf("brave") !== -1 || focusedId.indexOf("chrom") !== -1 || focusedId.indexOf("x.com") !== -1))
-      return focusedPretty
-
-    var siteHint = ""
-    try {
-      var workspaces = Hyprland.workspaces ? Hyprland.workspaces.values : []
-      for (var i = 0; i < workspaces.length; i++) {
-        var ws = workspaces[i]
-        var tops = ws && ws.toplevels ? ws.toplevels.values : []
-        for (var j = 0; j < tops.length; j++) {
-          var t = tops[j]
-          if (!t) continue
-          var appId = String(t.appId || "")
-          var pretty = MediaModel.prettySiteLabel(appId, t.title || "")
-          if (!pretty) continue
-          var idLower = appId.toLowerCase()
-          if (idLower.indexOf("brave") === -1 && idLower.indexOf("chrom") === -1 && idLower.indexOf("x.com") === -1) continue
-          if (pretty !== "Brave" && pretty !== "Chromium") {
-            siteHint = pretty
-            break
-          }
-        }
-        if (siteHint) break
-      }
-    } catch (e) {
-      return focusedPretty || ""
-    }
-    return siteHint || focusedPretty
-  }
-
-  function dismissKey(player) {
-    return MediaModel.dismissKey(player)
-  }
-
-  function isHiddenSource(player) {
-    var key = dismissKey(player)
-    return !!(key && hiddenSourceKeys && hiddenSourceKeys[key])
-  }
-
-  function copyHiddenKeys(source) {
-    var next = {}
-    var map = source || {}
-    for (var key in map) {
-      if (map[key]) next[key] = true
-    }
-    return next
-  }
-
-  function setHiddenSourceKeys(next) {
-    hiddenSourceKeys = next || {}
-    hiddenRevision += 1
-  }
-
-  function loadHiddenSources(raw) {
-    if (hiddenLoaded) return
-    var fromDisk = MediaModel.parseHiddenKeys(raw)
-    var merged = copyHiddenKeys(fromDisk)
-    var existing = hiddenSourceKeys || {}
-    for (var key in existing) {
-      if (existing[key]) merged[key] = true
-    }
-    setHiddenSourceKeys(merged)
-    hiddenLoaded = true
-    if (JSON.stringify(Object.keys(merged).sort()) !== JSON.stringify(Object.keys(fromDisk).sort()))
-      scheduleHiddenSave()
-  }
-
-  function flushHiddenSources() {
-    if (!hiddenLoaded) return
-    hiddenFile.setText(MediaModel.serializeHiddenKeys(hiddenSourceKeys))
-  }
-
-  function scheduleHiddenSave() {
-    if (!hiddenLoaded) return
-    hiddenSaveTimer.restart()
-  }
-
-  function hideSource(player) {
-    var key = dismissKey(player)
-    if (!key) return false
-
-    var next = copyHiddenKeys(hiddenSourceKeys)
-    if (next[key]) return true
-    next[key] = true
-    setHiddenSourceKeys(next)
-
-    if (preferredPlayerKey) {
-      var preferred = playerForKey(preferredPlayerKey)
-      if (preferred && dismissKey(preferred) === key) preferredPlayerKey = ""
-    }
-
-    scheduleHiddenSave()
-    return true
-  }
-
-  function unhideSource(player) {
-    var key = dismissKey(player)
-    if (!key || !hiddenSourceKeys || !hiddenSourceKeys[key]) return false
-
-    var next = copyHiddenKeys(hiddenSourceKeys)
-    delete next[key]
-    setHiddenSourceKeys(next)
-    scheduleHiddenSave()
-    return true
-  }
-
   function playerForKey(key) {
     if (!key) return null
     for (var i = 0; i < players.length; i++) {
@@ -269,7 +133,7 @@ Item {
     var list = []
     for (var i = 0; i < players.length; i++) {
       var p = players[i]
-      if (hasMetadata(p) && !isHiddenSource(p)) list.push(p)
+      if (hasMetadata(p)) list.push(p)
     }
 
     list.sort(function(a, b) {
@@ -289,7 +153,7 @@ Item {
     var list = []
     for (var i = 0; i < players.length; i++) {
       var p = players[i]
-      if (canCycleSource(p) && !isHiddenSource(p)) list.push(p)
+      if (canCycleSource(p)) list.push(p)
     }
 
     list.sort(function(a, b) {
@@ -308,7 +172,7 @@ Item {
 
     for (var i = 0; i < players.length; i++) {
       var p = players[i]
-      if (!p || isHiddenSource(p)) continue
+      if (!p) continue
 
       var proxyPlayer = isProxyPlayer(p)
       if (p.isPlaying) {
@@ -330,42 +194,13 @@ Item {
 
   function selectActivePlayer() {
     var preferred = null
-    var trackPlayer = null
-    var trackProxy = null
-    var streamPlayer = null
-    var streamProxy = null
-    var controllablePlayer = null
-    var controllableProxy = null
-    var identityPlayer = null
-    var identityProxy = null
-
     for (var i = 0; i < players.length; i++) {
       var p = players[i]
-      if (!p || isHiddenSource(p)) continue
-
-      var proxy = isProxyPlayer(p)
-
-      if (preferredPlayerKey && playerKey(p) === preferredPlayerKey && hasMetadata(p)) preferred = p
-
-      if (playerHasPlaybackStream(p)) {
-        if (!proxy && !streamPlayer) streamPlayer = p
-        else if (proxy && !streamProxy) streamProxy = p
-      } else if (hasTrackMetadata(p)) {
-        if (!proxy && !trackPlayer) trackPlayer = p
-        else if (proxy && !trackProxy) trackProxy = p
-      } else if (playerCanControl(p)) {
-        if (!proxy && !controllablePlayer) controllablePlayer = p
-        else if (proxy && !controllableProxy) controllableProxy = p
-      } else if (hasMetadata(p)) {
-        if (!proxy && !identityPlayer) identityPlayer = p
-        else if (proxy && !identityProxy) identityProxy = p
-      }
+      if (p && preferredPlayerKey && playerKey(p) === preferredPlayerKey && hasMetadata(p)) preferred = p
     }
 
     if (preferred && preferred.isPlaying) return preferred
-    var streamCandidate = streamPlayer || streamProxy
-    var streamPreferred = preferred && playerHasPlaybackStream(preferred) ? preferred : null
-    return oldestPlayingPlayer(true) || oldestPlayingPlayer(false) || streamPreferred || streamCandidate || preferred || trackPlayer || trackProxy || controllablePlayer || controllableProxy || identityPlayer || identityProxy || null
+    return oldestPlayingPlayer(true) || oldestPlayingPlayer(false) || MediaModel.idlePlayer(players, preferred, playerHasPlaybackStream)
   }
 
   function labelFor(player) {
@@ -479,7 +314,7 @@ Item {
     }
 
     if (showFeedback !== false) Qt.callLater(function() {
-      root.showOsd("Source", "media-source", next)
+      root.showOsd(I18n.t("media.source"), "media-source", next)
     })
 
     return true
@@ -507,27 +342,27 @@ Item {
   function runAction(action, showFeedback, targetKey) {
     var player = playerForAction(action, targetKey)
     var key = playerKey(player)
-    var actionLabel = "Play/pause"
+    var actionLabel = I18n.t("media.playPause")
     var iconName = "media"
     var beforeTrackSignature = trackSignature(player)
     var handled = false
 
     if (action === "next") {
-      actionLabel = "Next"
+      actionLabel = I18n.t("media.next")
       iconName = "media-next"
       if (player && player.canGoNext) {
         player.next()
         handled = true
       }
     } else if (action === "previous") {
-      actionLabel = "Previous"
+      actionLabel = I18n.t("media.previous")
       iconName = "media-previous"
       if (player && player.canGoPrevious) {
         player.previous()
         handled = true
       }
     } else if (action === "play") {
-      actionLabel = "Play"
+      actionLabel = I18n.t("media.play")
       iconName = "media-play"
       if (player && player.canPlay) {
         player.play()
@@ -537,7 +372,7 @@ Item {
         handled = true
       }
     } else if (action === "pause") {
-      actionLabel = "Pause"
+      actionLabel = I18n.t("media.pause")
       iconName = "media-pause"
       if (player && player.canPause) {
         player.pause()
@@ -547,7 +382,7 @@ Item {
         handled = true
       }
     } else if (action === "playPause") {
-      actionLabel = player && player.isPlaying ? "Pause" : "Play"
+      actionLabel = player && player.isPlaying ? I18n.t("media.pause") : I18n.t("media.play")
       iconName = player && player.isPlaying ? "media-pause" : "media-play"
       if (player && player.isPlaying && player.canPause) {
         player.pause()
@@ -579,10 +414,7 @@ Item {
     delegate: Connections {
       required property var modelData
       target: modelData
-      function onIsPlayingChanged() {
-        root.syncPlayingOrder()
-        if (modelData && modelData.isPlaying) root.unhideSource(modelData)
-      }
+      function onIsPlayingChanged() { root.syncPlayingOrder() }
     }
   }
 
@@ -593,24 +425,56 @@ Item {
     onTriggered: root.flushPendingTrackOsd(false)
   }
 
-  Timer {
-    id: hiddenSaveTimer
-    interval: 200
-    repeat: false
-    onTriggered: root.flushHiddenSources()
-  }
-
-  FileView {
-    id: hiddenFile
-    path: root.hiddenSourcesPath
-    watchChanges: false
-    atomicWrites: true
-    printErrors: false
-    onLoaded: root.loadHiddenSources(text())
-    onLoadFailed: root.loadHiddenSources("")
-  }
-
   PwObjectTracker { objects: root.playbackStreams }
+
+  // ------------------------------------------------------------- volume keys
+  //
+  // The volume keys arrive as global shortcuts and change the volume here,
+  // with no process per press, stepping, clamping, unmuting and debouncing the
+  // way omarchy-audio-output-volume does, so either path lands on the same
+  // volume and OSD. That script resolves a DSP sink through to the physical
+  // sink it feeds on every press, from the live routing. An ALSA sink is its
+  // own physical sink, so only then do the keys act here; any other default
+  // sink falls back to the script.
+  readonly property var defaultSink: Pipewire.defaultAudioSink
+  readonly property var volumeSink: defaultSink && String(defaultSink.name).indexOf("alsa_output.") === 0 ? defaultSink : null
+  property double lastMuteToggle: 0
+
+  // Returns false when the default sink is not one to control here, so the
+  // caller falls back to the script.
+  function handleVolumeKey(action) {
+    var audio = volumeSink && volumeSink.audio
+    if (!audio) return false
+
+    var step = MediaModel.volumeKeyStep(action, Math.round(audio.volume * 100), audio.muted)
+    if (!step) return false
+
+    if (action === "mute-toggle") {
+      // Some keyboards bounce the mute key; the script ignores a second
+      // toggle within 250ms too.
+      var now = Date.now()
+      if (now - lastMuteToggle < 250) return true
+      lastMuteToggle = now
+      audio.muted = step.muted
+    } else {
+      audio.muted = false
+      audio.volume = step.percent / 100
+    }
+
+    // The payload omarchy-osd builds, from the values just set: the node may
+    // not report them back before the OSD draws.
+    shell.summon("omarchy.osd", JSON.stringify({
+      icon: MediaModel.volumeOsdIcon(step.percent, step.muted),
+      message: "",
+      value: String(step.percent),
+      progressText: I18n.formatNumber(step.percent) + "%",
+      max: "100",
+      duration: ""
+    }))
+    return true
+  }
+
+  PwObjectTracker { objects: root.defaultSink ? [root.defaultSink] : [] }
 
   function statusJson() {
     var p = activePlayer
@@ -620,7 +484,7 @@ Item {
       playing: p ? !!p.isPlaying : false,
       identity: p ? (p.identity || "") : "",
       desktopEntry: p ? (p.desktopEntry || "") : "",
-      title: root.title,
+      title: p ? (p.trackTitle || "") : "",
       artist: p ? (p.trackArtist || "") : "",
       album: p && p.trackAlbum ? p.trackAlbum : "",
       artUrl: p && p.trackArtUrl ? p.trackArtUrl : "",
@@ -630,7 +494,16 @@ Item {
     })
   }
 
-  IpcHandler {
+  // Keybindings reach these handlers as Hyprland global shortcuts, run here
+  // exactly as the IPC call would run them, with no client to spawn.
+  function runShortcut(method) {
+    if (typeof ipcHandler[method] !== "function") return false
+    ipcHandler[method]()
+    return true
+  }
+
+  ShellIpc {
+    id: ipcHandler
     target: "media"
 
     function status(): string {

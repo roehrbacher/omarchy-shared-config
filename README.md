@@ -530,3 +530,15 @@ remove them by hand with `sudo pacman -Rns <pkg>`.
 ## License
 
 0BSD (see `LICENSE`), © 2026 Timon Röhrbacher. Third-party plugins and assets in `overlay/` (e.g. folders not named `timon.*`) keep their own licenses, see the `LICENSE` file inside each.
+
+## Pointer speed (machine-local overrides)
+
+Shared `hypr/shared-input.lua` stores **install-default** flat mouse speeds
+(sensible middle). Tuned feel lives only on the machine:
+
+- Gaming PC: `hypr/machine-input.lua` (omarchy-pc-config) + `~/.config/omarchy/pointer.json`
+- `omarchy-pointer set` rewrites **machine-input.lua only**, never the shared file
+
+So `omarchy-shared-config` install/sync cannot reset a tuned PC feel back to
+the shared default. XPS without `machine-input.lua` keeps the shared defaults.
+

@@ -12,6 +12,47 @@ function hasTrackMetadata(player) {
   return !!(player && (player.trackTitle || player.trackArtist || player.trackAlbum || player.trackArtUrl))
 }
 
+// What the bar widget needs before it shows a player at all.
+function hasShownTrack(player) {
+  return !!(player && (player.trackTitle || player.trackArtist))
+}
+
+// A selection slot keeps its first player unless that one would hide the bar and this one would not.
+function prefersShown(current, candidate) {
+  return !current || (!hasShownTrack(current) && hasShownTrack(candidate))
+}
+
+// The player to show when nothing is playing. One the bar would hide, like an idle browser holding
+// art-only metadata, loses to one it would show, unless it is the player the user last chose.
+function idlePlayer(players, preferred, hasPlaybackStream) {
+  var slots = {}
+  for (var i = 0; i < players.length; i++) {
+    var p = players[i]
+    if (!p) continue
+
+    var bucket = hasPlaybackStream(p) ? "stream"
+      : hasTrackMetadata(p) ? "track"
+      : playerCanControl(p) ? "controllable"
+      : hasMetadata(p) ? "identity"
+      : ""
+    if (!bucket) continue
+
+    var slot = bucket + (isProxyPlayer(p) ? "Proxy" : "Player")
+    if (prefersShown(slots[slot], p)) slots[slot] = p
+  }
+
+  var streamPreferred = preferred && hasPlaybackStream(preferred) ? preferred : null
+  var candidates = [streamPreferred, slots.streamPlayer, slots.streamProxy, preferred, slots.trackPlayer, slots.trackProxy, slots.controllablePlayer, slots.controllableProxy, slots.identityPlayer, slots.identityProxy]
+  var fallback = null
+  for (var j = 0; j < candidates.length; j++) {
+    var candidate = candidates[j]
+    if (!candidate) continue
+    if (candidate === preferred || hasShownTrack(candidate)) return candidate
+    if (!fallback) fallback = candidate
+  }
+  return fallback
+}
+
 function playerCanControl(player) {
   return !!(player && (player.canTogglePlaying || player.canPlay || player.canPause || player.canGoNext || player.canGoPrevious))
 }
@@ -93,97 +134,6 @@ function playerKey(player) {
   return String(player.dbusName || player.desktopEntry || player.identity || "")
 }
 
-function isBrowserPlayer(player) {
-  var ident = String(player && player.identity || "").toLowerCase()
-  var dbus = String(player && player.dbusName || "").toLowerCase()
-  var desktop = String(player && player.desktopEntry || "").toLowerCase()
-  return ident.indexOf("brave") !== -1
-    || ident.indexOf("chrom") !== -1
-    || dbus.indexOf("brave") !== -1
-    || dbus.indexOf("chrom") !== -1
-    || desktop.indexOf("brave") !== -1
-    || desktop.indexOf("chrom") !== -1
-}
-
-function prettySiteLabel(appId, title) {
-  var id = String(appId || "").toLowerCase()
-  var t = String(title || "").trim()
-  var sites = [
-    { match: "x.com", label: "X" },
-    { match: "twitter.com", label: "X" },
-    { match: "youtube", label: "YouTube" },
-    { match: "netflix", label: "Netflix" },
-    { match: "twitch", label: "Twitch" }
-  ]
-  var site = ""
-  for (var i = 0; i < sites.length; i++) {
-    if (id.indexOf(sites[i].match) !== -1) {
-      site = sites[i].label
-      break
-    }
-  }
-  if (!site) return t
-  if (!t) return site
-  var lower = t.toLowerCase()
-  if (lower === "home / x" || lower === "x" || lower === site.toLowerCase()) return site
-  var suffix = " / " + site
-  if (t.length > suffix.length && t.slice(-suffix.length).toLowerCase() === suffix.toLowerCase()) {
-    var head = t.slice(0, t.length - suffix.length).trim()
-    return head || site
-  }
-  var pipe = " | " + site
-  if (t.length > pipe.length && t.slice(-pipe.length).toLowerCase() === pipe.toLowerCase()) {
-    var head2 = t.slice(0, t.length - pipe.length).trim()
-    return head2 || site
-  }
-  return t
-}
-
-function displayTitle(player, windowHint) {
-  if (!player) return ""
-  if (player.trackTitle) return String(player.trackTitle)
-  var hint = String(windowHint || "").trim()
-  if (hint) return hint
-  if (player.trackArtist) return String(player.trackArtist)
-  return String(player.identity || player.desktopEntry || "Media")
-}
-
-function hasNowPlaying(player) {
-  return !!(player && (player.trackTitle || player.trackArtist || player.isPlaying))
-}
-
-function dismissKey(player) {
-  if (!player) return ""
-  var dbus = String(player.dbusName || "")
-  dbus = dbus.replace(/^org\.mpris\.MediaPlayer2\./, "")
-  dbus = dbus.replace(/\.instance[0-9]+$/i, "")
-  return String(dbus || player.desktopEntry || player.identity || "").toLowerCase()
-}
-
-function parseHiddenKeys(raw) {
-  var keys = {}
-  try {
-    var parsed = JSON.parse(String(raw || "[]"))
-    var list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.hidden) ? parsed.hidden : [])
-    for (var i = 0; i < list.length; i++) {
-      var key = String(list[i] || "").toLowerCase()
-      if (key) keys[key] = true
-    }
-  } catch (e) {
-  }
-  return keys
-}
-
-function serializeHiddenKeys(map) {
-  var list = []
-  var source = map || {}
-  for (var key in source) {
-    if (source[key]) list.push(String(key))
-  }
-  list.sort()
-  return JSON.stringify({ hidden: list }, null, 2) + "\n"
-}
-
 function trackSignature(player) {
   if (!player) return ""
   return [
@@ -210,11 +160,27 @@ function osdMessage(player, fallback) {
   return label || fallback
 }
 
+// What a volume key does to the output, by omarchy-audio-output-volume's rules:
+// raise and lower step 5 and clamp to 0..100 (so a boosted sink drops to 100
+// on raise), unmuting as they go; mute-toggle flips mute and keeps the volume.
+function volumeKeyStep(action, percent, muted) {
+  if (action === "raise") return { percent: Math.min(percent + 5, 100), muted: false }
+  if (action === "lower") return { percent: Math.max(percent - 5, 0), muted: false }
+  if (action === "mute-toggle") return { percent: percent, muted: !muted }
+  return null
+}
+
+function volumeOsdIcon(percent, muted) {
+  return muted || percent === 0 ? "volume-muted" : "volume-high"
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     isProxyPlayer: isProxyPlayer,
     hasMetadata: hasMetadata,
     hasTrackMetadata: hasTrackMetadata,
+    hasShownTrack: hasShownTrack,
+    idlePlayer: idlePlayer,
     playerCanControl: playerCanControl,
     canHandleAction: canHandleAction,
     canCycleSource: canCycleSource,
@@ -225,16 +191,11 @@ if (typeof module !== "undefined") {
     playerAppLabel: playerAppLabel,
     playerHasPlaybackStream: playerHasPlaybackStream,
     playerKey: playerKey,
-    isBrowserPlayer: isBrowserPlayer,
-    prettySiteLabel: prettySiteLabel,
-    displayTitle: displayTitle,
-    hasNowPlaying: hasNowPlaying,
-    dismissKey: dismissKey,
-    parseHiddenKeys: parseHiddenKeys,
-    serializeHiddenKeys: serializeHiddenKeys,
     trackSignature: trackSignature,
     trackChanged: trackChanged,
     labelFor: labelFor,
-    osdMessage: osdMessage
+    osdMessage: osdMessage,
+    volumeKeyStep: volumeKeyStep,
+    volumeOsdIcon: volumeOsdIcon
   }
 }

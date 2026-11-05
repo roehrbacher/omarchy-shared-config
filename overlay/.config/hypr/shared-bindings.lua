@@ -1,13 +1,17 @@
 -- Managed by omarchy-shared-config. Key bindings for every machine.
 -- Unbind a default before replacing it.
 
--- Media: skip tracks (same as XF86AudioPrev/Next). Play/Pause stays on the
--- media keys only; Alt+Space is dictation (see the dictation block below).
--- Left Alt is ALT; right Alt on a German layout is AltGr (MOD5).
+-- Media: skip tracks (same as XF86AudioPrev/Next). Alt+Space is Play/Pause
+-- (same IPC as the media keys). Left Alt is ALT; right Alt on a German layout
+-- is AltGr (MOD5).
 o.bind("ALT + LEFT", "Previous track", "omarchy-shell media previous", { locked = true })
 o.bind("ALT + RIGHT", "Next track", "omarchy-shell media next", { locked = true })
 o.bind("MOD5 + LEFT", "Previous track", "omarchy-shell media previous", { locked = true })
 o.bind("MOD5 + RIGHT", "Next track", "omarchy-shell media next", { locked = true })
+-- Unbind stock Alt+Space dictation toggle before claiming Play/Pause.
+hl.unbind("ALT + SPACE")
+o.bind("ALT + SPACE", "Play/Pause", { ipc = "media.playPause" }, { locked = true })
+o.bind("MOD5 + SPACE", "Play/Pause", { ipc = "media.playPause" }, { locked = true })
 
 -- Lid (laptops; a desktop has no lid switch, so these never fire there):
 -- omarchy-lid runs the stock lid commands first (omarchy-system-lid-close /
@@ -108,10 +112,9 @@ end
 -- Dictation through Omarchy's backend switch (omarchy-dictation), so the
 -- backend picked in Setup > Defaults > Dictation (Superwhisper on the PC) runs:
 --   hold Super + Ctrl + X = push-to-talk, release to stop and paste
---   Alt + Space is left unbound (no dictation, no Play/Pause).
+--   Alt + Space is Play/Pause (see media block above), not dictation.
 -- Right Alt stays AltGr (German layout): the stock Right-Alt hold is removed,
 -- and so is the stock F9 key.
-hl.unbind("ALT + SPACE")
 hl.unbind("ALT + Alt_R")
 hl.unbind("F9")
 hl.unbind("SUPER + CTRL + X")
@@ -151,3 +154,10 @@ o.bind("SUPER + F", "Full screen", "omarchy-fullscreen-smart")
 
 -- SUPER + A stays stock (Select all). The workspace overview (timon.overview)
 -- has no key for now.
+
+-- Quake console on German layout: stock uses Super+grave (no physical key on DE).
+-- Super+^ (key left of 1). Undo: remove these 4 lines.
+o.bind("SUPER + dead_circumflex", "Toggle Quake console", hl.dsp.workspace.toggle_special("qconsole"))
+o.bind("SUPER + asciicircum", "Toggle Quake console", hl.dsp.workspace.toggle_special("qconsole"))
+o.bind("SUPER + SHIFT + dead_circumflex", "Move window to Quake console", hl.dsp.window.move({ workspace = "special:qconsole", follow = false }))
+o.bind("SUPER + SHIFT + asciicircum", "Move window to Quake console", hl.dsp.window.move({ workspace = "special:qconsole", follow = false }))

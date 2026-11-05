@@ -13,6 +13,8 @@ Panel {
   id: root
   moduleName: "omarchy.audio"
   ipcTarget: "omarchy.audio"
+  // Own ShellIpc below (stock manageIpc has no nudge; media wheel needs it).
+  manageIpc: false
 
   readonly property var sink: Pipewire.defaultAudioSink
   readonly property var source: Pipewire.defaultAudioSource
@@ -502,6 +504,21 @@ Panel {
     var volume = Math.max(0, Math.min(1, v))
     volumeSink.audio.volume = volume
     return volume
+  }
+
+  // Panel IPC (replaces manageIpc defaults) + media/gesture nudge targets.
+  ShellIpc {
+    target: "omarchy.audio"
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.toggle() }
+    function nudge(percent: real): void { root.nudgeVolume(percent) }
+  }
+  ShellIpc {
+    target: "timon.audio"
+    function nudge(percent: real): void { root.nudgeVolume(percent) }
   }
 
   function nudgeVolume(percent) {

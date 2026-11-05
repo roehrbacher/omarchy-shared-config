@@ -254,7 +254,11 @@ BarWidget {
     if (nudgeProc.running || Math.abs(root.volPending) < 1) return
     var p = Math.trunc(root.volPending)
     root.volPending -= p
-    nudgeProc.command = ["qs", "ipc", "-p", "/usr/share/omarchy/shell", "call", "timon.audio", "nudge", String(p)]
+    // After Omarchy 4.5 audio merge, timon.audio ShellIpc nudge needs a shell
+    // restart to register. Drive the same physical sink the keys use via the
+    // stock CLI so the now-playing wheel works immediately (and still after).
+    var arg = (p >= 0 ? "+" : "") + String(p)
+    nudgeProc.command = ["omarchy-audio-output-volume", arg]
     nudgeProc.running = true
   }
   Process {

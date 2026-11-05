@@ -48,6 +48,10 @@ o.bind("SUPER + SHIFT + E", "Email", { webapp = "https://mail.proton.me" })
 -- YouTube web app is not used.
 hl.unbind("SUPER + SHIFT + Y")
 
+-- X (Twitter) web app removed: disable stock Super+Shift+X / Super+Shift+Alt+X.
+hl.unbind("SUPER + SHIFT + X")
+hl.unbind("SUPER + SHIFT + ALT + X")
+
 -- Grok Bot desktop app on SUPER + B: focuses the open window, or starts it.
 -- Window class is "grok-bot" on both machines. Bitwarden on SUPER + SHIFT + B
 -- (replaces stock Browser there; the browser stays on SUPER + SHIFT + RETURN).

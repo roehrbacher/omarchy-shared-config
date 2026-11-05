@@ -111,13 +111,14 @@ end
 
 -- Dictation through Omarchy's backend switch (omarchy-dictation), so the
 -- backend picked in Setup > Defaults > Dictation (Superwhisper on the PC) runs:
---   hold Super + Ctrl + X = push-to-talk, release to stop and paste
+--   hold Super + D = push-to-talk, release to stop and paste
 --   Alt + Space is Play/Pause (see media block above), not dictation.
 -- Right Alt stays AltGr (German layout): the stock Right-Alt hold is removed,
 -- and so is the stock F9 key.
 hl.unbind("ALT + Alt_R")
 hl.unbind("F9")
 hl.unbind("SUPER + CTRL + X")
+hl.unbind("SUPER + D")
 local function dictation_backend()
   local pipe = io.popen("omarchy-default-dictation 2>/dev/null", "r")
   local backend = pipe and pipe:read("*l")
@@ -125,7 +126,7 @@ local function dictation_backend()
   return backend
 end
 if o.dictation_installed and o.dictation_installed() then
-  o.bind_hold("SUPER + CTRL + X", "Start dictation (push-to-talk)", "omarchy-dictation start", "Stop dictation (push-to-talk)", "omarchy-dictation stop")
+  o.bind_hold("SUPER + D", "Start dictation (push-to-talk)", "omarchy-dictation start", "Stop dictation (push-to-talk)", "omarchy-dictation stop")
 end
 
 -- Voxtype-only extra (machines whose dictation backend is still Voxtype):
@@ -161,3 +162,10 @@ o.bind("SUPER + dead_circumflex", "Toggle Quake console", hl.dsp.workspace.toggl
 o.bind("SUPER + asciicircum", "Toggle Quake console", hl.dsp.workspace.toggle_special("qconsole"))
 o.bind("SUPER + SHIFT + dead_circumflex", "Move window to Quake console", hl.dsp.window.move({ workspace = "special:qconsole", follow = false }))
 o.bind("SUPER + SHIFT + asciicircum", "Move window to Quake console", hl.dsp.window.move({ workspace = "special:qconsole", follow = false }))
+
+-- omacast as the Super+Space launcher (replaces stock Omarchy menu).
+-- Do NOT run `omacast setup hyprland` — that steals Alt+Space (Play/Pause here).
+-- Stock menu remains on SUPER + SHIFT + code:201 if needed.
+hl.unbind("SUPER + SPACE")
+o.bind("SUPER + SPACE", "omacast", hl.dsp.global("omacast:toggle"))
+

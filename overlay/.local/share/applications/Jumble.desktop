@@ -3,6 +3,7 @@ Version=1.0
 Name=Jumble
 Comment=Nostr client
 Exec=omarchy-launch-webapp "https://jumble.social"
+StartupWMClass=chrome-jumble.social__-Default
 Terminal=false
 Type=Application
 Icon=jumble

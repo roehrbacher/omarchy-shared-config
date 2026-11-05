@@ -3,6 +3,8 @@
 
 -- Media: play/pause and skip (same as XF86AudioPlay/Prev/Next).
 -- Left Alt is ALT; right Alt on a German layout is AltGr (MOD5).
+-- Omarchy 4.5 puts dictation on Alt+Space; keep it for Play/Pause (Voxtype PTT is Shift+Left Alt).
+hl.unbind("ALT + SPACE")
 o.bind("ALT + SPACE", "Play/Pause", "omarchy-shell media playPause", { locked = true })
 o.bind("ALT + LEFT", "Previous track", "omarchy-shell media previous", { locked = true })
 o.bind("ALT + RIGHT", "Next track", "omarchy-shell media next", { locked = true })
@@ -65,6 +67,7 @@ o.bind("ALT + B", "Bitwarden (browser extension)", { webapp = "chrome-extension:
 o.window("^(brave|chrome|chromium)-nngceckbapebfimnlniiiahkandclblb[-_].*$", { tag = "-floating-window", tile = true })
 
 -- Telegram on SUPER + SHIFT + T: focuses the open window, or starts it.
+hl.unbind("SUPER + SHIFT + T")
 o.bind("SUPER + SHIFT + T", "Telegram", { launch = "Telegram", focus = "^org.telegram.desktop$" })
 
 -- Messengers on easy keys (Super+Shift+Alt+G still opens WhatsApp too).
@@ -132,4 +135,5 @@ o.bind("SUPER + F", "Full screen", "omarchy-fullscreen-smart")
 
 -- Workspace overview (timon.overview, github.com/roehrbacher/omarchy-overview)
 -- on Super+A (Super+Ctrl+A audio, Super+Shift+A ChatGPT, Super+Shift+Alt+A Grok stay). Toggles.
+hl.unbind("SUPER + A")
 o.bind("SUPER + A", "Workspace overview", "omarchy-shell shell toggle timon.overview")

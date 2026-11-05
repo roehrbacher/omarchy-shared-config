@@ -4,6 +4,7 @@ Name=Drive Proton
 Comment=Proton Drive
 Keywords=Proton;Drive;Files;Cloud;
 Exec=omarchy-launch-webapp "https://drive.proton.me"
+StartupWMClass=chrome-drive.proton.me__-Default
 Terminal=false
 Type=Application
 Icon=proton-drive

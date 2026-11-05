@@ -4,6 +4,7 @@ Name=Calendar Proton
 Comment=Proton Calendar
 Keywords=Proton;Calendar;
 Exec=omarchy-launch-webapp "https://calendar.proton.me"
+StartupWMClass=chrome-calendar.proton.me__-Default
 Terminal=false
 Type=Application
 Icon=proton-calendar

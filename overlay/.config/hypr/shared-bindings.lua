@@ -64,7 +64,10 @@ hl.unbind("SUPER + ALT + B")
 o.bind("ALT + B", "Bitwarden (browser extension)", { webapp = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html?uilocation=popout" })
 o.window("^(brave|chrome|chromium)-nngceckbapebfimnlniiiahkandclblb[-_].*$", { tag = "-floating-window", tile = true })
 
--- SUPER + SHIFT + T stays stock (Activity / btop). Telegram has no key for now.
+-- Telegram on SUPER + SHIFT + T: focuses the open window, or starts it.
+-- Replaces stock Activity (btop); btop is still in the terminal.
+hl.unbind("SUPER + SHIFT + T")
+o.bind("SUPER + SHIFT + T", "Telegram", { launch = "Telegram", focus = "^org.telegram.desktop$" })
 
 -- Messengers on easy keys (Super+Shift+Alt+G still opens WhatsApp too).
 -- Replaces stock SUPER+SHIFT+W (was: Omawrite) and SUPER+SHIFT+S (was: Google Maps).
@@ -104,8 +107,8 @@ end
 
 -- Dictation through Omarchy's backend switch (omarchy-dictation), so the
 -- backend picked in Setup > Defaults > Dictation (Superwhisper on the PC) runs:
---   hold Alt + Space (Left Alt) = push-to-talk, release to stop and paste
---   Super + Ctrl + X            = toggle recording
+--   hold Super + Ctrl + X = push-to-talk, release to stop and paste
+--   Alt + Space is left unbound (no dictation, no Play/Pause).
 -- Right Alt stays AltGr (German layout): the stock Right-Alt hold is removed,
 -- and so is the stock F9 key.
 hl.unbind("ALT + SPACE")
@@ -119,8 +122,7 @@ local function dictation_backend()
   return backend
 end
 if o.dictation_installed and o.dictation_installed() then
-  o.bind_hold("ALT + SPACE", "Start dictation (push-to-talk)", "omarchy-dictation start", "Stop dictation (push-to-talk)", "omarchy-dictation stop")
-  o.bind("SUPER + CTRL + X", "Toggle dictation", "omarchy-dictation toggle")
+  o.bind_hold("SUPER + CTRL + X", "Start dictation (push-to-talk)", "omarchy-dictation start", "Stop dictation (push-to-talk)", "omarchy-dictation stop")
 end
 
 -- Voxtype-only extra (machines whose dictation backend is still Voxtype):

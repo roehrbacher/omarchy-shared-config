@@ -1,13 +1,9 @@
 -- Managed by omarchy-shared-config. Key bindings for every machine.
 -- Unbind a default before replacing it.
 
--- Media: play/pause and skip (same as XF86AudioPlay/Prev/Next).
+-- Media: skip tracks (same as XF86AudioPrev/Next). Play/Pause stays on the
+-- media keys only; Alt+Space is dictation (see the dictation block below).
 -- Left Alt is ALT; right Alt on a German layout is AltGr (MOD5).
--- Omarchy 4.5 puts dictation on Alt+Space and Right-Alt hold; keep Alt+Space
--- for Play/Pause (Voxtype PTT is Shift+Left Alt) and free Right Alt for AltGr.
-hl.unbind("ALT + SPACE")
-hl.unbind("ALT + Alt_R")
-o.bind("ALT + SPACE", "Play/Pause", "omarchy-shell media playPause", { locked = true })
 o.bind("ALT + LEFT", "Previous track", "omarchy-shell media previous", { locked = true })
 o.bind("ALT + RIGHT", "Next track", "omarchy-shell media next", { locked = true })
 o.bind("MOD5 + LEFT", "Previous track", "omarchy-shell media previous", { locked = true })
@@ -68,9 +64,7 @@ hl.unbind("SUPER + ALT + B")
 o.bind("ALT + B", "Bitwarden (browser extension)", { webapp = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html?uilocation=popout" })
 o.window("^(brave|chrome|chromium)-nngceckbapebfimnlniiiahkandclblb[-_].*$", { tag = "-floating-window", tile = true })
 
--- Telegram on SUPER + SHIFT + T: focuses the open window, or starts it.
-hl.unbind("SUPER + SHIFT + T")
-o.bind("SUPER + SHIFT + T", "Telegram", { launch = "Telegram", focus = "^org.telegram.desktop$" })
+-- SUPER + SHIFT + T stays stock (Activity / btop). Telegram has no key for now.
 
 -- Messengers on easy keys (Super+Shift+Alt+G still opens WhatsApp too).
 -- Replaces stock SUPER+SHIFT+W (was: Omawrite) and SUPER+SHIFT+S (was: Google Maps).
@@ -108,21 +102,39 @@ for n = 1, 9 do
   o.bind("ALT + SHIFT + code:" .. tostring(n + 9), "Paste pinned clipboard item " .. n, "voxtype-ptt cancel; setsid -f " .. paste_pinned .. " " .. n)
 end
 
--- Voxtype push-to-talk: hold Shift + Left Alt (either order) to talk,
--- release either key to stop and paste. Starts fire on whichever key goes
--- down second; stops fire on the release of either key with any mod state,
--- so a stop always lands. All non-consuming, so Alt/Shift still reach apps
--- and Alt+Shift+<key> shortcuts keep working (voxtype-ptt cancels taps
--- under 0.35 s and the pinned-paste binds cancel explicitly).
--- Replaces the stock F9 / Super+Ctrl+X dictation keys on both machines.
+-- Dictation through Omarchy's backend switch (omarchy-dictation), so the
+-- backend picked in Setup > Defaults > Dictation (Superwhisper on the PC) runs:
+--   hold Alt + Space (Left Alt) = push-to-talk, release to stop and paste
+--   Super + Ctrl + X            = toggle recording
+-- Right Alt stays AltGr (German layout): the stock Right-Alt hold is removed,
+-- and so is the stock F9 key.
+hl.unbind("ALT + SPACE")
+hl.unbind("ALT + Alt_R")
 hl.unbind("F9")
 hl.unbind("SUPER + CTRL + X")
-for _, start in ipairs({ "SHIFT + Alt_L", "SHIFT + ALT + Alt_L", "ALT + Shift_L", "ALT + SHIFT + Shift_L" }) do
-  o.bind(start, "Start dictation (push-to-talk)", "voxtype-ptt start", { repeating = false, non_consuming = true })
+local function dictation_backend()
+  local pipe = io.popen("omarchy-default-dictation 2>/dev/null", "r")
+  local backend = pipe and pipe:read("*l")
+  if pipe then pipe:close() end
+  return backend
 end
-for _, key in ipairs({ "Alt_L", "Shift_L" }) do
-  for _, mods in ipairs({ "", "SHIFT + ", "ALT + ", "SHIFT + ALT + " }) do
-    o.bind(mods .. key, "Stop dictation (push-to-talk)", "voxtype-ptt stop", { release = true, non_consuming = true })
+if o.dictation_installed and o.dictation_installed() then
+  o.bind_hold("ALT + SPACE", "Start dictation (push-to-talk)", "omarchy-dictation start", "Stop dictation (push-to-talk)", "omarchy-dictation stop")
+  o.bind("SUPER + CTRL + X", "Toggle dictation", "omarchy-dictation toggle")
+end
+
+-- Voxtype-only extra (machines whose dictation backend is still Voxtype):
+-- hold Shift + Left Alt (either order) to talk, release either key to stop.
+-- Non-consuming, so Alt/Shift still reach apps (voxtype-ptt cancels taps
+-- under 0.35 s and the pinned-paste binds cancel explicitly).
+if dictation_backend() == "voxtype" then
+  for _, start in ipairs({ "SHIFT + Alt_L", "SHIFT + ALT + Alt_L", "ALT + Shift_L", "ALT + SHIFT + Shift_L" }) do
+    o.bind(start, "Start dictation (push-to-talk)", "voxtype-ptt start", { repeating = false, non_consuming = true })
+  end
+  for _, key in ipairs({ "Alt_L", "Shift_L" }) do
+    for _, mods in ipairs({ "", "SHIFT + ", "ALT + ", "SHIFT + ALT + " }) do
+      o.bind(mods .. key, "Stop dictation (push-to-talk)", "voxtype-ptt stop", { release = true, non_consuming = true })
+    end
   end
 end
 o.bind("SUPER + SHIFT + CTRL + V", "Clipboard incognito", "omarchy-shell shell call timon.clipboard toggleIncognito x")
@@ -135,7 +147,5 @@ o.bind("SUPER + F", "Full screen", "omarchy-fullscreen-smart")
 -- Super+wheel: Omarchy's stock binds (workspace e+1 / e-1, existing
 -- workspaces only, empty ones skipped) are used as-is.
 
--- Workspace overview (timon.overview, github.com/roehrbacher/omarchy-overview)
--- on Super+A (Super+Ctrl+A audio, Super+Shift+A ChatGPT, Super+Shift+Alt+A Grok stay). Toggles.
-hl.unbind("SUPER + A")
-o.bind("SUPER + A", "Workspace overview", "omarchy-shell shell toggle timon.overview")
+-- SUPER + A stays stock (Select all). The workspace overview (timon.overview)
+-- has no key for now.

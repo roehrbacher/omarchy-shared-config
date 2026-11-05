@@ -308,7 +308,9 @@ Panel {
     var output = '"' + name.replace(/[\\"]/g, "\\$&") + '"'
     var expr = enabled
       ? 'hl.monitor({ output = ' + output + ', disabled = true })'
-      : 'hl.monitor({ output = ' + output + ', disabled = false, mode = "preferred", position = "auto", scale = "auto" })'
+      // Omarchy 4.5 fix: hl.monitor updates the existing rule, so mode, position
+      // and scale are kept when the display comes back.
+      : 'hl.monitor({ output = ' + output + ', disabled = false })'
     actionProc.command = ["hyprctl", "eval", expr]
     if (!actionProc.running) actionProc.running = true
   }

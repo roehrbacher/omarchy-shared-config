@@ -3,8 +3,10 @@
 
 -- Media: play/pause and skip (same as XF86AudioPlay/Prev/Next).
 -- Left Alt is ALT; right Alt on a German layout is AltGr (MOD5).
--- Omarchy 4.5 puts dictation on Alt+Space; keep it for Play/Pause (Voxtype PTT is Shift+Left Alt).
+-- Omarchy 4.5 puts dictation on Alt+Space and Right-Alt hold; keep Alt+Space
+-- for Play/Pause (Voxtype PTT is Shift+Left Alt) and free Right Alt for AltGr.
 hl.unbind("ALT + SPACE")
+hl.unbind("ALT + Alt_R")
 o.bind("ALT + SPACE", "Play/Pause", "omarchy-shell media playPause", { locked = true })
 o.bind("ALT + LEFT", "Previous track", "omarchy-shell media previous", { locked = true })
 o.bind("ALT + RIGHT", "Next track", "omarchy-shell media next", { locked = true })

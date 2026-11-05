@@ -32,7 +32,7 @@ if [[ -r $STATE_FILE ]] && jq -e '.private == true' "$STATE_FILE" >/dev/null 2>&
   exit 0
 fi
 
-types=$(wl-paste --list-types 2>/dev/null || true)
+types=$(timeout 2s wl-paste --list-types 2>/dev/null || true)
 
 # Password managers: Bitwarden desktop (arboard >= 3.6 exclude_from_history),
 # KeePassXC and `wl-copy --sensitive` offer the x-kde-passwordManagerHint
@@ -182,5 +182,5 @@ for mime in image/png image/jpeg image/webp image/gif image/bmp image/tiff; do
 done
 
 if grep -q '^text/' <<<"$types" || grep -qx 'UTF8_STRING' <<<"$types" || grep -qx 'STRING' <<<"$types"; then
-  wl-paste --type text --no-newline 2>/dev/null | emit_text
+  timeout 2s wl-paste --type text --no-newline 2>/dev/null | emit_text
 fi

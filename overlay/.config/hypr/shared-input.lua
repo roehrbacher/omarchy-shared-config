@@ -14,7 +14,7 @@ hl.config({
 -- pointer-profiles:begin
 hl.device({
   name = "compx-2.4g-receiver-mouse",
-  sensitivity = -0.40,
+  sensitivity = -0.45,
   accel_profile = "flat",
 })
 

@@ -499,8 +499,11 @@ Restarting the shell at the wrong moment has killed the lock screen once
 (a reload while locked) and crashed Quickshell once (right after a plugin copy).
 So installs follow these rules:
 
-- **Copy, then rely on hot reload.** Plugin files may be copied even while the
-  screen is locked; the shell reloads a changed plugin on its own.
+- **Copy, then rely on hot reload.** `./install.sh` calls
+  `omarchy-safe-gate --stage`: it still waits while the screen is locked or a
+  game is running, and it does not wait for the pointer to be idle. A changed
+  plugin file reloads on its own. `omarchy-safe-gate` without `--stage` is the
+  restart check (lock, game, and idle) and install does not use that mode.
 - **Never restart the shell from an install,** not while locked and not
   automatically after unlock. Instead run
   `omarchy-mark-reload-needed "<what changed>"`. It writes

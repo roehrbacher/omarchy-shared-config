@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
-# Wait until it is safe to write shell config or restart the shell/audio:
+# Wait until it is safe to restart the shell, or (with --stage) to copy files.
 #   - the screen is not locked (omarchy-shell `lock isLocked`)
-#   - no game is running (Steam game / Proton / Overwatch)
-#   - no input for --idle seconds (default 15)
+#   - no game is running (Steam game / Proton / Overwatch), unless --lock-only
+#   - no input for --idle seconds (default 15), unless --stage or --lock-only
 # Exit 0 when safe, 75 when --max seconds (default 1800) pass first.
-#   omarchy-safe-gate [--idle N] [--max N] [--lock-only] [--no-media]
-# --lock-only skips the game and idle checks; --no-media also waits until no
-# player is Playing (use before audio restarts). OMARCHY_SAFE_GATE=0 skips all.
+#   omarchy-safe-gate [--idle N] [--max N] [--lock-only] [--stage] [--no-media]
+# --stage is on-disk install and hot reload: lock and gaming still block, idle
+# does not. It does not restart the shell. --lock-only skips the game and idle
+# checks (shell.json fill). --no-media also waits until no player is Playing
+# (use before an audio restart). OMARCHY_SAFE_GATE=0 skips all.
 set -uo pipefail
-IDLE=15 MAX=1800 LOCK_ONLY=0 MEDIA=0
+IDLE=15 MAX=1800 LOCK_ONLY=0 STAGE=0 MEDIA=0
 while (($#)); do
   case $1 in
     --idle) IDLE=$2; shift ;;
     --max) MAX=$2; shift ;;
     --lock-only) LOCK_ONLY=1 ;;
+    --stage) STAGE=1 ;;
     --no-media) MEDIA=1 ;;
-    *) sed -n '2,10p' "$0"; exit 2 ;;
+    *) sed -n '2,11p' "$0"; exit 2 ;;
   esac
   shift
 done
@@ -36,6 +39,12 @@ gaming() {
 playing() {
   command -v playerctl >/dev/null && playerctl -a status 2>/dev/null | grep -qx Playing
 }
+nap() { # never sleep past the deadline
+  local n=$1 left=$((deadline - SECONDS))
+  ((left > 0)) || return 0
+  ((n > left)) && n=$left
+  sleep "$n"
+}
 wait_idle() { # 0 once idle for $IDLE s, 1 if the time runs out
   local left=$((deadline - SECONDS))
   ((left > 0)) || return 1
@@ -43,10 +52,13 @@ wait_idle() { # 0 once idle for $IDLE s, 1 if the time runs out
 }
 
 while ((SECONDS < deadline)); do
-  if locked; then say "screen locked, waiting"; sleep 20; continue; fi
+  if locked; then say "screen locked, waiting"; nap 20; continue; fi
   if ((LOCK_ONLY)); then exit 0; fi
-  if gaming; then say "game running, waiting"; sleep 60; continue; fi
-  if ((MEDIA)) && playing; then say "media playing, waiting"; sleep 30; continue; fi
+  if gaming; then say "game running, waiting"; nap 60; continue; fi
+  if ((MEDIA)) && playing; then say "media playing, waiting"; nap 30; continue; fi
+  # Staging copies files and arms the reload icon. It does not restart the shell,
+  # so typing is not a reason to wait.
+  if ((STAGE)); then exit 0; fi
   wait_idle || break
   # re-check after the idle wait: the lock or a game may have started meanwhile
   locked || gaming || { ((MEDIA)) && playing; } || exit 0

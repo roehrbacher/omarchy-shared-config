@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""Hide one bar widget id. Nothing else on the bar is moved or removed.
+
+  omarchy-bar-hide-id <id>
+  omarchy-bar-hide-id --undo <id>
+
+The id is taken out of every bar section and added to disabledPlugins.
+The first removal remembers the section, index and entry under
+~/.local/state/omarchy-config/bar-hidden.json so --undo can put that one
+entry back and drop only that id from disabledPlugins.
+
+Safe to run again. Does nothing when shell.json is missing.
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+HOME = Path.home()
+TARGET = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "omarchy/shell.json"
+STATE = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "omarchy-config/bar-hidden.json"
+
+
+def load_state():
+    try:
+        data = json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_state(data):
+    if not data:
+        STATE.unlink(missing_ok=True)
+        return
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STATE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    os.chmod(tmp, 0o600)
+    tmp.replace(STATE)
+
+
+def write_shell(cfg):
+    tmp = TARGET.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
+    os.chmod(tmp, 0o600)
+    tmp.replace(TARGET)
+
+
+def hide(cfg, wid, state):
+    layout = (cfg.get("bar") or {}).get("layout") or {}
+    for sec, entries in list(layout.items()):
+        kept = []
+        for index, entry in enumerate(entries or []):
+            if isinstance(entry, dict) and entry.get("id") == wid:
+                state.setdefault(wid, {"section": sec, "index": index, "entry": entry})
+                continue
+            kept.append(entry)
+        layout[sec] = kept
+    disabled = cfg.setdefault("disabledPlugins", [])
+    if wid not in disabled:
+        disabled.append(wid)
+    return True
+
+
+def undo(cfg, wid, state):
+    saved = state.get(wid)
+    layout = cfg.setdefault("bar", {}).setdefault("layout", {})
+    present = any(
+        isinstance(e, dict) and e.get("id") == wid
+        for entries in layout.values()
+        for e in entries or []
+    )
+    if saved and not present:
+        sec = saved.get("section") or "right"
+        entry = saved.get("entry") or {"id": wid}
+        entries = list(layout.get(sec) or [])
+        index = saved.get("index")
+        if not isinstance(index, int) or index < 0 or index > len(entries):
+            index = len(entries)
+        entries.insert(index, entry)
+        layout[sec] = entries
+    if "disabledPlugins" in cfg:
+        cfg["disabledPlugins"] = [v for v in cfg["disabledPlugins"] if v != wid]
+        if not cfg["disabledPlugins"]:
+            cfg.pop("disabledPlugins")
+    state.pop(wid, None)
+    return True
+
+
+def main(argv):
+    undo_mode = False
+    if argv and argv[0] == "--undo":
+        undo_mode = True
+        argv = argv[1:]
+    if len(argv) != 1 or argv[0].startswith("-"):
+        print(__doc__)
+        return 2
+    wid = argv[0]
+    if not TARGET.is_file():
+        return 0
+    cfg = json.loads(TARGET.read_text())
+    before = json.dumps(cfg, sort_keys=True)
+    state = load_state()
+    if undo_mode:
+        undo(cfg, wid, state)
+    else:
+        hide(cfg, wid, state)
+    save_state(state)
+    if json.dumps(cfg, sort_keys=True) == before:
+        return 0
+    write_shell(cfg)
+    print(f"Bar: {'restored' if undo_mode else 'hid'} {wid}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

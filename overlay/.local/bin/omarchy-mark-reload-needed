@@ -17,6 +17,11 @@ case ${1:-} in
     [[ -z $reason ]] && reason=$old
     printf '%s\n' "${reason:0:200}" > "$flag" ;;
 esac
-# Tell the widget now (it also polls every 5 s). Never fails the caller.
-timeout 3 qs ipc -p /usr/share/omarchy/shell call timon.reload-needed refresh >/dev/null 2>&1 || true
+# Tell the widget now. It also watches the flag file, so there is no timer.
+# Never fails the caller. One refresh is enough; do not also toggle anything.
+if command -v omarchy-shell >/dev/null 2>&1; then
+  timeout 3 omarchy-shell -q timon.reload-needed refresh >/dev/null 2>&1 || true
+else
+  timeout 3 qs ipc -p /usr/share/omarchy/shell call timon.reload-needed refresh >/dev/null 2>&1 || true
+fi
 exit 0

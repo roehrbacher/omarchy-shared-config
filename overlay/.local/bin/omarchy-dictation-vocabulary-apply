@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+"""Merge the shared dictation vocabulary into a local Superwhisper settings file.
+
+  omarchy-dictation-vocabulary-apply [--shared FILE] [--settings FILE]
+  omarchy-dictation-vocabulary-apply --remove-shared
+
+Reads overlay vocabulary (no licenses, history, or model caches). When a
+Superwhisper settings JSON already exists, adds missing vocabulary words,
+drops the vocabulary term listed in removeVocabulary (OmaCalc), and upserts
+the shared replacements. Every other key is left as it is. Phrases in
+protectedFrom (calc, calculator, oma) are never written.
+
+Does not create a settings file. PC/XPS mode, language, license and history
+stay on the machine. Does nothing when Superwhisper is not installed yet.
+
+Shared file: --shared, else $XDG_CONFIG_HOME/omarchy/dictation-shared.json.
+Settings: --settings, else $SUPERWHISPER_SETTINGS, else an existing file at
+  ~/.config/superwhisper/settings/settings.json
+  ~/.config/superwhisper/settings.json
+  ~/superwhisper/settings/settings.json
+  ~/Documents/superwhisper/settings/settings.json
+One existing file is updated. Several existing files: only the newest is
+updated, and the others are left byte for byte. Equal mtimes: none are
+changed. A missing path is never created.
+"""
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+HOME = Path.home()
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
+
+
+def candidate_paths():
+    # The PC keeps the live file in the nested directory. The flat file is
+    # the older layout and is still used when it is the only one present.
+    return [
+        CONFIG / "superwhisper/settings/settings.json",
+        CONFIG / "superwhisper/settings.json",
+        HOME / "superwhisper/settings/settings.json",
+        HOME / "Documents/superwhisper/settings/settings.json",
+    ]
+
+
+def load_json(path):
+    return json.loads(Path(path).read_text())
+
+
+def write_json(path, doc):
+    path = Path(path)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
+    os.chmod(tmp, mode)
+    tmp.replace(path)
+
+
+def blocked(phrase, protected):
+    return str(phrase).casefold() in protected
+
+
+def pair_fields(item):
+    if not isinstance(item, dict):
+        return None
+    if "from" in item and "to" in item:
+        return "from", "to"
+    if "original" in item and "with" in item:
+        return "original", "with"
+    return None
+
+
+def merge(doc, shared):
+    protected = {str(p).casefold() for p in shared.get("protectedFrom") or []}
+    notes = []
+    vocab = doc.get("vocabulary")
+    if vocab is None:
+        doc["vocabulary"] = []
+        vocab = doc["vocabulary"]
+    if isinstance(vocab, list):
+        drop = {str(w).casefold() for w in shared.get("removeVocabulary") or []}
+        doc["vocabulary"] = [w for w in vocab if str(w).casefold() not in drop]
+        have = {str(w).casefold() for w in doc["vocabulary"]}
+        for word in shared.get("vocabulary") or []:
+            if blocked(word, protected):
+                notes.append(f"skipped protected vocabulary {word!r}")
+                continue
+            if str(word).casefold() not in have:
+                doc["vocabulary"].append(word)
+                have.add(str(word).casefold())
+    else:
+        notes.append("vocabulary left unchanged (not a list)")
+
+    reps = doc.get("replacements")
+    shared_reps = []
+    for pair in shared.get("replacements") or []:
+        src = str(pair.get("from", ""))
+        dst = pair.get("to", "")
+        if not src or blocked(src, protected):
+            notes.append(f"skipped protected replacement {src!r}")
+            continue
+        shared_reps.append((src, dst))
+
+    if reps is None:
+        doc["replacements"] = []
+        reps = doc["replacements"]
+    if isinstance(reps, dict):
+        for src, dst in shared_reps:
+            key = next((k for k in reps if str(k).casefold() == src.casefold()), None)
+            reps[src if key is None else key] = dst
+    elif isinstance(reps, list):
+        src_key, dst_key = "original", "with"
+        for item in reps:
+            fields = pair_fields(item)
+            if fields:
+                src_key, dst_key = fields
+                break
+        index = {}
+        for item in reps:
+            if isinstance(item, dict) and src_key in item:
+                index[str(item[src_key]).casefold()] = item
+        for src, dst in shared_reps:
+            hit = index.get(src.casefold())
+            if hit is None:
+                item = {src_key: src, dst_key: dst}
+                reps.append(item)
+                index[src.casefold()] = item
+            else:
+                hit[dst_key] = dst
+    else:
+        notes.append("replacements left unchanged (unknown shape)")
+    return notes
+
+
+def remove_shared(doc, shared):
+    protected = {str(p).casefold() for p in shared.get("protectedFrom") or []}
+    words = {str(w).casefold() for w in shared.get("vocabulary") or []}
+    words -= protected
+    if isinstance(doc.get("vocabulary"), list):
+        doc["vocabulary"] = [w for w in doc["vocabulary"] if str(w).casefold() not in words]
+    phrases = {str(p.get("from", "")).casefold() for p in shared.get("replacements") or []}
+    phrases -= protected
+    reps = doc.get("replacements")
+    if isinstance(reps, dict):
+        for key in list(reps):
+            if str(key).casefold() in phrases:
+                del reps[key]
+    elif isinstance(reps, list):
+        kept = []
+        for item in reps:
+            fields = pair_fields(item)
+            if fields and str(item.get(fields[0], "")).casefold() in phrases:
+                continue
+            kept.append(item)
+        doc["replacements"] = kept
+    return []
+
+
+def discover_settings():
+    found = [path for path in candidate_paths() if path.is_file()]
+    if not found:
+        return None
+    if len(found) == 1:
+        return found[0]
+    stamps = {path: path.stat().st_mtime_ns for path in found}
+    newest_ns = max(stamps.values())
+    newest = [path for path, stamp in stamps.items() if stamp == newest_ns]
+    if len(newest) != 1:
+        print("Several Superwhisper settings files are equally new; none were changed:", file=sys.stderr)
+        for path in found:
+            print(f"  {path}", file=sys.stderr)
+        return False
+    chosen = newest[0]
+    print(f"Using {chosen}", file=sys.stderr)
+    for path in found:
+        if path != chosen:
+            print(f"Leaving {path} unchanged", file=sys.stderr)
+    return chosen
+
+
+def resolve_settings(explicit):
+    if explicit:
+        return Path(explicit)
+    env = os.environ.get("SUPERWHISPER_SETTINGS")
+    if env:
+        return Path(env)
+    return discover_settings()
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--shared")
+    parser.add_argument("--settings")
+    parser.add_argument("--remove-shared", action="store_true")
+    args = parser.parse_args(argv)
+    shared_path = Path(args.shared) if args.shared else CONFIG / "omarchy/dictation-shared.json"
+    if not shared_path.is_file():
+        print(f"No shared vocabulary at {shared_path}", file=sys.stderr)
+        return 1
+    shared = load_json(shared_path)
+    settings = resolve_settings(args.settings)
+    if settings is False:
+        return 0
+    if settings is None or not settings.is_file():
+        where = settings if settings else "Superwhisper settings"
+        print(f"{where} is not installed yet; shared vocabulary left in {shared_path}")
+        return 0
+    doc = load_json(settings)
+    before = json.dumps(doc, sort_keys=True)
+    notes = remove_shared(doc, shared) if args.remove_shared else merge(doc, shared)
+    for note in notes:
+        print(note, file=sys.stderr)
+    if json.dumps(doc, sort_keys=True) == before:
+        print(f"{settings} already matches the shared vocabulary")
+        return 0
+    backup = settings.with_name(settings.name + ".bak-omarchy-vocab")
+    if not backup.exists():
+        backup.write_text(settings.read_text())
+        os.chmod(backup, settings.stat().st_mode & 0o777)
+    write_json(settings, doc)
+    print(f"{'Removed' if args.remove_shared else 'Merged'} shared vocabulary in {settings}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

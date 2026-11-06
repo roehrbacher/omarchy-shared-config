@@ -1,0 +1,208 @@
+{
+  "vocabulary": [
+    "Omarchy",
+    "Superwhisper",
+    "OmaCast",
+    "Hyprland",
+    "Grok",
+    "Grok Bot",
+    "Grok Build",
+    "Voxtype",
+    "Timon Röhrbacher",
+    "Wardogs",
+    "Quickshell",
+    "Eichgraben",
+    "Proton",
+    "Obsidian",
+    "Tailscale",
+    "Sunshine",
+    "Moonlight",
+    "GitHub."
+  ],
+  "removeVocabulary": [
+    "OmaCalc"
+  ],
+  "protectedFrom": [
+    "calc",
+    "calculator",
+    "oma"
+  ],
+  "replacements": [
+    {
+      "from": "omarchi",
+      "to": "Omarchy"
+    },
+    {
+      "from": "omarchie",
+      "to": "Omarchy"
+    },
+    {
+      "from": "omarchey",
+      "to": "Omarchy"
+    },
+    {
+      "from": "omarci",
+      "to": "Omarchy"
+    },
+    {
+      "from": "omarji",
+      "to": "Omarchy"
+    },
+    {
+      "from": "omargie",
+      "to": "Omarchy"
+    },
+    {
+      "from": "amarji",
+      "to": "Omarchy"
+    },
+    {
+      "from": "amarchi",
+      "to": "Omarchy"
+    },
+    {
+      "from": "marchi",
+      "to": "Omarchy"
+    },
+    {
+      "from": "marchie",
+      "to": "Omarchy"
+    },
+    {
+      "from": "oh marchy",
+      "to": "Omarchy"
+    },
+    {
+      "from": "o'marchy",
+      "to": "Omarchy"
+    },
+    {
+      "from": "omachi",
+      "to": "Omarchy"
+    },
+    {
+      "from": "ohmachi",
+      "to": "Omarchy"
+    },
+    {
+      "from": "omaki",
+      "to": "Omarchy"
+    },
+    {
+      "from": "oma key",
+      "to": "Omarchy"
+    },
+    {
+      "from": "oh omarchy",
+      "to": "Omarchy"
+    },
+    {
+      "from": "a omarchy",
+      "to": "Omarchy"
+    },
+    {
+      "from": "omer calc",
+      "to": "OmaCast"
+    },
+    {
+      "from": "oma calc",
+      "to": "OmaCast"
+    },
+    {
+      "from": "omacalc",
+      "to": "OmaCast"
+    },
+    {
+      "from": "oma cast",
+      "to": "OmaCast"
+    },
+    {
+      "from": "omacast",
+      "to": "OmaCast"
+    },
+    {
+      "from": "oh ma cast",
+      "to": "OmaCast"
+    },
+    {
+      "from": "grogbot",
+      "to": "Grok Bot"
+    },
+    {
+      "from": "grog bot",
+      "to": "Grok Bot"
+    },
+    {
+      "from": "vox type",
+      "to": "Voxtype"
+    },
+    {
+      "from": "voxtape",
+      "to": "Voxtype"
+    },
+    {
+      "from": "vox tape",
+      "to": "Voxtype"
+    },
+    {
+      "from": "tmon",
+      "to": "Timon"
+    },
+    {
+      "from": "war dogs",
+      "to": "Wardogs"
+    },
+    {
+      "from": "ibecoded",
+      "to": "vibe coded"
+    },
+    {
+      "from": "grock",
+      "to": "Grok"
+    },
+    {
+      "from": "grog build",
+      "to": "Grok Build"
+    },
+    {
+      "from": "hyperland",
+      "to": "Hyprland"
+    },
+    {
+      "from": "hyper land",
+      "to": "Hyprland"
+    },
+    {
+      "from": "amarkey",
+      "to": "Omarchy"
+    },
+    {
+      "from": "a marchy",
+      "to": "Omarchy"
+    },
+    {
+      "from": "quick shell",
+      "to": "Quickshell"
+    },
+    {
+      "from": "eichkrabben",
+      "to": "Eichgraben"
+    },
+    {
+      "from": "eich krabben",
+      "to": "Eichgraben"
+    },
+    {
+      "from": "eichgrabben",
+      "to": "Eichgraben"
+    },
+    {
+      "from": "eich graben",
+      "to": "Eichgraben"
+    },
+    {
+      "from": "aichgraben",
+      "to": "Eichgraben"
+    }
+  ]
+}

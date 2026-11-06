@@ -1,0 +1,72 @@
+diff --git a/overlay/.config/omarchy/plugins/timon.pc-power/Panel.qml b/overlay/.config/omarchy/plugins/timon.pc-power/Panel.qml
+index d5511d2..32a7200 100644
+--- a/overlay/.config/omarchy/plugins/timon.pc-power/Panel.qml
++++ b/overlay/.config/omarchy/plugins/timon.pc-power/Panel.qml
+@@ -58,21 +58,22 @@ Panel {
+ 
+   readonly property real totalW: Math.max(0, root.cpuW) + Math.max(0, root.gpuW)
+ 
+-  implicitWidth: button.implicitWidth
+-  implicitHeight: button.implicitHeight
++  // No reading (GPU not found, or a vertical bar): take no slot. A failed
++  // sample hides the number instead of reserving a two-digit hole.
++  implicitWidth: button.text !== "" ? button.implicitWidth : 0
++  implicitHeight: button.text !== "" ? button.implicitHeight : 0
+ 
+-  BarIconButton {
++  // Omarchy 4.5 BarIconButton paints `text` through OpticalGlyph and scales
++  // the whole string into the 16 px icon canvas. "64W" stayed tiny inside a
++  // slot padded well past the ink. A label at Style.font.body is the
++  // bar's normal text size, and the slot is that ink plus a small margin.
++  WidgetButton {
+     id: button
+     anchors.fill: parent
+     bar: root.bar
+-    // Plain "<N>W", no icon. Width = text + 21 px: the measured ink-to-ink
+-    // gap between stock bar icons is 19-23 px (median 21), so the text gets
+-    // the same breathing room as its neighbours. Never narrower than "00W"
+-    // so the bar doesn't shift between 1- and 2-digit readings.
+     text: (root.gpuW >= 0 && !vertical) ? Math.round(root.totalW) + "W" : ""
+-    slotSize: Math.ceil(Math.max(wattsMetrics.advanceWidth, minMetrics.advanceWidth)) + 21
+-    TextMetrics { id: wattsMetrics; font.family: button.fontFamily; font.pixelSize: button.fontSize; text: button.text }
+-    TextMetrics { id: minMetrics; font.family: button.fontFamily; font.pixelSize: button.fontSize; text: "00W" }
++    fontSize: Style.font.body
++    horizontalMargin: 4
+     tooltipText: (root.cpuW >= 0 ? "CPU " + Math.round(root.cpuW) + " W" : "CPU n/a") +
+                  "\nGPU " + (root.gpuW >= 0 ? Math.round(root.gpuW) + " W" : "n/a")
+   }
+diff --git a/overlay/.config/omarchy/plugins/timon.pc-power/manifest.json b/overlay/.config/omarchy/plugins/timon.pc-power/manifest.json
+index 3f2da2d..36001c9 100644
+--- a/overlay/.config/omarchy/plugins/timon.pc-power/manifest.json
++++ b/overlay/.config/omarchy/plugins/timon.pc-power/manifest.json
+@@ -2,7 +2,7 @@
+   "schemaVersion": 1,
+   "id": "timon.pc-power",
+   "name": "PC Power",
+-  "version": "1.2.0",
++  "version": "1.2.1",
+   "author": "Timon Röhrbacher",
+   "description": "Live system power in the bar: CPU package (Ryzen SoC PPT via the iGPU amdgpu hwmon, no root) plus dedicated GPU (amdgpu hwmon), every 1 s",
+   "kinds": [
+diff --git a/tests/pc-power-readout.test.sh b/tests/pc-power-readout.test.sh
+new file mode 100755
+index 0000000..c3170ea
+--- /dev/null
++++ b/tests/pc-power-readout.test.sh
+@@ -0,0 +1,16 @@
++#!/usr/bin/env bash
++# Static check: watts stay a readable label, not an optically scaled icon slot.
++set -u
++here=$(cd "$(dirname "$0")/.." && pwd)
++qml=$here/overlay/.config/omarchy/plugins/timon.pc-power/Panel.qml
++fail=0
++need() { if grep -qF "$1" "$qml"; then echo "ok   $2"; else echo "FAIL missing: $2"; fail=1; fi; }
++forbid() { if grep -qF "$1" "$qml"; then echo "FAIL still present: $2"; fail=1; else echo "ok   $2"; fi; }
++need 'fontSize: Style.font.body' "body-size label"
++need 'Math.round(root.totalW) + "W"' "watt text kept"
++need 'CPU ' "CPU tooltip kept"
++need 'GPU ' "GPU tooltip kept"
++forbid '+ 21' "no unscaled advance+21 slot"
++forbid 'slotSize:' "BarIconButton slot no longer sizes the readout"
++forbid '00W' "no reserved two-digit hole"
++exit $fail

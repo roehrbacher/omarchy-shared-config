@@ -22,16 +22,17 @@ if ! command -v omarchy >/dev/null 2>&1; then
   exit 1
 fi
 
-# Never write shell config or restart the shell while the screen is locked,
-# a game runs, or Timon is typing: a reload while locked kills the lock screen.
+# On-disk staging: refuse while locked or a game is running. Do not wait for
+# idle. The install never restarts the shell; the reload-needed icon does that
+# when clicked. A full shell restart still uses omarchy-safe-gate without --stage.
 GATE="$OVERLAY/.local/bin/omarchy-safe-gate"
 [[ -x $GATE ]] || GATE="$HOME/.local/bin/omarchy-safe-gate"
 gate() {
   ((DRY)) && return 0
   [[ -x $GATE ]] || { echo "omarchy-safe-gate missing; install omarchy-shared-config first (or OMARCHY_SAFE_GATE=0)." >&2; [[ ${OMARCHY_SAFE_GATE:-1} == 0 ]]; return; }
-  "$GATE" "$@" || { echo "Not safe to install right now (locked, gaming or busy). Nothing changed after this point." >&2; exit 75; }
+  "$GATE" "$@" || { echo "Not safe to install right now (locked or a game is running). Nothing changed after this point." >&2; exit 75; }
 }
-gate
+gate --stage
 
 REMOVE_PATHS=()
 EXTRA_BACKUP=()

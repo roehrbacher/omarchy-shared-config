@@ -2,9 +2,10 @@
 
 An Omarchy bar widget (`timon.reload-needed`) that works like the stock
 **Omarchy update** icon: same size and padding, hidden while nothing is
-pending. The icon is the Quickshell logo in the theme colour. It appears when `~/.local/state/omarchy-reload-needed` exists (the
-first line is the tooltip) and a left click deletes the flag and runs
-`omarchy restart shell`.
+pending. The icon is the Quickshell logo in the theme colour. It appears as soon as `~/.local/state/omarchy-reload-needed` exists (the
+widget watches that file, and the helper calls its refresh IPC; there is no
+poll). The first line is the tooltip. A left click deletes the flag and runs
+`omarchy restart shell`. Installers do not restart the shell themselves.
 
 Installers call the helper instead of restarting the shell:
 

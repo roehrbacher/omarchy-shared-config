@@ -483,7 +483,15 @@ Omarchy 4.5 draws `BarIconButton.text` inside a 16 px icon, so "64W" and the
 XPS `watts + percent + icon` string were tiny, while the slot stayed wide
 (PC: text width plus 21 px, XPS: three icon slots whenever watts were shown).
 The fix keeps the watt strings and uses a normal bar label (`Style.font.body`)
-beside the battery icon. `tests/power-readout/` renders that comparison offscreen.
+beside the battery icon. Apply it in those repos (this repo cannot push there):
+
+```bash
+git -C ~/Work/omarchy-pc-config apply tests/power-readout/timon.pc-power.patch
+git -C ~/Work/omarchy-xps-config apply tests/power-readout/timon.xps-power.patch
+```
+
+Run the patch from a checkout of this repo, or pass the full path to each file.
+`tests/power-readout/` also renders the old slot and the new label offscreen.
 
 ## Installing changes: no automatic shell restarts
 

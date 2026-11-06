@@ -18,6 +18,15 @@ need 'FileView' "$reload" "reload icon watches the flag file"
 need 'flagPath' "$reload" "reload icon uses the flag path"
 forbid 'sleep' "$mark" "reload helper does not sleep"
 need 'omarchy-shell -q timon.reload-needed refresh' "$mark" "helper refreshes over shell IPC"
+# The icon click restarts immediately. It does not call the idle gate.
+click=$(sed -n '/function reloadShell()/,/^  }/p' "$reload")
+printf '%s\n' "$click" | grep -q 'exec omarchy restart shell' && echo "ok   click runs the shell restart" || { echo "FAIL click command"; fail=1; }
+if printf '%s\n' "$click" | grep -Eq 'safe-gate|idle|sleep |qs '; then
+  echo "FAIL click waits or calls the idle gate" >&2
+  fail=1
+else
+  echo "ok   click does not wait for idle"
+fi
 if grep -q 'omarchy restart shell' "$mark"; then echo "FAIL helper restarts the shell"; fail=1; else echo "ok   helper does not restart the shell"; fi
 python3 - "$shell" <<'PY'
 import json, sys

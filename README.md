@@ -462,12 +462,15 @@ history, or model cache. `oma calc`, `omer calc`, `omacalc`, `oma cast`,
 `oma` are not replaced, and the calculator launcher stays **Calc (OmaCalc)**.
 `OmaCalc` is not a vocabulary hint.
 
-`install.sh` runs `omarchy-dictation-vocabulary-apply`. If Superwhisper's
-settings JSON is already on the machine, only vocabulary and those replacements
-are merged. Mode, language, GPU, license and history stay put. If Superwhisper
-is not installed, the script does not create a settings file (the XPS still
-uses Voxtype until that install is done). It does not install the package and
-it does not restart the shell.
+`install.sh` runs `omarchy-dictation-vocabulary-apply`. It looks for an
+existing settings file, including `~/.config/superwhisper/settings/settings.json`
+and the older `~/.config/superwhisper/settings.json`. One file is merged.
+If several exist, only the newest is merged and the others stay as they are.
+If they are equally new, none are changed. Mode, language, GPU, license,
+history and the model cache stay put. If Superwhisper is not installed, the
+script does not create a settings file (the XPS still uses Voxtype until that
+install is done). It does not install the package and it does not restart
+the shell.
 
 Undo the merge: `omarchy-dictation-vocabulary-apply --remove-shared`. The first
 merge also leaves `settings.json.bak-omarchy-vocab` next to the settings file.

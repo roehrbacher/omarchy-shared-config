@@ -102,4 +102,98 @@ fail=$((fail + $?))
 missing=$tmp/missing.json
 "$apply" --shared "$shared" --settings "$missing" && [[ ! -e $missing ]] \
   && echo "ok   missing settings file is not created" || { echo "FAIL created settings"; fail=1; }
+
+# Path discovery. HOME is a fixture, not this machine.
+home=$tmp/machine
+export HOME=$home XDG_CONFIG_HOME=$home/.config
+unset SUPERWHISPER_SETTINGS
+mkdir -p "$home"
+seed_settings() {
+  mkdir -p "$(dirname "$1")"
+  cat >"$1" <<'EOF'
+{
+  "license": "local-license-keep",
+  "history": [{"text": "yesterday"}],
+  "mode": {"model": "parakeet", "language": "auto", "gpu": "local"},
+  "modelCache": "/home/example/.cache/superwhisper/models",
+  "vocabulary": ["CustomWord", "OmaCalc"],
+  "replacements": [{"original": "my email", "with": "me@example.com"}]
+}
+EOF
+}
+unchanged_private() {
+  python3 - "$1" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1]))
+ok = (
+    doc["license"] == "local-license-keep"
+    and doc["history"] == [{"text": "yesterday"}]
+    and doc["mode"] == {"model": "parakeet", "language": "auto", "gpu": "local"}
+    and doc["modelCache"].endswith("/models")
+    and any(r.get("original") == "my email" and r.get("with") == "me@example.com" for r in doc["replacements"])
+)
+print(("ok  " if ok else "FAIL ") + "private fields stay in " + sys.argv[1])
+sys.exit(0 if ok else 1)
+PY
+}
+
+flat=$home/.config/superwhisper/settings.json
+nested=$home/.config/superwhisper/settings/settings.json
+
+# No Superwhisper install: create nothing.
+"$apply" --shared "$shared" && echo "ok   absent Superwhisper exits 0" || { echo "FAIL absent superwhisper"; fail=1; }
+[[ -z $(find "$home" -name 'settings.json' -o -name 'settings.json.bak-omarchy-vocab' 2>/dev/null) ]] \
+  && echo "ok   absent Superwhisper creates no settings" || { echo "FAIL created a settings file"; fail=1; }
+
+# Live nested path only (the PC layout).
+seed_settings "$nested"
+"$apply" --shared "$shared" >/dev/null || { echo "FAIL nested merge"; fail=1; }
+python3 - "$nested" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1]))
+ok = "OmaCast" in doc["vocabulary"] and "OmaCalc" not in doc["vocabulary"] and "CustomWord" in doc["vocabulary"]
+print(("ok  " if ok else "FAIL ") + "nested path received the shared vocabulary")
+sys.exit(0 if ok else 1)
+PY
+fail=$((fail + $?))
+unchanged_private "$nested" || fail=1
+[[ ! -e $flat ]] && echo "ok   flat path was not created beside the nested file" || { echo "FAIL flat file created"; fail=1; }
+nested_once=$(cat "$nested")
+second=$("$apply" --shared "$shared")
+printf '%s\n' "$second" | grep -q 'already matches' && echo "ok   nested merge is idempotent" || { echo "FAIL nested second run: $second"; fail=1; }
+[[ $(cat "$nested") == "$nested_once" ]] && echo "ok   second nested merge does not rewrite" || { echo "FAIL nested rewrite"; fail=1; }
+
+# Older flat path still works when it is the only file.
+rm -rf "$home/.config/superwhisper"
+seed_settings "$flat"
+"$apply" --shared "$shared" >/dev/null || { echo "FAIL flat merge"; fail=1; }
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "OmaCast" in d["vocabulary"] else 1)' "$flat" \
+  && echo "ok   flat path still receives the vocabulary" || { echo "FAIL flat vocabulary"; fail=1; }
+unchanged_private "$flat" || fail=1
+[[ ! -e $nested ]] && echo "ok   nested path was not created beside the flat file" || { echo "FAIL nested file created"; fail=1; }
+
+# Both files: only the newer one changes.
+rm -rf "$home/.config/superwhisper"
+seed_settings "$flat"
+seed_settings "$nested"
+cp "$flat" "$tmp/flat-before"
+cp "$nested" "$tmp/nested-before"
+touch -d '2020-01-01 00:00:00' "$flat"
+touch -d '2024-06-01 00:00:00' "$nested"
+"$apply" --shared "$shared" >/dev/null || { echo "FAIL newest merge"; fail=1; }
+cmp -s "$flat" "$tmp/flat-before" && echo "ok   older flat file was not modified" || { echo "FAIL stale flat file changed"; fail=1; }
+! cmp -s "$nested" "$tmp/nested-before" && echo "ok   newer nested file was merged" || { echo "FAIL live nested file unchanged"; fail=1; }
+unchanged_private "$nested" || fail=1
+
+# Equal mtimes: modify neither.
+rm -rf "$home/.config/superwhisper"
+seed_settings "$flat"
+seed_settings "$nested"
+touch -d '2024-06-01 00:00:00' "$flat" "$nested"
+cp "$flat" "$tmp/tie-flat"
+cp "$nested" "$tmp/tie-nested"
+tie=$("$apply" --shared "$shared" 2>&1) || { echo "FAIL tie merge exited nonzero"; fail=1; }
+printf '%s\n' "$tie" | grep -q 'none were changed' && echo "ok   equal mtimes change nothing" || { echo "FAIL tie message: $tie"; fail=1; }
+cmp -s "$flat" "$tmp/tie-flat" && cmp -s "$nested" "$tmp/tie-nested" \
+  && echo "ok   neither tied file was written" || { echo "FAIL a tied file changed"; fail=1; }
 exit $fail

@@ -14,12 +14,14 @@ Does not create a settings file. PC/XPS mode, language, license and history
 stay on the machine. Does nothing when Superwhisper is not installed yet.
 
 Shared file: --shared, else $XDG_CONFIG_HOME/omarchy/dictation-shared.json.
-Settings: --settings, else $SUPERWHISPER_SETTINGS, else the first of
+Settings: --settings, else $SUPERWHISPER_SETTINGS, else an existing file at
+  ~/.config/superwhisper/settings/settings.json
   ~/.config/superwhisper/settings.json
   ~/superwhisper/settings/settings.json
   ~/Documents/superwhisper/settings/settings.json
-that exists. If --settings or SUPERWHISPER_SETTINGS is set and missing,
-nothing is created.
+One existing file is updated. Several existing files: only the newest is
+updated, and the others are left byte for byte. Equal mtimes: none are
+changed. A missing path is never created.
 """
 import argparse
 import json
@@ -31,8 +33,11 @@ HOME = Path.home()
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
 
 
-def candidates():
+def candidate_paths():
+    # The PC keeps the live file in the nested directory. The flat file is
+    # the older layout and is still used when it is the only one present.
     return [
+        CONFIG / "superwhisper/settings/settings.json",
         CONFIG / "superwhisper/settings.json",
         HOME / "superwhisper/settings/settings.json",
         HOME / "Documents/superwhisper/settings/settings.json",
@@ -152,16 +157,35 @@ def remove_shared(doc, shared):
     return []
 
 
+def discover_settings():
+    found = [path for path in candidate_paths() if path.is_file()]
+    if not found:
+        return None
+    if len(found) == 1:
+        return found[0]
+    stamps = {path: path.stat().st_mtime_ns for path in found}
+    newest_ns = max(stamps.values())
+    newest = [path for path, stamp in stamps.items() if stamp == newest_ns]
+    if len(newest) != 1:
+        print("Several Superwhisper settings files are equally new; none were changed:", file=sys.stderr)
+        for path in found:
+            print(f"  {path}", file=sys.stderr)
+        return False
+    chosen = newest[0]
+    print(f"Using {chosen}", file=sys.stderr)
+    for path in found:
+        if path != chosen:
+            print(f"Leaving {path} unchanged", file=sys.stderr)
+    return chosen
+
+
 def resolve_settings(explicit):
     if explicit:
-        return Path(explicit), True
+        return Path(explicit)
     env = os.environ.get("SUPERWHISPER_SETTINGS")
     if env:
-        return Path(env), True
-    for path in candidates():
-        if path.is_file():
-            return path, False
-    return None, False
+        return Path(env)
+    return discover_settings()
 
 
 def main(argv):
@@ -175,7 +199,9 @@ def main(argv):
         print(f"No shared vocabulary at {shared_path}", file=sys.stderr)
         return 1
     shared = load_json(shared_path)
-    settings, pinned = resolve_settings(args.settings)
+    settings = resolve_settings(args.settings)
+    if settings is False:
+        return 0
     if settings is None or not settings.is_file():
         where = settings if settings else "Superwhisper settings"
         print(f"{where} is not installed yet; shared vocabulary left in {shared_path}")

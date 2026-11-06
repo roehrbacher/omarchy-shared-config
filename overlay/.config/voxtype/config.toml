@@ -68,7 +68,7 @@ language = "en,de"
 translate = false
 # Vocabulary hint: Whisper leans toward these spellings. Keep it short,
 # a long prompt can leak into very short recordings.
-initial_prompt = "Omarchy, OmaCalc, Hyprland, Grok, Grok Bot, Grok Build, Voxtype, Timon Röhrbacher, Wardogs, Quickshell, Eichgraben, Proton, Obsidian, Tailscale, Sunshine, Moonlight, GitHub."
+initial_prompt = "Omarchy, Superwhisper, OmaCast, Hyprland, Grok, Grok Bot, Grok Build, Voxtype, Timon Röhrbacher, Wardogs, Quickshell, Eichgraben, Proton, Obsidian, Tailscale, Sunshine, Moonlight, GitHub."
 
 # Number of CPU threads for inference (omit for auto-detection)
 # threads = 4
@@ -158,8 +158,12 @@ filter_filler_words = true
 # (replacements run twice, so these catch the leftovers).
 "oh omarchy" = "Omarchy"
 "a omarchy" = "Omarchy"
-"omer calc" = "OmaCalc"
-"oma calc" = "OmaCalc"
+"omer calc" = "OmaCast"
+"oma calc" = "OmaCast"
+"omacalc" = "OmaCast"
+"oma cast" = "OmaCast"
+"omacast" = "OmaCast"
+"oh ma cast" = "OmaCast"
 "grogbot" = "Grok Bot"
 "grog bot" = "Grok Bot"
 "vox type" = "Voxtype"
@@ -180,6 +184,8 @@ filter_filler_words = true
 "eichgrabben" = "Eichgraben"
 "eich graben" = "Eichgraben"
 "aichgraben" = "Eichgraben"
+# Bare "calc", "calculator" and "oma" are not replaced. The calculator
+# launcher stays "Calc (OmaCalc)". These phrases are the OmaCast mishearings.
 
 [osd]
 enabled = false

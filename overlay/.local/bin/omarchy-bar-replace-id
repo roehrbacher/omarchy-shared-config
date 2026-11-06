@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Replace one bar widget id with another, in the same place.
+
+  omarchy-bar-replace-id <old-id> <new-id>
+
+Other entries, their settings, and the rest of shell.json stay as they are.
+The old plugin is not disabled and the new id is not inserted when the old
+one is not already on the bar. Safe to run again. Does nothing when
+shell.json is missing.
+
+Undo is the same command with the ids swapped.
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+TARGET = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "omarchy/shell.json"
+
+
+def replace(cfg, old, new):
+    layout = (cfg.get("bar") or {}).get("layout") or {}
+    changed = False
+    for sec, entries in layout.items():
+        have_new = any(isinstance(e, dict) and e.get("id") == new for e in entries or [])
+        out = []
+        for entry in entries or []:
+            if isinstance(entry, dict) and entry.get("id") == old:
+                if have_new:
+                    changed = True
+                    continue
+                entry = dict(entry)
+                entry["id"] = new
+                have_new = True
+                changed = True
+            out.append(entry)
+        layout[sec] = out
+    return changed
+
+
+def main(argv):
+    if len(argv) != 2 or argv[0].startswith("-"):
+        print(__doc__)
+        return 2
+    old, new = argv
+    if old == new or not TARGET.is_file():
+        return 0
+    text = TARGET.read_text()
+    cfg = json.loads(text)
+    if not replace(cfg, old, new):
+        return 0
+    tmp = TARGET.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
+    os.chmod(tmp, 0o600)
+    tmp.replace(TARGET)
+    print(f"Bar: {old} -> {new}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

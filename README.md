@@ -142,8 +142,8 @@ indicators (stock group + the Insomnia eye; stock behaviour: inactive ones only 
 local, untracked `~/.config/omarchy/shell.d/90-local.json`:
 `{"barSettings": {"omarchy.clock": {"birthYear": 1990}}}`),
 keyboard layout, now playing, updates. Right: tray,
-Tailscale, agents, Grokbar, local AI, audio (`timon.audio`), Mic Passthrough (`timon.mic-passthrough`), Bluetooth, network (stock) + Wired (`timon.wired`, only while plugged in), monitor,
-battery with percentage, notification center. Now playing (`<title> |
+Tailscale, Grokbar (`timon.grok-usage`), local AI, audio (`timon.audio`), Mic Passthrough (`timon.mic-passthrough`), Bluetooth, network (stock) + Wired (`timon.wired`, only while plugged in), monitor,
+battery with percentage, notification center. The stock agents robot (`omarchy.agents`, bar glyph U+F16A3) stays off the bar and in `disabledPlugins`. `timon.grok-usage` is a different plugin and stays. Now playing (`<title> |
 <artist>`) keeps its place but stays invisible until the pointer is over the
 bar (picked in Omarchy menu > Hover Reveal, see `timon.hover-reveal`). Grokbar shows only the
 Grok Bot logo; click it for the usage panel.
@@ -295,8 +295,22 @@ default menu (the menu would otherwise blank them).
   `omarchy-menu-build.path` (changes in `~` and those folders) and
   `omarchy-menu-build.timer` (login + every 15 min).
 - **Power Off replaces Shutdown** – menu search matches inside words, so "down"
-  found "Shutdown". The row is now *Power Off* (same command); "shut",
-  "shutdown" and "power" still find it.
+  found "Shutdown". The row is now *Power Off*. "shut", "shutdown" and "power"
+  still find it. The new title is only the label. The command stays
+  `omarchy-system shutdown` (the stock subcommand). `omarchy-system-shutdown`
+  was never a program, so renaming the row did not break it; a hyphenated
+  action string did. OmaCast reads the built menu
+  (`~/.config/omarchy/extensions/omarchy-menu.jsonc`, merged over the stock
+  menu by id) and runs that action string. It shows "Power Off".
+- **Logo opens OmaCast** – the top-left mark is `timon.omacast-logo`. Left
+  click runs `hyprctl dispatch global omacast:toggle`, the same Hyprland
+  global Super+Space uses. It does not also call the shell IPC (that would
+  toggle twice). Right click still opens a terminal. The stock menu plugin
+  stays loaded. Undo: `omarchy-bar-replace-id timon.omacast-logo omarchy.menu`.
+- **Insomnia in the launcher** – typing Insomnia runs `omarchy-insomnia menu`
+  (the picker). It does not run `omarchy-insomnia set`, and menu-build skips
+  the `omarchy-insomnia` checkout so it is not opened as a folder. The desktop
+  file is `omarchy-insomnia.desktop`, not `insomnia.desktop`.
 - **"ca"/"cal"/"calc" open OmaCalc first** – its launcher is overridden as
   "Calc (OmaCalc)" (`.local/share/applications/omacalc.desktop`; delete it if
   the omacalc package ever changes its launcher), and the Apps menu lost its
@@ -439,6 +453,38 @@ the weather location and the night light. Uses Omarchy's stock sudo rule for
 **install.sh also removes** (after backup): `timon.power`, the old
 stand-alone `timon.insomnia`, `timon.bar`, and the old post-boot timezone/night-light hooks.
 
+## Dictation vocabulary
+
+`overlay/.config/omarchy/dictation-shared.json` is the shared word list for both
+machines (the same replacements as `voxtype/config.toml`). It has no license,
+history, or model cache. `oma calc`, `omer calc`, `omacalc`, `oma cast`,
+`omacast` and `oh ma cast` become **OmaCast**. Bare `calc`, `calculator` and
+`oma` are not replaced, and the calculator launcher stays **Calc (OmaCalc)**.
+`OmaCalc` is not a vocabulary hint.
+
+`install.sh` runs `omarchy-dictation-vocabulary-apply`. If Superwhisper's
+settings JSON is already on the machine, only vocabulary and those replacements
+are merged. Mode, language, GPU, license and history stay put. If Superwhisper
+is not installed, the script does not create a settings file (the XPS still
+uses Voxtype until that install is done). It does not install the package and
+it does not restart the shell.
+
+Undo the merge: `omarchy-dictation-vocabulary-apply --remove-shared`. The first
+merge also leaves `settings.json.bak-omarchy-vocab` next to the settings file.
+
+## PC watts and XPS battery numbers
+
+Those bar widgets are not in this repo. `timon.pc-power` is in
+[omarchy-pc-config](https://github.com/roehrbacher/omarchy-pc-config).
+`timon.xps-power` is in
+[omarchy-xps-config](https://github.com/roehrbacher/omarchy-xps-config).
+`timon.battery` is the laptop hibernate service, not the bar readout.
+Omarchy 4.5 draws `BarIconButton.text` inside a 16 px icon, so "64W" and the
+XPS `watts + percent + icon` string were tiny, while the slot stayed wide
+(PC: text width plus 21 px, XPS: three icon slots whenever watts were shown).
+The fix keeps the watt strings and uses a normal bar label (`Style.font.body`)
+beside the battery icon. `tests/power-readout/` renders that comparison offscreen.
+
 ## Installing changes: no automatic shell restarts
 
 Restarting the shell at the wrong moment has killed the lock screen once
@@ -450,16 +496,18 @@ So installs follow these rules:
 - **Never restart the shell from an install,** not while locked and not
   automatically after unlock. Instead run
   `omarchy-mark-reload-needed "<what changed>"`. It writes
-  `~/.local/state/omarchy-reload-needed` and the `timon.reload-needed` bar icon
-  (a single rotate arrow, next to the stock update icon) appears; its tooltip
-  says what changed. One left click deletes the flag and runs
+  `~/.local/state/omarchy-reload-needed` and tells `timon.reload-needed` to
+  refresh. The icon watches that file, so it shows immediately. There is no
+  poll. Its tooltip says what changed. One left click deletes the flag and runs
   `omarchy restart shell`. `omarchy-mark-reload-needed --clear` hides it.
 - **Hyprland binds/config:** `hyprctl reload` is fine, also while locked. It
   only re-reads the Hyprland config; the lock screen is a shell surface and
   is not touched (Hyprland also auto-reloads on save).
-- **Never write shell.json or reorder the bar.** The bar order is set by hand.
+- **Never reorder the bar.** The bar order is set by hand.
   Adding `timon.reload-needed` to the bar is a one-time manual step in the bar
-  settings.
+  settings. Install only edits two ids in place: the logo becomes
+  `timon.omacast-logo`, and `omarchy.agents` is removed and added to
+  `disabledPlugins`. Everything else stays where it is.
 
 ## Update ping (after-update check)
 

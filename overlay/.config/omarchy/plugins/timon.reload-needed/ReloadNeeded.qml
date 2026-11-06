@@ -16,8 +16,14 @@ BarWidget {
   property bool pending: false
   property string reason: ""
 
+  function applyFlag(raw) {
+    var line = String(raw || "").split("\n")[0].trim()
+    root.reason = line
+    root.pending = line.length > 0
+  }
+
   function refresh() {
-    if (!checkProc.running) checkProc.running = true
+    flagView.reload()
   }
 
   function reloadShell() {
@@ -39,24 +45,15 @@ BarWidget {
     }
   }
 
-  Process {
-    id: checkProc
-    // Exit 0 + first line when the flag exists, exit 1 when it does not.
-    command: ["sh", "-c", "[ -e \"$1\" ] || exit 1; head -n1 \"$1\"", "sh", root.flagPath]
-    stdout: StdioCollector { id: out }
-    onExited: function(exitCode) {
-      root.reason = exitCode === 0 ? out.text.trim() : ""
-      root.pending = exitCode === 0
-    }
-  }
-
-  // The helper pings the IPC refresh; this poll is only the fallback.
-  Timer {
-    interval: 5000
-    running: true
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: root.refresh()
+  // The flag file is the source of truth. A write shows the icon on the
+  // file watch; the helper also calls refresh over shell IPC. No poll timer.
+  FileView {
+    id: flagView
+    path: root.flagPath
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.applyFlag(text())
+    onFileChanged: reload()
   }
 
   BarIconButton {

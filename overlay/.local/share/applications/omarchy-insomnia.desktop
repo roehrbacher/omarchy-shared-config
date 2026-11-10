@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Insomnia
+GenericName=Stay awake
+Comment=Open the Insomnia stay-awake popup
+Exec=omarchy-insomnia menu
+Icon=omarchy-insomnia
+Terminal=false
+Categories=Utility;
+Keywords=insomnia;stay awake;stay-awake;omarchy-insomnia;lid;popup;
+StartupNotify=false

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "timon.omacast-logo",
+  "name": "OmaCast logo",
+  "version": "1.0.0",
+  "author": "Timon Röhrbacher",
+  "description": "Omarchy logo in the top-left of the bar. Left click opens OmaCast the same way Super+Space does.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "OmaCast",
+    "description": "Omarchy logo that opens OmaCast",
+    "category": "Compositor",
+    "allowMultiple": false
+  }
+}

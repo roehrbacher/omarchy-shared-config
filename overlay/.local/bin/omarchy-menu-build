@@ -65,6 +65,9 @@ SKIP_NAMES = {
     "Steam", "SteamLibrary", "steamapps", "Games", "games",
     # made by tools/agents, not by hand
     "terminals", "agent-tools",
+    # The Insomnia checkout is not a launcher. Typing Insomnia opens the
+    # stay-awake popup (menu row "insomnia"), not this folder in Nautilus.
+    "omarchy-insomnia",
 }
 
 

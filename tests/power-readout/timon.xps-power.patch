@@ -1,0 +1,104 @@
+diff --git a/overlay/.config/omarchy/plugins/timon.xps-power/Panel.qml b/overlay/.config/omarchy/plugins/timon.xps-power/Panel.qml
+index e7d2d1e..b58655f 100644
+--- a/overlay/.config/omarchy/plugins/timon.xps-power/Panel.qml
++++ b/overlay/.config/omarchy/plugins/timon.xps-power/Panel.qml
+@@ -220,6 +220,12 @@ Panel {
+     if (root.bar && root.bar.shell) root.bar.shell.updateEntryInline(root.moduleName, root.settings)
+   }
+ 
++  function pressPower(b) {
++    if (!root.batteryPresent) return
++    if (b === Qt.RightButton) root.togglePercentage()
++    else root.toggle()
++  }
++
+   IpcHandler {
+     target: "omarchy.power"
+ 
+@@ -401,19 +407,35 @@ Panel {
+     }
+   }
+ 
+-  BarIconButton {
++  // The icon stays one glyph at icon size. Watts and percent are a label at
++  // Style.font.body. Omarchy 4.5 scaled the old combined string (watts +
++  // percent + icon) into the 16 px icon canvas while slotSize stayed
++  // iconSlot*3 whenever watts were set, so the numbers were tiny and the
++  // slot was wide. powerWatts itself is unchanged ("+12W ", "-12W ", "0W ").
++  Row {
+     id: button
+-    anchors.fill: parent
+-    bar: root.bar
+-    text: root.showPercentage && !vertical
+-      ? root.powerWatts + Math.round(root.batteryFraction * 100) + "% " + root.barIcon()
+-      : root.barIcon()
+-    slotSize: Style.bar.iconSlot * (root.showPercentage && !vertical ? (root.powerWatts !== "" ? 3 : 2) : 1)
+-    tooltipText: ""
+-    onPressed: function(b) {
+-      if (!root.batteryPresent) return
+-      if (b === Qt.RightButton) root.togglePercentage()
+-      else root.toggle()
++    spacing: 0
++    readonly property bool vertical: iconButton.vertical
++    readonly property real glyphPaintedWidth: readout.visible ? readout.implicitWidth : iconButton.glyphPaintedWidth
++
++    BarIconButton {
++      id: iconButton
++      bar: root.bar
++      text: root.barIcon()
++      slotSize: Style.bar.iconSlot
++      tooltipText: ""
++      onPressed: function(b) { root.pressPower(b) }
++    }
++
++    WidgetButton {
++      id: readout
++      visible: root.showPercentage && !iconButton.vertical
++      bar: root.bar
++      text: root.powerWatts + Math.round(root.batteryFraction * 100) + "%"
++      fontSize: Style.font.body
++      horizontalMargin: 2
++      tooltipText: ""
++      onPressed: function(b) { root.pressPower(b) }
+     }
+   }
+ 
+diff --git a/overlay/.config/omarchy/plugins/timon.xps-power/manifest.json b/overlay/.config/omarchy/plugins/timon.xps-power/manifest.json
+index 9cea3c6..3526116 100644
+--- a/overlay/.config/omarchy/plugins/timon.xps-power/manifest.json
++++ b/overlay/.config/omarchy/plugins/timon.xps-power/manifest.json
+@@ -2,7 +2,7 @@
+   "schemaVersion": 1,
+   "id": "timon.xps-power",
+   "name": "XPS Power",
+-  "version": "1.2.1",
++  "version": "1.2.2",
+   "author": "Timon Röhrbacher",
+   "description": "Stock battery/power bar widget plus a 'Limit charging to 80%' switch (UPower charge threshold) and a battery-heart icon on the bar while the limit is on, plus a touchpad haptics strength slider",
+   "kinds": [
+diff --git a/tests/xps-power-readout.test.sh b/tests/xps-power-readout.test.sh
+new file mode 100755
+index 0000000..6920b57
+--- /dev/null
++++ b/tests/xps-power-readout.test.sh
+@@ -0,0 +1,20 @@
++#!/usr/bin/env bash
++# Static check: battery icon stays an icon; watts and percent are a label.
++set -u
++here=$(cd "$(dirname "$0")/.." && pwd)
++qml=$here/overlay/.config/omarchy/plugins/timon.xps-power/Panel.qml
++fail=0
++need() { if grep -qF "$1" "$qml"; then echo "ok   $2"; else echo "FAIL missing: $2"; fail=1; fi; }
++forbid() { if grep -qF "$1" "$qml"; then echo "FAIL still present: $2"; fail=1; else echo "ok   $2"; fi; }
++need 'fontSize: Style.font.body' "body-size readout"
++need 'root.powerWatts + Math.round(root.batteryFraction * 100) + "%"' "watts and percent kept"
++need 'text: root.barIcon()' "icon is only the battery glyph"
++need 'root.powerWatts = "0W "' "idle 0W kept"
++need 'st === "Charging" ? "+" : "-"' "charge and discharge signs kept"
++need 'function pressPower' "click handler kept"
++need 'root.togglePercentage()' "right click still toggles percentage"
++need 'root.toggle()' "left click still opens the panel"
++need 'visible: batteryPresent' "no battery still hides the widget"
++forbid 'iconSlot *' "no 2-slot or 3-slot reservation"
++forbid 'powerWatts + Math.round(root.batteryFraction * 100) + "% " + root.barIcon()' "icon no longer concatenated into the readout"
++exit $fail
